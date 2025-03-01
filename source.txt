@@ -1,10 +1,22 @@
 
-ifJ = 0
-a = 0
+temp = 1
+i = 0
+birthday = 15
+iEqualsBirthday = 0
+monthLength = 30
 
-for i 15
-    a = a + i
-    
-endf
 
-b = 100
+    if i == birthday
+        iEqualsBirthday = 1
+        i = 10
+        if i == birthday
+            i = 11
+            endif
+    elif birthday == i
+        i = 100
+        endif
+    else
+        i = 10000
+        endif
+    endif
+

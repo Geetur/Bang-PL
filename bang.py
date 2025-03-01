@@ -569,7 +569,6 @@ def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to re
     if first:
         output = []
         for i in blocksWithScope:
-            print("START#####################")
             res, potentialError = interpretScope(i, True, False)
             if potentialError:
                 return [], potentialError
@@ -589,15 +588,20 @@ def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to re
             res, potentialError = interpreter(blocksWithScope[0])
             if potentialError:
                 return [], potentialError
-            print(res)
             lastIf = True if res[-1][-1] not in ["false", 0] else False
+            elifIsTrue = False 
             collectedRes=[]
             for i in blocksWithScope[1]:
-                res, potentialError = interpretScope(i, lastIf, first)
+                res, potentialError = interpretScope(i, lastIf, first) #SOMETHING CAN BE DONE HERE maybe break out of loop
                 if potentialError:
                     return [], potentialError
-                collectedRes.append(res)
+                if res:
+                    collectedRes.append(res)
+                if len(i) == 2 and i[0][0][-1][1] == "elif":
+                    if res:
+                        break
             return collectedRes, ""
+        
         elif blocksWithScope[0][0][-1][1] == "while" and lastIf:
             whileRes = []
             while True:
@@ -620,16 +624,14 @@ def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to re
             start, end, jmp = 0, 0, 1
             iteratorVar = blocksWithScope[0][0][0][-1]
             staticIteratorIdentifier = iteratorVar
-            
-            
+                       
             end, potentialError = interpreter(blocksWithScope[0])
             if potentialError:
                 return [], potentialError
             end = end[-1][-1]
             if end in ["true", "false"]:
                 end = 1 if end == "true" else 0
-            
-            
+               
             if start == end:
                 return [], ""
             
@@ -748,7 +750,6 @@ def interpreter(block):
 
             elif tokType == TDIV:
                 if rightVal == 0:
-                    print(parsedTokenPositionsInSource[len(LHS) + idx])
                     return [], error("Interpreter error: attempted division by zero", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][errorIncrement + idx]], ("", ""))
                 else:
                     resVal = leftVal / rightVal
@@ -773,7 +774,6 @@ def interpreter(block):
             return (LHS[0][1], intermediate[0]), ""
         if LHS[-1][1] == "else":
             return [(TBOOL, "true")], ""
-    print(intermediate)
     return intermediate, ""
 
     
@@ -790,8 +790,7 @@ def run(sourceCodeFilePath):
     if potentialError:
         print(potentialError)
         return
-    
-    
+ 
     parsedBlocks, potentialError = passBlocksToParser(blocks)
     
     if potentialError:
