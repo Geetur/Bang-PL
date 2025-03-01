@@ -12,7 +12,7 @@ monthLength = 30
         if i == birthday
             i = 11
             endif
-    elif birthday == i
+    elif birthday > i
         i = 100
         endif
     else
