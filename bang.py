@@ -147,6 +147,7 @@ def lexer(text):
 
 
     def lexLinesWithPosition(tokens):
+        import pprint
         global tokenPositions, tokenPositionsForInterpreter
         currBlock, blocks = [], []
         currPosition, positions = [], []
@@ -156,7 +157,7 @@ def lexer(text):
                 if currBlock:
                     blocks.append(currBlock)
                     positions.append(currPosition)
-                    if currBlock[-1][-1] not in ["endif", "endw", "endf"]: # if currBlock[-1][-1] != "endif" or "endw":
+                    if currBlock[-1][-1] not in ["endif", "endw", "endf"]:
                         interpreterCurrPosition = []
                         for i in currPosition:
                             interpreterCurrPosition.append((i[0], i[1], len(positionsForInterpreter)))
@@ -174,6 +175,7 @@ def lexer(text):
             currPosition.append(tokenPositions[idx])
         tokenPositions = positions
         tokenPositionsForInterpreter = positionsForInterpreter
+        
         return blocks
 
     def finishLineIfError():                                           # must copy entire line, even if error is found, for error msg
@@ -406,6 +408,7 @@ def stateMachine(parsedBlocks):
         
 
 def passBlocksToParser(blocks):
+    import pprint
     parsedBlocks = []
     tokenPositionsForInterpreterIDX = 0
     for idx, i in enumerate(blocks):
@@ -413,7 +416,7 @@ def passBlocksToParser(blocks):
         errorIdxMapInterpreter.append(originalTokenPositions)
         if potentialError:
             return [], potentialError
-        if LHS and LHS[-1][-1] not in  ["endif", "endw", "endf"]:  
+        if not LHS or (LHS and LHS[-1][-1] not in ["endif", "endw", "endf"]):
             parsedBlocks.append((LHS, output, tokenPositionsForInterpreter[tokenPositionsForInterpreterIDX])) # was parsedBlocks.append((LHS, output, tokenPositionsForInterpreter[tpidx]))
             tokenPositionsForInterpreterIDX += 1
         else:
@@ -554,7 +557,7 @@ def parser(tokens, row):
          if not output:
             return [], [], [], error(f"Parser error: the {LHS[-1][1]} keyword can only exist paired with a loop expression", 0, row)
     #################################################### HANDLE OPERATORS
-
+    
     return LHS, output, originalTokenPositions, ""
 ##################### PARSER END
 
@@ -584,7 +587,7 @@ def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to re
 
     elif len(blocksWithScope) == 2:
 
-        if blocksWithScope[0][0][-1][1] == "if" or (blocksWithScope[0][0][-1][1] in ["else", "elif"] and not lastIf):
+        if (blocksWithScope[0][0][-1][1] == "if" and lastIf) or (blocksWithScope[0][0][-1][1] in ["else", "elif"] and not lastIf): # if blocksWithScope[0][0][-1][1] in "if" or (blocksWithScope[0][0][-1][1] in ["else", "elif"] and not lastIf)
             res, potentialError = interpreter(blocksWithScope[0])
             if potentialError:
                 return [], potentialError
@@ -661,7 +664,7 @@ def interpreter(block):
     LHS, parsedInput, parsedTokenPositionsInSource = block
     row = parsedTokenPositionsInSource[0][2] if parsedTokenPositionsInSource else None
     intermediate = []
-    errorIncrement = 1 if LHS[-1][0] == TASSIGN else 0
+    errorIncrement = 1 if LHS and LHS[-1][0] == TASSIGN else 0
     for idx, i in enumerate(parsedInput): 
         
         tokType, value = i[0], i[1]                   
@@ -786,26 +789,27 @@ def run(sourceCodeFilePath):
     with open(sourceCodeFilePath, 'r') as sourceCode:
         sourceCode = sourceCode.read()
 
-    blocks, potentialError = lexer(sourceCode)
-    if potentialError:
+    blocks, potentialError = lexer(sourceCode) #SOMETHING SERIOUS WRONG HAPPENS BETWEEN LEXER AND THE PARSED BLOCKS OUTPUT. SOMETHING ION THE PASS
+    if potentialError:                          # BLOCKS TO PARSER FUNCTION IS RUINING THE TOKEN POSITIONS OF PURE EXPRESSIONS ( I + 1)
         print(potentialError)
         return
- 
-    parsedBlocks, potentialError = passBlocksToParser(blocks)
     
+    parsedBlocks, potentialError = passBlocksToParser(blocks)
     if potentialError:
         print(potentialError)
         return
 
+    
     blocksWithState, potentialError = stateMachine(parsedBlocks)
     if potentialError:
         print(potentialError)
         return
-    
+
     output, potentialError = interpretScope(blocksWithState, False, True)
     if potentialError:
         print(potentialError)
         return
+    
     pprint.pprint(output)
     return
     
