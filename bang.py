@@ -738,6 +738,7 @@ def interpreter(block):
                 if potentialError:
                     return [], potentialError
                 i[1][j] = potential
+                
         
         tokType, value = i[0], i[1]
         if tokType != TARRAY:
@@ -822,9 +823,8 @@ def interpreter(block):
                         resVal = "false"
 
             elif tokType == TPLUS:
-                if leftType == TARRAY:
-                    leftVal.extend(rightVal)
-                    resVal = leftVal
+                if leftType == TARRAY:                                     
+                    resVal = leftVal + rightVal #leftVal.extend(rightVal)  #this causing the propogation
                 else:
                     resVal = leftVal + rightVal
 
