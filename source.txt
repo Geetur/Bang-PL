@@ -1,32 +1,11 @@
-2 + 2 + 2 + 2
-temp = 1
-i = 15
-birthday = 15
-iEqualsBirthday = 0
-monthLength = 30
-
-
-    if i == birthday
-
-        iEqualsBirthday = 1
-        i = 2
-
-        if i == birthday
-            i = 11
-        elif i == 10
-            i = 12
-            endif
-        else
-            i + 5000000
-            endif
-
-        endif
-
-    elif birthday > i
-        i = 100
-        endif
-    else
-        i = 10000
-        endif
+a = 1
+b = 2
+c = -3
+n = 4
+birthday = 0
+if birthday == 0
+    a = [c + 0 + c + 0] + [0 + 0] + [0 + 0, 5 + 8]
+else
+    a = 9 + 9 + 9
     endif
-
+endif

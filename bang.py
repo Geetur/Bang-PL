@@ -19,6 +19,7 @@ TASSIGN = "ASSIGN"
 TFLOAT = "FLOAT"
 TINT = "INT"
 TBOOL = "BOOL"
+TARRAY = "ARRAY"
 #values
 
 #LOGICAL OPERATORS
@@ -47,6 +48,8 @@ TUNARYPLUS = "UNARYPLUS"
 #BRACKETS
 TLPAREN = "LPAREN"
 TRPAREN = "RPAREN"
+TLBRACKET = "LBRACKET"
+TRBRACKET = "TRBRACKET"
 #BRACKETS
 
 #KEYWORDS
@@ -58,6 +61,9 @@ TWHILE = "while"
 TENDW = "endw"
 TFOR = "for"
 TENDF = "endf"
+TCOMMA = "COMMA"
+
+
 keywords = (TIF, TELIF, TELSE, TENDIF, TWHILE, TENDW, TFOR, TENDF)
 #KEYWORDS
 
@@ -76,6 +82,8 @@ symbToTkn = {
     "p": TUNARYPLUS,
     "m": TUNARYMINUS,
     "(": TLPAREN,
+    "[": TLBRACKET,
+    "]": TRBRACKET,
     ")": TRPAREN,
     "^": TEXPO,
     ">": TGREATERTHAN,
@@ -88,6 +96,7 @@ symbToTkn = {
     "||": TOR,
     "!": TNOT,
     "\n": TENDLINE,
+    ",": TCOMMA
 }
 
 tokenPositions, tokenPositionsForInterpreter = [], []              # tuple of (token start idx, token end idx, row where token exist)
@@ -273,13 +282,13 @@ def lexer(text):
 
             elif i in symbToTkn or i in "|&":
 
-                if tokens and tokens[-1][0] in (TUNARYMINUS, TUNARYPLUS) and (i in symbToTkn or i in "|&") and i != "(":
+                if tokens and tokens[-1][0] in (TUNARYMINUS, TUNARYPLUS) and (i in symbToTkn or i in "|&") and i not in "([":
                     record(0, 0, col, col)
                     finishLineIfError()
                     print(tokens)
                     return [], error(f"Parser error: expected value expression following unary operator, not operator", len(tokenPositions) - 1, -1)
 
-                elif i in "+-" and ((not tokens or (tokens[-1][1] in symbToTkn and tokens[-1][0] != TRPAREN) or tokens[-1][0] == TKEYWORD)):
+                elif i in "+-" and ((not tokens or (tokens[-1][1] in symbToTkn and tokens[-1][0] not in [TRPAREN, TRBRACKET]) or tokens[-1][0] == TKEYWORD)):
                     if i in "+":
                         record(TUNARYPLUS, "p", col, col)
                     else:
@@ -409,10 +418,13 @@ def stateMachine(parsedBlocks):
 
 def passBlocksToParser(blocks):
     import pprint
+    
     parsedBlocks = []
     tokenPositionsForInterpreterIDX = 0
     for idx, i in enumerate(blocks):
         LHS, output, originalTokenPositions, potentialError = parser(i, idx)
+        if potentialError:
+            return [], potentialError
         errorIdxMapInterpreter.append(originalTokenPositions)
         if potentialError:
             return [], potentialError
@@ -424,10 +436,12 @@ def passBlocksToParser(blocks):
     return parsedBlocks, ""
 
 
-def parser(tokens, row):                                                
-    if tokens[-1][1] in symbToTkn and tokens[-1][0] != TRPAREN:
+def parser(tokens, row):     #isinstance(tokens[-1][-1], str) and
+    import pprint                                   
+    if isinstance(tokens[-1][-1], str) and tokens[0][0] != TARRAY and tokens[-1][1] in symbToTkn and tokens[-1][0] not in [TRPAREN, TRBRACKET]:
+        pprint.pprint(tokens)
         return [], [], [], error("Parser error: expression not allowed to end with operator", len(tokenPositions[row]) - 1, row) # lines can't start with any symbol other than a left paren bracket / 1
-    elif tokens[0][1] in symbToTkn and tokens[0][0] not in (TLPAREN, TUNARYMINUS, TUNARYPLUS, TNOT):           # and unary operators; lines can't end with any symbol other than a / 2
+    elif isinstance(tokens[-1][-1], str) and tokens[0][0] != TARRAY and tokens[0][1] in symbToTkn and tokens[0][0] not in (TLBRACKET, TLPAREN, TUNARYMINUS, TUNARYPLUS, TNOT):           # and unary operators; lines can't end with any symbol other than a / 2
         return [], [], [], error("Parser error: expression not allowed to start with non unary operator", 0, row)   # right paren bracket
 
     operator, output, LHS = [], [], [] # LHS holds the assignment entity (left hand side)  / 1
@@ -444,10 +458,12 @@ def parser(tokens, row):
     
     prev = ("", "") 
 
+    total = []
+    arrayState = []
+    subexpression = []
+    
     for idx, i in enumerate(tokens):
-
         #################################################### HANDLE KEYWORDS
-
         if i[0] == TKEYWORD:
 
             if i[1] in keywords:
@@ -462,8 +478,8 @@ def parser(tokens, row):
         #################################################### HANDLE KEYWORDS
 
         #################################################### HANDLE VALUES
-        if i[0] in (TINT, TFLOAT, TIDENTIFIER, TBOOL):
-            if prev[0] in (TINT, TFLOAT, TIDENTIFIER, TRPAREN, TBOOL):
+        if i[0] in (TINT, TFLOAT, TIDENTIFIER, TBOOL, TARRAY):
+            if prev[0] in (TINT, TFLOAT, TIDENTIFIER, TRPAREN, TBOOL, TARRAY):
                 return [], [], [], error("Parser Error: expected operator, not value", idx, row)
             if prev[1] in [TFOR]:
                 if i[0] not in TIDENTIFIER:
@@ -471,6 +487,7 @@ def parser(tokens, row):
                 else:
                     LHS = [i, LHS[-1]]; prev = ("", ""); continue
             output.append(i); originalTokenPositions.append(idx)
+           
         #################################################### HANDLE VALUES
 
 
@@ -480,6 +497,43 @@ def parser(tokens, row):
             if i[1] in ["+", "-", "/", "*", "^", "=", ">", ">=", "<", "<=", "==", "!=", "&&", "||", ")"] and prev[1] in ["+", "-", "/", "*", "^", "=", ">", ">=", "<", "<=", "==", "(", "!=", "&&", "||"]:
                 return [], [], [], error("Parser Error: repeating operators not allowed", idx, row)
             
+            elif i[1] in ",":
+                if prev[0] not in [TINT, TFLOAT, TIDENTIFIER, TBOOL, TARRAY]:
+                    return [], [], [], error(f"Parser Error: expected value following {i[1]}, not {prev[1]}", idx, row)
+                while operator:
+                    output.append(operator.pop()); originalTokenPositions.append(operatorTokenPositions.pop())
+                if arrayState:
+                    arrayState[-1][-1].append(output)
+                else:
+                    total.extend(output)
+                output = []
+            
+            elif i[0] == TLBRACKET:
+                while operator:
+                    output.append(operator.pop()); originalTokenPositions.append(operatorTokenPositions.pop())
+                if output:
+                    if arrayState:
+                        arrayState[-1][-1].append(output)
+                    else:
+                        total.extend(output)
+                    output = []
+                arrayState.append([TARRAY, []])
+            
+            elif i[0] == TRBRACKET:
+                if prev[0] not in [TINT, TFLOAT, TIDENTIFIER, TBOOL, TARRAY, TRBRACKET, TLBRACKET]:
+                    return [], [], [], error(f"Parser Error: expected value following {i[1]}, not {prev[1]}", idx, row)
+                while operator:
+                    output.append(operator.pop()); originalTokenPositions.append(operatorTokenPositions.pop())
+                if output:
+                    arrayState[-1][-1].append(output)
+                output = []
+                nest = tuple(arrayState.pop())
+                if arrayState:
+                    arrayState[-1][-1].append(nest)
+                else:
+                    total.append(nest)
+                
+                
             elif i[1] in "(":
                 if prev[0] in (TINT, TFLOAT, TIDENTIFIER):
                     return [], [], [], error("Parser Error: expected operator, not value expression", idx, row)
@@ -499,6 +553,10 @@ def parser(tokens, row):
                     return [], [], [], error(f"Parser error: '{LHS[-1][1]}' statement must be a truth expression, not an assignment operation", idx, row)
                 elif LHS and LHS[-1][1] in (TFOR):
                     return [], [], [], error(f"Parser error: '{LHS[-1][1]}' statement can't be an assignment operation", idx, row)
+                if LHS and i[1] in "=":
+                    if arrayState:
+                        return [], [], [], error(f"Parser error: only value expressions can exist within a list", idx, row)
+                    return [], [], [], error(f"Parser error: only one assignment allowed per line; statement can't be an assignment operation", idx, row)
                 while operator and operator[-1][1] in ["||", "&&", "==", "!=", "<", ">", ">=", "<=", "+", "-", "*", "/", "^", "p", "m", "!"]:       
                     output.append(operator.pop()); originalTokenPositions.append(operatorTokenPositions.pop())
                 LHS = output
@@ -538,7 +596,7 @@ def parser(tokens, row):
                     output.append(operator.pop()); originalTokenPositions.append(operatorTokenPositions.pop())
 
                                                                                                                 
-            if i[1] not in ")=":
+            if i[1] not in "[])=,":
                 operator.append(i)
                 if i[1] != "(":
                     operatorTokenPositions.append(idx)
@@ -557,7 +615,11 @@ def parser(tokens, row):
          if not output:
             return [], [], [], error(f"Parser error: the {LHS[-1][1]} keyword can only exist paired with a loop expression", 0, row)
     #################################################### HANDLE OPERATORS
-    
+    if total:
+        LHS2, output, originalTokenPositions2, potentialError = parser(total, row)
+        if potentialError:
+            return [], [], [], potentialError
+        
     return LHS, output, originalTokenPositions, ""
 ##################### PARSER END
 
@@ -565,10 +627,11 @@ def parser(tokens, row):
 # interpreter                                                           #ERROR WITH LINE: a = -cool * 9 -(cool*3+7 - 9/4) ^ 2 - -(cool+6)
 ######################################################################
 
-
+global termNumber
 def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to return error msgs
+    global termNumber
     from collections import deque
-    
+    termNumber = 0
     if first:
         output = []
         for i in blocksWithScope:
@@ -579,14 +642,13 @@ def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to re
         return output, ""
             
     if len(blocksWithScope) == 3 and lastIf:
-        
         res, potentialError = interpreter(blocksWithScope)
         if potentialError:
             return [], potentialError
         return res, ""
 
     elif len(blocksWithScope) == 2:
-
+        
         if (blocksWithScope[0][0][-1][1] == "if" and lastIf) or (blocksWithScope[0][0][-1][1] in ["else", "elif"] and not lastIf): # if blocksWithScope[0][0][-1][1] in "if" or (blocksWithScope[0][0][-1][1] in ["else", "elif"] and not lastIf)
             res, potentialError = interpreter(blocksWithScope[0])
             if potentialError:
@@ -661,22 +723,34 @@ def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to re
         return [], ""
 
 def interpreter(block):
+    global termNumber
+    import pprint
     LHS, parsedInput, parsedTokenPositionsInSource = block
     row = parsedTokenPositionsInSource[0][2] if parsedTokenPositionsInSource else None
+    
     intermediate = []
     errorIncrement = 1 if LHS and LHS[-1][0] == TASSIGN else 0
-    for idx, i in enumerate(parsedInput): 
+    for idx, i in enumerate(parsedInput):
+        if i[0] in [TARRAY]:
+            for j, n in enumerate(i[1]):
+                n = [n] if n[0] == TARRAY else n
+                potential, potentialError = interpreter([[], n ,parsedTokenPositionsInSource])
+                if potentialError:
+                    return [], potentialError
+                i[1][j] = potential
         
-        tokType, value = i[0], i[1]                   
+        tokType, value = i[0], i[1]
+        if tokType != TARRAY:
+            termNumber += 1          
         if tokType in TIDENTIFIER:
             if value in identifiers:
                 tokType, value = identifiers[value][0], identifiers[value][1]
             else:
-                return [], error("Interpreter error: identifier not defined", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][errorIncrement + idx]], ("", ""))
+                return [], error("Interpreter error: identifier not defined", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
 
         resType, resVal = "", 0
 
-        if tokType in (TINT, TFLOAT, TBOOL):
+        if tokType in (TINT, TFLOAT, TBOOL, TARRAY):
             intermediate.append((tokType, value))
 
         elif tokType in (TUNARYMINUS, TUNARYPLUS, TNOT):
@@ -686,10 +760,10 @@ def interpreter(block):
             resType = operandType
 
             if tokType == TNOT and operandType != TBOOL:
-                return [], error("Interpreter error: can't perform logical negation on non-boolean values", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][errorIncrement + idx]], ("", ""))
+                return [], error("Interpreter error: can't perform logical negation on non-boolean values", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
             
             elif tokType in [TUNARYMINUS, TUNARYPLUS] and operandType not in [TFLOAT, TINT]:
-                return [], error("Interpreter error: can't perform arithmetic negation on non-arithmetic values", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][errorIncrement + idx]], ("", ""))
+                return [], error("Interpreter error: can't perform arithmetic negation on non-arithmetic values", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
 
             elif tokType == TUNARYMINUS:
                 resVal = operandVal * -1
@@ -702,9 +776,11 @@ def interpreter(block):
             intermediate.append((resType, resVal))
 
         else:
-
+            if not intermediate:
+                break
             right = intermediate.pop()
-            left = intermediate.pop()  
+            left = intermediate.pop()
+            
             leftType, leftVal = left[0], left[1]
             rightType, rightVal = right[0], right[1]
 
@@ -746,14 +822,18 @@ def interpreter(block):
                         resVal = "false"
 
             elif tokType == TPLUS:
-                resVal = leftVal + rightVal
+                if leftType == TARRAY:
+                    leftVal.extend(rightVal)
+                    resVal = leftVal
+                else:
+                    resVal = leftVal + rightVal
 
             elif tokType == TMINUS:
                 resVal = leftVal - rightVal
 
             elif tokType == TDIV:
                 if rightVal == 0:
-                    return [], error("Interpreter error: attempted division by zero", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][errorIncrement + idx]], ("", ""))
+                    return [], error("Interpreter error: attempted division by zero", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber + 1]], ("", ""))
                 else:
                     resVal = leftVal / rightVal
 
@@ -765,11 +845,12 @@ def interpreter(block):
             
             if resVal in ["false", "true"]:
                 resType = TBOOL
+            elif leftType == TARRAY:
+                resType = TARRAY
             elif resVal % 1 == 0:
                 resType, resVal = TINT, int(resVal)
             else:
                 resType = TFLOAT
-            
             intermediate.append((resType, resVal))
     if LHS:
         if LHS[-1][0] == TASSIGN:
@@ -777,8 +858,10 @@ def interpreter(block):
             return (LHS[0][1], intermediate[0]), ""
         if LHS[-1][1] == "else":
             return [(TBOOL, "true")], ""
-    return intermediate, ""
-
+    if intermediate:
+        return intermediate[0], ""
+    else:
+        return [], ""
     
 ############################ ##########################################
 # MAIN
@@ -789,28 +872,32 @@ def run(sourceCodeFilePath):
     with open(sourceCodeFilePath, 'r') as sourceCode:
         sourceCode = sourceCode.read()
 
-    blocks, potentialError = lexer(sourceCode) #SOMETHING SERIOUS WRONG HAPPENS BETWEEN LEXER AND THE PARSED BLOCKS OUTPUT. SOMETHING ION THE PASS
-    if potentialError:                          # BLOCKS TO PARSER FUNCTION IS RUINING THE TOKEN POSITIONS OF PURE EXPRESSIONS ( I + 1)
+    blocks, potentialError = lexer(sourceCode) 
+    if potentialError:                          
         print(potentialError)
         return
     
+    
+ 
     parsedBlocks, potentialError = passBlocksToParser(blocks)
     if potentialError:
         print(potentialError)
         return
-
+    
     
     blocksWithState, potentialError = stateMachine(parsedBlocks)
     if potentialError:
         print(potentialError)
         return
-
+    
     output, potentialError = interpretScope(blocksWithState, False, True)
+
     if potentialError:
         print(potentialError)
         return
     
     pprint.pprint(output)
+    
     return
     
     
