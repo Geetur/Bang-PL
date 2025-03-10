@@ -10,7 +10,7 @@ Features of Bang are:
 | **Variables** | Bang supports dynamically typed user variables with the "=" operator. Variables can be used anywhere a constant value is allowed (in conditions, expressions, loops, etc.). |
 | **Conditions** | Bang supports conditional expressions with the [if, elif, else, endif] keywords, which can be paired with any type of expression/value via implicit type conversion. |
 | **Loops**     | Bang supports loops via the [for, while, endf, endw] keywords. The for loop requires a variable iterator definition and an end-range value (e.g., 10). The while loop requires a condition. |
-| **Data Structures**     | Bang currently supports dynamic lists with a right-append operation that can append an arbitrary amount of values (any value) using the "+" operator |
+| **Data Structures**     | Bang currently supports dynamic lists with right and left, append and extend, operations that can append or extend an arbitrary amount of values, and any value, using the "+" operator |
 | **Upcoming**  | Functions, hashmaps, tuple assignments, and built-in functions. |
 
 # Example Code
