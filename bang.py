@@ -436,10 +436,15 @@ def passBlocksToParser(blocks):
     return parsedBlocks, ""
 
 
-def parser(tokens, row):     #isinstance(tokens[-1][-1], str) and
+def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
+    import pprint
+
+
+    
+
     import pprint                                   
     if isinstance(tokens[-1][-1], str) and tokens[0][0] != TARRAY and tokens[-1][1] in symbToTkn and tokens[-1][0] not in [TRPAREN, TRBRACKET]:
-        pprint.pprint(tokens)
+        
         return [], [], [], error("Parser error: expression not allowed to end with operator", len(tokenPositions[row]) - 1, row) # lines can't start with any symbol other than a left paren bracket / 1
     elif isinstance(tokens[-1][-1], str) and tokens[0][0] != TARRAY and tokens[0][1] in symbToTkn and tokens[0][0] not in (TLBRACKET, TLPAREN, TUNARYMINUS, TUNARYPLUS, TNOT):           # and unary operators; lines can't end with any symbol other than a / 2
         return [], [], [], error("Parser error: expression not allowed to start with non unary operator", 0, row)   # right paren bracket
@@ -460,9 +465,12 @@ def parser(tokens, row):     #isinstance(tokens[-1][-1], str) and
 
     total = []
     arrayState = []
+    after = []
     subexpression = []
     
+
     for idx, i in enumerate(tokens):
+        
         #################################################### HANDLE KEYWORDS
         if i[0] == TKEYWORD:
 
@@ -509,8 +517,8 @@ def parser(tokens, row):     #isinstance(tokens[-1][-1], str) and
                 output = []
             
             elif i[0] == TLBRACKET:
-                while operator:
-                    output.append(operator.pop()); originalTokenPositions.append(operatorTokenPositions.pop())
+                after.append(operator)
+                operator = []
                 if output:
                     if arrayState:
                         arrayState[-1][-1].append(output)
@@ -519,7 +527,7 @@ def parser(tokens, row):     #isinstance(tokens[-1][-1], str) and
                     output = []
                 arrayState.append([TARRAY, []])
             
-            elif i[0] == TRBRACKET:
+            elif i[0] == TRBRACKET: 
                 if prev[0] not in [TINT, TFLOAT, TIDENTIFIER, TBOOL, TARRAY, TRBRACKET, TLBRACKET]:
                     return [], [], [], error(f"Parser Error: expected value following {i[1]}, not {prev[1]}", idx, row)
                 while operator:
@@ -530,8 +538,10 @@ def parser(tokens, row):     #isinstance(tokens[-1][-1], str) and
                 nest = tuple(arrayState.pop())
                 if arrayState:
                     arrayState[-1][-1].append(nest)
+                    arrayState[-1][-1].extend(after)
                 else:
                     total.append(nest)
+                    total.extend(after.pop())
                 
                 
             elif i[1] in "(":
@@ -615,10 +625,12 @@ def parser(tokens, row):     #isinstance(tokens[-1][-1], str) and
          if not output:
             return [], [], [], error(f"Parser error: the {LHS[-1][1]} keyword can only exist paired with a loop expression", 0, row)
     #################################################### HANDLE OPERATORS
+    hold = []
+    if output and total:
+        hold = output
     if total:
-        LHS2, output, originalTokenPositions2, potentialError = parser(total, row)
-        if potentialError:
-            return [], [], [], potentialError
+        output = total
+    output.extend(hold)
         
     return LHS, output, originalTokenPositions, ""
 ##################### PARSER END
@@ -823,10 +835,13 @@ def interpreter(block):
                         resVal = "false"
 
             elif tokType == TPLUS:
-                if leftType == TARRAY:                                     
-                    resVal = leftVal + rightVal #leftVal.extend(rightVal)  #this causing the propogation
-                else:
-                    resVal = leftVal + rightVal
+                if leftType == TARRAY:
+                    if rightType in [TINT, TFLOAT]:
+                        rightVal = [(TINT, 0)] * rightVal
+                elif rightType == TARRAY:
+                    if leftType in [TINT, TFLOAT]:
+                        leftVal = [(TINT, 0)] * leftVal
+                resVal = leftVal + rightVal
 
             elif tokType == TMINUS:
                 resVal = leftVal - rightVal
@@ -845,7 +860,7 @@ def interpreter(block):
             
             if resVal in ["false", "true"]:
                 resType = TBOOL
-            elif leftType == TARRAY:
+            elif leftType == TARRAY or rightType == TARRAY:
                 resType = TARRAY
             elif resVal % 1 == 0:
                 resType, resVal = TINT, int(resVal)
@@ -878,17 +893,17 @@ def run(sourceCodeFilePath):
         return
     
     
- 
+    
     parsedBlocks, potentialError = passBlocksToParser(blocks)
     if potentialError:
         print(potentialError)
         return
     
-    
     blocksWithState, potentialError = stateMachine(parsedBlocks)
     if potentialError:
         print(potentialError)
         return
+    
     
     output, potentialError = interpretScope(blocksWithState, False, True)
 
