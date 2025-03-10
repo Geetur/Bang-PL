@@ -536,12 +536,15 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
                     arrayState[-1][-1].append(output)
                 output = []
                 nest = tuple(arrayState.pop())
+                p = after.pop()
                 if arrayState:
                     arrayState[-1][-1].append(nest)
-                    arrayState[-1][-1].extend(after)
+                    if p:
+                        arrayState[-1][-1].extend(after)
                 else:
                     total.append(nest)
-                    total.extend(after.pop())
+                    if p:
+                        total.extend(p)
                 
                 
             elif i[1] in "(":
