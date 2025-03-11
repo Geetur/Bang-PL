@@ -61,15 +61,10 @@ while temp
 # array definition and operation (a = [2, 0, [0,13]] at end of program)
 ```
 a = [1 + 0 + 1 + 0]
-b = 2
-c = -3
-n = 4
 birthday = 0
 if birthday == 0
     a = a + [0 + 0] + [[0 + 0, 5 + 8]]
-else
-    a = 9 + 9 + 9
-    endif
 endif
+
 ```
 
