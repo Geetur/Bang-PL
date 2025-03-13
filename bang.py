@@ -469,7 +469,6 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
     
 
     for idx, i in enumerate(tokens):
-        
         #################################################### HANDLE KEYWORDS
         if i[0] == TKEYWORD:
 
@@ -538,12 +537,12 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
                 p = after.pop()
                 if arrayState:
                     arrayState[-1][-1].append(nest)
-                    if p:
-                        arrayState[-1][-1].extend(after)
+                    while p:
+                        arrayState[-1][-1].append(p.pop())
                 else:
                     total.append(nest)
-                    if p:
-                        total.extend(p)
+                    while p:
+                        total.append(p.pop())
                 
                 
             elif i[1] in "(":
@@ -621,18 +620,20 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
     while operator:
         output.append(operator.pop()); originalTokenPositions.append(operatorTokenPositions.pop())
 
-    if LHS and LHS[-1][1] in [TIF, TELIF, TWHILE] and not output:
-        return [], [], [], error(f"Parser error: the {LHS[-1][1]} keyword can only exist paired with a truth expression", 0, row)
-    elif LHS and LHS[-1][1] in [TFOR]:
-         if not output:
-            return [], [], [], error(f"Parser error: the {LHS[-1][1]} keyword can only exist paired with a loop expression", 0, row)
-    #################################################### HANDLE OPERATORS
     hold = []
     if output and total:
         hold = output
     if total:
         output = total
     output.extend(hold)
+
+    if LHS and LHS[-1][1] in [TIF, TELIF, TWHILE] and not output:
+        print(output)
+        return [], [], [], error(f"Parser error: the {LHS[-1][1]} keyword can only exist paired with a truth expression", 0, row)
+    elif LHS and LHS[-1][1] in [TFOR]:
+         if not output:
+            return [], [], [], error(f"Parser error: the {LHS[-1][1]} keyword can only exist paired with a loop expression", 0, row)
+    #################################################### HANDLE OPERATORS
         
     return LHS, output, originalTokenPositions, ""
 ##################### PARSER END
@@ -667,7 +668,8 @@ def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to re
             res, potentialError = interpreter(blocksWithScope[0])
             if potentialError:
                 return [], potentialError
-            lastIf = True if res[-1][-1] not in ["false", 0] else False
+            
+            lastIf = True if res[-1] not in ["false", 0, []] else False
             elifIsTrue = False 
             collectedRes=[]
             for i in blocksWithScope[1]:
@@ -687,7 +689,7 @@ def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to re
                 res, potentialError = interpreter(blocksWithScope[0])
                 if potentialError:
                     return [], potentialError
-                elif res[-1][-1] not in ["false", 0]:
+                elif res[-1] not in ["false", 0, []]:
                     collectedRes = []
                     for i in blocksWithScope[1]:
                         res, potentialError = interpretScope(i, lastIf, first)
@@ -707,7 +709,7 @@ def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to re
             end, potentialError = interpreter(blocksWithScope[0])
             if potentialError:
                 return [], potentialError
-            end = end[-1][-1]
+            end = end[-1]
             if end in ["true", "false"]:
                 end = 1 if end == "true" else 0
                
@@ -739,12 +741,14 @@ def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to re
 def interpreter(block):
     global termNumber
     import pprint
+    
     LHS, parsedInput, parsedTokenPositionsInSource = block
     row = parsedTokenPositionsInSource[0][2] if parsedTokenPositionsInSource else None
     
     intermediate = []
     errorIncrement = 1 if LHS and LHS[-1][0] == TASSIGN else 0
     for idx, i in enumerate(parsedInput):
+        
         if i[0] in [TARRAY]:
             for j, n in enumerate(i[1]):
                 n = [n] if n[0] == TARRAY else n
@@ -774,10 +778,10 @@ def interpreter(block):
             operandType, operandVal = operand[0], operand[1]
             resType = operandType
 
-            if tokType == TNOT and operandType != TBOOL:
-                return [], error("Interpreter error: can't perform logical negation on non-boolean values", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
+            #if tokType == TNOT and operandType != TBOOL:
+               #return [], error("Interpreter error: can't perform logical negation on non-boolean values", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
             
-            elif tokType in [TUNARYMINUS, TUNARYPLUS] and operandType not in [TFLOAT, TINT]:
+            if tokType in [TUNARYMINUS, TUNARYPLUS] and operandType not in [TFLOAT, TINT]:
                 return [], error("Interpreter error: can't perform arithmetic negation on non-arithmetic values", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
 
             elif tokType == TUNARYMINUS:
@@ -786,19 +790,19 @@ def interpreter(block):
                 resVal = operandVal * 1
 
             elif tokType == TNOT:
-                resVal = "false" if operandVal == "true" else "true"
-            
+                resVal = "false" if (operandVal == "true" or operandVal not in [0, []]) else "true"
+                resType = TBOOL
             intermediate.append((resType, resVal))
-
         else:
             if not intermediate:
                 break
+            
             right = intermediate.pop()
             left = intermediate.pop()
             
             leftType, leftVal = left[0], left[1]
             rightType, rightVal = right[0], right[1]
-
+            
             if leftType == TBOOL:
                 leftVal = 0 if leftVal == "false" else 1
             if rightType == TBOOL:
@@ -874,7 +878,7 @@ def interpreter(block):
             identifiers[LHS[0][1]] = intermediate[0]
             return (LHS[0][1], intermediate[0]), ""
         if LHS[-1][1] == "else":
-            return [(TBOOL, "true")], ""
+            return (TBOOL, "true"), ""
     if intermediate:
         return intermediate[0], ""
     else:
@@ -894,20 +898,18 @@ def run(sourceCodeFilePath):
         print(potentialError)
         return
     
-    
-    pprint.pprint(blocks)
-    return
     parsedBlocks, potentialError = passBlocksToParser(blocks)
     if potentialError:
         print(potentialError)
         return
+    
     
     blocksWithState, potentialError = stateMachine(parsedBlocks)
     if potentialError:
         print(potentialError)
         return
     
-    
+    #pprint.pprint(blocksWithState
     output, potentialError = interpretScope(blocksWithState, False, True)
 
     if potentialError:
