@@ -281,12 +281,11 @@ def lexer(text):
                 
 
             elif i in symbToTkn or i in "|&":
-
-                if tokens and tokens[-1][0] in (TUNARYMINUS, TUNARYPLUS) and (i in symbToTkn or i in "|&") and i not in "([":
+                if tokens and tokens[-1][0] in (TUNARYMINUS, TUNARYPLUS) and (i in symbToTkn or i in "|&" or i in ["["]) and i not in ["("]:
                     record(0, 0, col, col)
                     finishLineIfError()
                     print(tokens)
-                    return [], error(f"Parser error: expected value expression following unary operator, not operator", len(tokenPositions) - 1, -1)
+                    return [], error(f"Parser error: expected value expression following unary operator, not {i}", len(tokenPositions) - 1, -1)
 
                 elif i in "+-" and ((not tokens or (tokens[-1][1] in symbToTkn and tokens[-1][0] not in [TRPAREN, TRBRACKET]) or tokens[-1][0] == TKEYWORD)):
                     if i in "+":
@@ -896,7 +895,8 @@ def run(sourceCodeFilePath):
         return
     
     
-    
+    pprint.pprint(blocks)
+    return
     parsedBlocks, potentialError = passBlocksToParser(blocks)
     if potentialError:
         print(potentialError)
