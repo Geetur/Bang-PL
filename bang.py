@@ -850,7 +850,25 @@ def interpreter(block):
                 resVal = leftVal + rightVal
 
             elif tokType == TMINUS:
-                resVal = leftVal - rightVal
+                if leftType == TARRAY and rightType in [TINT, TFLOAT]:
+                    resVal = [] if rightVal >= len(leftVal) else leftVal[:-rightVal]
+                elif rightType ==TARRAY and leftType in [TINT, TFLOAT]:
+                    resVal = [] if leftVal >= len(rightVal) else rightVal[leftVal:]
+                elif leftType == TARRAY and rightType == TARRAY:
+                    toRemove = {}
+                    new = []
+                    for i in rightVal:
+                        toRemove[i] = 1 if i not in toRemove else toRemove[i] + 1
+                    for i in leftVal:
+                        if i in toRemove:
+                            toRemove[i] -= 1
+                            if not toRemove[i]:
+                                del toRemove[i]
+                        else:
+                            new.append(i)
+                    resVal = new
+                else:
+                    resVal = leftVal - rightVal
 
             elif tokType == TDIV:
                 if rightVal == 0:
