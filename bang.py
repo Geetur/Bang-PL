@@ -653,7 +653,8 @@ def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to re
             res, potentialError = interpretScope(i, True, False)
             if potentialError:
                 return [], potentialError
-            output.append(res)
+            if res:
+                output.append(res)
         return output, ""
             
     if len(blocksWithScope) == 3 and lastIf:
@@ -668,7 +669,6 @@ def interpretScope(blocksWithScope, lastIf, first): ####need to find a way to re
             res, potentialError = interpreter(blocksWithScope[0])
             if potentialError:
                 return [], potentialError
-            
             lastIf = True if res[-1] not in ["false", 0, []] else False
             elifIsTrue = False 
             collectedRes=[]
@@ -744,11 +744,10 @@ def interpreter(block):
     
     LHS, parsedInput, parsedTokenPositionsInSource = block
     row = parsedTokenPositionsInSource[0][2] if parsedTokenPositionsInSource else None
-    
     intermediate = []
     errorIncrement = 1 if LHS and LHS[-1][0] == TASSIGN else 0
+   
     for idx, i in enumerate(parsedInput):
-        
         if i[0] in [TARRAY]:
             for j, n in enumerate(i[1]):
                 n = [n] if n[0] == TARRAY else n
@@ -854,19 +853,7 @@ def interpreter(block):
                     resVal = [] if rightVal >= len(leftVal) else leftVal[:-rightVal]
                 elif rightType ==TARRAY and leftType in [TINT, TFLOAT]:
                     resVal = [] if leftVal >= len(rightVal) else rightVal[leftVal:]
-                elif leftType == TARRAY and rightType == TARRAY:
-                    toRemove = {}
-                    new = []
-                    for i in rightVal:
-                        toRemove[i] = 1 if i not in toRemove else toRemove[i] + 1
-                    for i in leftVal:
-                        if i in toRemove:
-                            toRemove[i] -= 1
-                            if not toRemove[i]:
-                                del toRemove[i]
-                        else:
-                            new.append(i)
-                    resVal = new
+                
                 else:
                     resVal = leftVal - rightVal
 
@@ -921,13 +908,11 @@ def run(sourceCodeFilePath):
         print(potentialError)
         return
     
-    
     blocksWithState, potentialError = stateMachine(parsedBlocks)
     if potentialError:
         print(potentialError)
         return
     
-    #pprint.pprint(blocksWithState
     output, potentialError = interpretScope(blocksWithState, False, True)
 
     if potentialError:
@@ -935,6 +920,7 @@ def run(sourceCodeFilePath):
         return
     
     pprint.pprint(output)
+    return
     
     return
     
