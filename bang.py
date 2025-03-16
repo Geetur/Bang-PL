@@ -606,7 +606,7 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
                 while operator and operator[-1][1] in "pm!":          
                     output.append(operator.pop()); originalTokenPositions.append(operatorTokenPositions.pop())
 
-                                                                                                                
+                                                                                                              
             if i[1] not in "[])=,":
                 operator.append(i)
                 if i[1] != "(":
@@ -746,7 +746,6 @@ def interpreter(block):
     row = parsedTokenPositionsInSource[0][2] if parsedTokenPositionsInSource else None
     intermediate = []
     errorIncrement = 1 if LHS and LHS[-1][0] == TASSIGN else 0
-   
     for idx, i in enumerate(parsedInput):
         if i[0] in [TARRAY]:
             for j, n in enumerate(i[1]):
@@ -859,9 +858,16 @@ def interpreter(block):
 
             elif tokType == TDIV:
                 if rightVal == 0:
-                    return [], error("Interpreter error: attempted division by zero", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber + 1]], ("", ""))
+                    return [], error("Interpreter error: attempted division by zero", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
                 else:
-                    resVal = leftVal / rightVal
+                    if leftType == TARRAY and rightType in [TINT, TFLOAT]:
+                        end = len(leftVal) // rightVal
+                        resVal = leftVal[ :end] if end >= 0 else []
+                    elif rightType == TARRAY and leftType in [TINT, TFLOAT]:
+                        start = len(rightVal) // leftVal
+                        resVal = rightVal[len(rightVal) - start: ] if len(rightVal) - start >= 0 else []
+                    else:
+                        resVal = leftVal / rightVal
 
             elif tokType == TMUL:
                 resVal = leftVal * rightVal
@@ -922,7 +928,6 @@ def run(sourceCodeFilePath):
     pprint.pprint(output)
     return
     
-    return
     
     
 
