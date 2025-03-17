@@ -424,6 +424,7 @@ def passBlocksToParser(blocks):
         LHS, output, originalTokenPositions, potentialError = parser(i, idx)
         if potentialError:
             return [], potentialError
+        
         errorIdxMapInterpreter.append(originalTokenPositions)
         if potentialError:
             return [], potentialError
@@ -465,6 +466,7 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
     total = []
     arrayState = []
     after = []
+    afterTokenPositions = []
     subexpression = []
     
 
@@ -516,7 +518,9 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
             
             elif i[0] == TLBRACKET:
                 after.append(operator)
+                afterTokenPositions.append(operatorTokenPositions)
                 operator = []
+                operatorTokenPositions = []
                 if output:
                     if arrayState:
                         arrayState[-1][-1].append(output)
@@ -535,14 +539,19 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
                 output = []
                 nest = tuple(arrayState.pop())
                 p = after.pop()
+                pPositions = afterTokenPositions.pop()
                 if arrayState:
                     arrayState[-1][-1].append(nest)
                     while p:
                         arrayState[-1][-1].append(p.pop())
+                    originalTokenPositions.extend(pPositions)
+                        
                 else:
                     total.append(nest)
                     while p:
                         total.append(p.pop())
+                    originalTokenPositions.extend(pPositions)
+                        
                 
                 
             elif i[1] in "(":
@@ -625,6 +634,7 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
         hold = output
     if total:
         output = total
+    
     output.extend(hold)
 
     if LHS and LHS[-1][1] in [TIF, TELIF, TWHILE] and not output:
@@ -748,6 +758,7 @@ def interpreter(block):
     errorIncrement = 1 if LHS and LHS[-1][0] == TASSIGN else 0
     for idx, i in enumerate(parsedInput):
         if i[0] in [TARRAY]:
+            
             for j, n in enumerate(i[1]):
                 n = [n] if n[0] == TARRAY else n
                 potential, potentialError = interpreter([[], n ,parsedTokenPositionsInSource])
@@ -859,15 +870,11 @@ def interpreter(block):
             elif tokType == TDIV:
                 if rightVal == 0:
                     return [], error("Interpreter error: attempted division by zero", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
+                
+                if leftType == TARRAY or rightType == TARRAY:
+                    return [], error("interpreter error: division not supported on lists", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
                 else:
-                    if leftType == TARRAY and rightType in [TINT, TFLOAT]:
-                        end = len(leftVal) // rightVal
-                        resVal = leftVal[ :end] if end >= 0 else []
-                    elif rightType == TARRAY and leftType in [TINT, TFLOAT]:
-                        start = len(rightVal) // leftVal
-                        resVal = rightVal[len(rightVal) - start: ] if len(rightVal) - start >= 0 else []
-                    else:
-                        resVal = leftVal / rightVal
+                    resVal = leftVal / rightVal
 
             elif tokType == TMUL:
                 resVal = leftVal * rightVal
