@@ -862,8 +862,20 @@ def interpreter(block):
                 if leftType == TARRAY and rightType in [TINT, TFLOAT]:
                     resVal = [] if rightVal >= len(leftVal) else leftVal[:-rightVal]
                 elif rightType ==TARRAY and leftType in [TINT, TFLOAT]:
-                    resVal = [] if leftVal >= len(rightVal) else rightVal[leftVal:]
-                
+                    resVal = [] if leftVal >= len(rightVal) else rightVal[leftVal:] 
+                elif leftType == TARRAY and rightType == TARRAY:
+                    toDelete = {}
+                    new = []
+                    for i in rightVal:
+                        toDelete[i[1]] = 1 if i[1] not in toDelete else toDelete[i[1]] + 1
+                    for i in leftVal:
+                        if i[1] in toDelete:
+                            toDelete[i[1]] -= 1
+                            if not toDelete[i[1]]:
+                                del toDelete[i[1]]
+                        else:
+                            new.append(i)
+                    resVal = new
                 else:
                     resVal = leftVal - rightVal
 
@@ -888,6 +900,20 @@ def interpreter(block):
                         if len(segment) == segmentLength:
                             new.append(segment); segment = []
                     resVal = new
+                elif leftType == TARRAY and rightType == TARRAY:
+                    if not leftVal:
+                        resVal = []
+                    else:
+                        for i,n in enumerate(rightVal):
+                            if i >= len(leftVal):
+                                break
+                            if n[1] == 0:
+                                return [], error("Interpreter error: attempted division by zero", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
+                            val = leftVal[i][1] / n[1]
+                            ttype = TINT if val % 1 == 0 else TFLOAT
+                            val = int(val) if ttype == TINT else val
+                            leftVal[i] = (ttype, val)  
+                        resVal = leftVal
                 else:
                     resVal = leftVal / rightVal
 
