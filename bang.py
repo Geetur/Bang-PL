@@ -868,11 +868,26 @@ def interpreter(block):
                     resVal = leftVal - rightVal
 
             elif tokType == TDIV:
-                if rightVal == 0:
+                if rightVal == 0 or (leftVal == 0 and rightType == TARRAY) or (rightType == TARRAY and len(rightVal) == 0):
                     return [], error("Interpreter error: attempted division by zero", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
-                
-                if leftType == TARRAY or rightType == TARRAY:
-                    return [], error("interpreter error: division not supported on lists", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
+                elif leftType == TARRAY and rightType in [TINT, TFLOAT]:
+                    segmentLength = len(leftVal) // rightVal
+                    segment = []
+                    new = []
+                    for i, n in enumerate(leftVal):
+                        segment.append(n)
+                        if len(segment) == segmentLength:
+                            new.append(segment); segment = []
+                    resVal = new
+                elif leftType in [TINT, TFLOAT] and rightType == TARRAY:
+                    segmentLength = len(rightVal) // leftVal
+                    segment = []
+                    new = []
+                    for i, n in enumerate(rightVal):
+                        segment.append(n)
+                        if len(segment) == segmentLength:
+                            new.append(segment); segment = []
+                    resVal = new
                 else:
                     resVal = leftVal / rightVal
 
