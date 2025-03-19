@@ -918,9 +918,24 @@ def interpreter(block):
                     resVal = leftVal / rightVal
 
             elif tokType == TMUL:
-                resVal = leftVal * rightVal
+                if leftType == TARRAY and rightType == TARRAY:
+                    if not leftVal:
+                        resVal = []
+                    else:
+                        for i,n in enumerate(rightVal):
+                            if i >= len(leftVal):
+                                break
+                            val = leftVal[i][1] * n[1]
+                            ttype = TINT if val % 1 == 0 else TFLOAT
+                            val = int(val) if ttype == TINT else val
+                            leftVal[i] = (ttype, val)
+                        resVal = leftVal
+                else:
+                    resVal = leftVal * rightVal
             
             elif tokType == TEXPO:
+                if leftType not in [TFLOAT, TINT] or rightType not in [TINT, TFLOAT]:
+                    return [], error(f"Exponentiation only supported for number values", parsedTokenPositionsInSource[errorIdxMapInterpreter[row][termNumber]], ("", ""))
                 resVal = leftVal ** rightVal
             
             if resVal in ["false", "true"]:
