@@ -49,7 +49,7 @@ TUNARYPLUS = "UNARYPLUS"
 TLPAREN = "LPAREN"
 TRPAREN = "RPAREN"
 TLBRACKET = "LBRACKET"
-TRBRACKET = "TRBRACKET"
+TRBRACKET = "RBRACKET"
 #BRACKETS
 
 #KEYWORDS
@@ -232,6 +232,7 @@ def lexer(text):
         while len(text) > idx:
             
             i = text[idx]
+            
             if i == " ":
                 advance()                                                # skip spaces
                 continue
@@ -309,6 +310,7 @@ def lexer(text):
                         finishLineIfError()
                         return [], error(f"Syntax Error: Invalid symbol", len(tokenPositions) - 1, -1)
                 else:
+                    
                     record(symbToTkn[i], i, col, col)                   
                     advance()
             else:
@@ -471,6 +473,7 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
     
     
     for idx, i in enumerate(tokens):
+        
         #################################################### HANDLE KEYWORDS
         if i[0] == TKEYWORD:
 
@@ -486,6 +489,8 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
         #################################################### HANDLE KEYWORDS
 
         #################################################### HANDLE VALUES
+
+
         if i[0] in (TINT, TFLOAT, TIDENTIFIER, TBOOL, TARRAY):
             if prev[0] in (TINT, TFLOAT, TIDENTIFIER, TRPAREN, TBOOL, TARRAY):
                 return [], [], [], error("Parser Error: expected operator, not value", idx, row)
@@ -500,7 +505,8 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
 
 
         #################################################### HANDLE OPERATORS
-        elif i[1] in symbToTkn:
+        if i[1] in symbToTkn:
+            
             if i[1] in ["+", "-", "/", "*", "^", "=", ">", ">=", "<", "<=", "==", "!=", "&&", "||", ")"] and prev[1] in ["+", "-", "/", "*", "^", "=", ">", ">=", "<", "<=", "==", "(", "!=", "&&", "||"]:
                 return [], [], [], error("Parser Error: repeating operators not allowed", idx, row)
             
@@ -516,6 +522,8 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
                 output = []
             
             elif i[0] == TLBRACKET:
+                if prev[0] in [TINT, TFLOAT, TBOOL]:
+                    return [], [], [], error(f"Parser Error: expected operator not {i[1]}", idx, row)
                 after.append(operator)
                 afterTokenPositions.append(operatorTokenPositions)
                 operator = []
@@ -527,6 +535,7 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
                         total.extend(output)
                     output = []
                 arrayState.append([TARRAY, []])
+                
             
             elif i[0] == TRBRACKET: 
                 if prev[0] not in [TINT, TFLOAT, TIDENTIFIER, TBOOL, TARRAY, TRBRACKET, TLBRACKET]:
@@ -535,26 +544,34 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
                     output.append(operator.pop()); originalTokenPositions.append(operatorTokenPositions.pop())
                 if output:
                     arrayState[-1][-1].extend(output)
-                
                 output = []
                 nest = tuple(arrayState.pop())
-                
+
                 if not isinstance(nest[1][0], list):
-                    nest = (nest[0],[nest[1]] )
+                    nest = (nest[0],[nest[1]])
+                
+                for b in range(len(nest[1])):
+                    if not isinstance(nest[1][b], list):
+                        new = nest[1][b:]
+                        while not isinstance(nest[1][-1], list):
+                            nest[1].pop()
+                        nest[1].append(new)
+                        break
                     
-                p = after.pop()
+                p = after.pop() #instead of directly append just make them the output and original token positions again
                 pPositions = afterTokenPositions.pop()
+                operatorTokenPositions.extend(pPositions)
+                operator = p
                 if arrayState:
                     arrayState[-1][-1].append(nest)
-                    while p:
-                        arrayState[-1][-1].append(p.pop())
-                    originalTokenPositions.extend(pPositions)
-                        
+                    #while p:
+                        #arrayState[-1][-1].append(p.pop())
+                    #originalTokenPositions.extend(pPositions)     
                 else:  
                     total.append(nest)
-                    while p:
-                        total.append(p.pop())
-                    originalTokenPositions.extend(pPositions)
+                    #while p:
+                        #total.append(p.pop())
+                    #originalTokenPositions.extend(pPositions)
             
                  
                         
@@ -645,7 +662,7 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
     output.extend(hold)
 
     if LHS and LHS[-1][1] in [TIF, TELIF, TWHILE] and not output:
-        print(output)
+        
         return [], [], [], error(f"Parser error: the {LHS[-1][1]} keyword can only exist paired with a truth expression", 0, row)
     elif LHS and LHS[-1][1] in [TFOR]:
          if not output:
@@ -773,9 +790,7 @@ def interpreter(block):
                 potential, potentialError = interpreter([[], n ,parsedTokenPositionsInSource])
                 if potentialError:
                     return [], potentialError
-                i[1][j] = potential
-            
-               
+                i[1][j] = potential        
         
         tokType, value = i[0], i[1]
         if tokType != TARRAY:
@@ -986,7 +1001,6 @@ def run(sourceCodeFilePath):
     if potentialError:
         print(potentialError)
         return
-    
     
     blocksWithState, potentialError = stateMachine(parsedBlocks)
     if potentialError:
