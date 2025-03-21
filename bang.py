@@ -469,7 +469,7 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
     afterTokenPositions = []
     subexpression = []
     
-
+    
     for idx, i in enumerate(tokens):
         #################################################### HANDLE KEYWORDS
         if i[0] == TKEYWORD:
@@ -501,7 +501,6 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
 
         #################################################### HANDLE OPERATORS
         elif i[1] in symbToTkn:
-
             if i[1] in ["+", "-", "/", "*", "^", "=", ">", ">=", "<", "<=", "==", "!=", "&&", "||", ")"] and prev[1] in ["+", "-", "/", "*", "^", "=", ">", ">=", "<", "<=", "==", "(", "!=", "&&", "||"]:
                 return [], [], [], error("Parser Error: repeating operators not allowed", idx, row)
             
@@ -535,9 +534,14 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
                 while operator:
                     output.append(operator.pop()); originalTokenPositions.append(operatorTokenPositions.pop())
                 if output:
-                    arrayState[-1][-1].append(output)
+                    arrayState[-1][-1].extend(output)
+                
                 output = []
                 nest = tuple(arrayState.pop())
+                
+                if not isinstance(nest[1][0], list):
+                    nest = (nest[0],[nest[1]] )
+                    
                 p = after.pop()
                 pPositions = afterTokenPositions.pop()
                 if arrayState:
@@ -546,11 +550,13 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
                         arrayState[-1][-1].append(p.pop())
                     originalTokenPositions.extend(pPositions)
                         
-                else:
+                else:  
                     total.append(nest)
                     while p:
                         total.append(p.pop())
                     originalTokenPositions.extend(pPositions)
+            
+                 
                         
                 
                 
@@ -621,13 +627,14 @@ def parser(tokens, row ):     #isinstance(tokens[-1][-1], str) and
                 if i[1] != "(":
                     operatorTokenPositions.append(idx)
                                       
-        prev = i                                                   
+        prev = i                                            
 
     if LParenIdx:
         return [], [], [], error("Parser Error: unbalanced parenthesis; missing matching right bracket", LParenIdx[0], row)
 
     while operator:
         output.append(operator.pop()); originalTokenPositions.append(operatorTokenPositions.pop())
+    
 
     hold = []
     if output and total:
@@ -755,22 +762,25 @@ def interpreter(block):
     LHS, parsedInput, parsedTokenPositionsInSource = block
     row = parsedTokenPositionsInSource[0][2] if parsedTokenPositionsInSource else None
     intermediate = []
+    
     errorIncrement = 1 if LHS and LHS[-1][0] == TASSIGN else 0
+    
     for idx, i in enumerate(parsedInput):
+        
         if i[0] in [TARRAY]:
-            
             for j, n in enumerate(i[1]):
                 n = [n] if n[0] == TARRAY else n
                 potential, potentialError = interpreter([[], n ,parsedTokenPositionsInSource])
                 if potentialError:
                     return [], potentialError
                 i[1][j] = potential
-                
+            
+               
         
         tokType, value = i[0], i[1]
         if tokType != TARRAY:
             termNumber += 1          
-        if tokType in TIDENTIFIER:
+        if tokType == TIDENTIFIER:
             if value in identifiers:
                 tokType, value = identifiers[value][0], identifiers[value][1]
             else:
@@ -977,11 +987,12 @@ def run(sourceCodeFilePath):
         print(potentialError)
         return
     
+    
     blocksWithState, potentialError = stateMachine(parsedBlocks)
     if potentialError:
         print(potentialError)
         return
-    
+   
     output, potentialError = interpretScope(blocksWithState, False, True)
 
     if potentialError:
@@ -991,7 +1002,4 @@ def run(sourceCodeFilePath):
     pprint.pprint(output)
     return
     
-    
-    
-
 run("c:/Users/jeter/Desktop/myLang/source.txt")
