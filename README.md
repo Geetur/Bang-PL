@@ -1,6 +1,8 @@
 # Bang
 Bang is an interpreted, procedural programming language for algorithmic design/prototypes, or small-scale projects. Bang was created with an emphasis on the developer; it is meant for developers to prototype algorithms, functions, programs, etc. rapidly, and then translate into a more robust language.
 
+Bang is still in development and thus the code in the master branch is meant for debugging! All of the features below do work, but there are many edge cases specifically regarding array manipulation that haven't been dealt with because the array implementation isn't fully robust, refactored, etc.
+
 Features of Bang are:
 
 | **Features**  | **Description**                                                                                       |
