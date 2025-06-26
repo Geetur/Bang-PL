@@ -1,0 +1,140 @@
+
+a = ["1"]
+b = [a[0]]
+
+a = 1 + 5 + 9 + (5 * 2)
+
+arr = [1, 5,7 + 1, "a"]
+
+"1" + 5 + 9 + (5 * 2)
+
+if a && arr
+    for i 15
+        arr += [1]
+    end
+elif a || arr
+    i = 10
+    while a
+        i -= 1
+    end
+end
+else
+    for i 10
+        arr *= [1]
+    end
+end
+end
+
+count = --0
+build = 4
+while count || arr || build >= 0
+    build -= 1
+end
+
+if !count
+    count += [1, 5,7 + 1, "a"][2]
+end
+
+arr = [1.3] 
+
+"value = -3 * (4 + +5)"
+value = -3 * (4 + +5)
+
+arr = [[1,2], [3, [4,5]]]
+
+result = 3.5 * 2.0 + 1.25
+
+x = ((1 + 2) * 3) - 4
+
+#x = -
+i = 0
+val = arr[1][1][i + 1]
+
+arr = [1, 2, 3]
+
+next = arr[1]
+
+nest = [1,,1]
+#x = tensor[1,2][3]
+
+flag = a < a && nest > val || !next
+
+nest = [, 1]
+
+if true    
+x = 1
+else    
+x = 2
+end
+end
+
+
+a = "hello"
+b = "dgdg"
+
+a += b
+
+a = [1]
+b = [2] 
+a[0] += b[0]
+
+a = ["1"]
+b = [a[0]]
+a[0] *= b[0]
+
+arr = [[1,2], [3, [4,5]]]
+
+x = ![1] 
+
+x = !x[0]
+
+
+a = [-1.1232423]
+b = [["2"]]
+
+a[0] /= b[0]
+
+fn print args
+    print{args[0]}
+    return 0 
+end
+
+fn two_sum args
+    a = args[0]
+    b = args[1]
+    if !a
+        return a+b
+    elif !a && !b
+        return a ** b
+        end
+    elif a && b && a == b
+        return a // b
+        end
+    else
+        return a - b
+        end
+    end
+end
+a = 1
+b = 1
+c = 1
+if a
+    if b
+        if c
+        ans = 1 + two_sum{[1,2,3],print{5}} + 5
+        ans = (print{1,2,3} - two_sum{[1,2,3],print{5}})
+        ans = print{1,2,3}[5]
+        end
+    end
+end
+
+x=1
+
+fn x args
+return 0
+end
+
+p=x{5}
+p = -"5"
+
+
