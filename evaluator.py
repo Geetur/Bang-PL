@@ -77,6 +77,22 @@ class EvaluatorError(Exception):
 
     __repr__ = __str__
 
+# when we encounter a break, return, etc we
+# need to propogate this across potentially every function we have; so instead of returning
+# "break_signal" and adding custom logic to each one, which increases the complexity and
+# decreases readability, we create private exceptions that allow us to control exactly where each signal
+# propogates to
+
+class _ReturnSignal(Exception):
+    __slots__ = ("value",)
+    def __init__(self, value): self.value = value          # carry the result
+
+class _BreakSignal(Exception):
+    pass
+
+class _ContinueSignal(Exception):
+    pass
+
 
 # from our semantic analysis, we don't have to really change anything.
 # we are going to go to our leaf functions (the functions where any given dispatch could end)
@@ -129,8 +145,8 @@ class Evaluator:
         self.construct_to_eval = {
             AssignmentNode: self.eval_assignments,
             IFNode:         self.eval_if,
-            ElifNode:       self.eval_elif,
-            ElseNode:       self.eval_else,
+            #ElifNode:       self.eval_elif,
+            #ElseNode:       self.eval_else,
             ForNode:        self.eval_for,
             WhileNode:      self.eval_while,
             BlockNode:      self.eval_block,
@@ -157,17 +173,8 @@ class Evaluator:
     def eval_function(self, root):
         function_name = root.name
         args_name = root.arg_list_name
-        # its really important to initalize the function outside of its bodys scope
 
-        self.initalize_var(function_name, FunctionType(value=root.body))
-
-        self.func_depth += 1
-        self.scope_stack.append({})
-        self.initalize_var(args_name, CallListType(value=[]))
-
-        self.eval_block(root.body)
-        self.scope_stack.pop()
-        self.func_depth -= 1
+        self.initalize_var(function_name, runtime_function(body=root.body, params_name=args_name, closure=self.scope_stack))
         
     def eval_block(self, root):
         # A block just evals its children in the current scope
@@ -177,61 +184,114 @@ class Evaluator:
     
     def eval_if(self, root):
 
-        self.eval_expression(root.condition.root_expr)
-        self.scope_stack.append({})
-        self.eval_block(root.body)
-        self.scope_stack.pop()
-
+        if self.eval_expression(root.condition.root_expr):
+            self.scope_stack.append({})
+            self.eval_block(root.body)
+            self.scope_stack.pop()
+            return
         for elif_root in root.elif_branch.block:
-            self.eval_elif(elif_root)
+            if self.eval_expression(elif_root.condition.root_expr):
+                self.scope_stack.append({})
+                self.eval_block(elif_root.body)
+                self.scope_stack.pop()
+                return
         for else_root in root.else_branch.block:
-            self.eval_else(else_root)
+            self.scope_stack.append({})
+            self.eval_block(else_root.body)
+            self.scope_stack.pop()
+            return
     
-    def eval_elif(self, root):
+    #def eval_elif(self, root):
 
-        self.eval_expression(root.condition.root_expr)
-        self.scope_stack.append({})
-        self.eval_block(root.body)
-        self.scope_stack.pop()
+        #self.eval_expression(root.condition.root_expr)
+        #self.scope_stack.append({})
+        #self.eval_block(root.body)
+        #self.scope_stack.pop()
     
-    def eval_else(self, root):
-        self.scope_stack.append({})
-        self.eval_block(root.body)
-        self.scope_stack.pop()
+    #def eval_else(self, root):
+        #self.scope_stack.append({})
+        #self.eval_block(root.body)
+        #self.scope_stack.pop()
     
     
     def eval_for(self, root):
+
         self.loop_depth += 1
         self.scope_stack.append({})
         left_hand_name = root.variable.value
-        right_hand_type = self.eval_expression(root.bound.root_expr)
-        if type(right_hand_type) in {StringType, NoneType}:
-            raise EvaluatorError(self.file, "For loop bound must be an array, identifier, or number", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-        self.initalize_var(left_hand_name, right_hand_type)
-        self.eval_block(root.body)
+
+        right_hand_val = self.eval_expression(root.bound.root_expr)
+        if len(left_hand_name) >= 5 and left_hand_name.lower()[:5] == "range":
+            if type(right_hand_val) != list:
+                raise EvaluatorError(self.file, "range loop can only be accessed with bound of type list", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+            if len(right_hand_val) == 1:
+                start = 0
+                end = right_hand_val[0]
+                jump = 1
+            elif len(right_hand_val) == 2:
+                start = right_hand_val[0]
+                end = right_hand_val[1]
+                jump = 1
+            else:
+                start = right_hand_val[0]
+                end = right_hand_val[1]
+                jump = right_hand_val[2]
+            if not all(isinstance(i, (int, float)) for i in (start, end, jump)):
+                EvaluatorError(self.file, "start, end, and jump of range list (first three elements) must be numbers", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+            for i in range(start, end, jump):
+                self.initalize_var(left_hand_name, i)
+                try:
+                    self.eval_block(root.body)
+                except _ContinueSignal:
+                    continue
+                except _BreakSignal:
+                    break
+        else:
+            try:
+                for i in right_hand_val:
+                    self.initalize_var(left_hand_name, i)
+                    try:
+                        self.eval_block(root.body)
+                    except _ContinueSignal:
+                        continue
+                    except _BreakSignal:
+                        break
+            except:
+                raise EvaluatorError(self.file, "bound not iterable", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
         self.scope_stack.pop()
         self.loop_depth -= 1
-    
-    
+
+
     def eval_while(self, root):
         self.loop_depth += 1
-        self.eval_expression(root.condition.root_expr)
-        self.eval_block(root.body)
-        self.loop_depth -= 1
+        self.scope_stack.append({})
+        try:
+            while self.eval_expression(root.condition.root_expr):
+                try:
+                    self.eval_block(root.body)
+                except _BreakSignal:
+                    break
+                except _ContinueSignal:
+                    continue
+        finally:
+            self.loop_depth -= 1
+            self.scope_stack.pop()
 
     def eval_break(self, root):
         if self.loop_depth == 0:
             raise EvaluatorError(self.file, "cannot break outside of loop scope", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+        raise _BreakSignal()
     
     def eval_continue(self, root):
         if self.loop_depth == 0:
             raise EvaluatorError(self.file, "cannot continue outside of loop scope", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+        raise _ContinueSignal()
     
     def eval_return(self, root):
         if not self.func_depth:
             raise EvaluatorError(self.file, "cannot return outside of function scope", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-        if root.expression:
-            self.eval_expression(root.expression.root_expr)
+        value = self.eval_expression(root.expression.root_expr)
+        raise _ReturnSignal(value=value)
 
 
     # every time a var is assigned we throw it into our current scope
@@ -246,9 +306,10 @@ class Evaluator:
         self.scope_stack[-1][left_hand] = right_hand
     
     def search_for_var(self, name, potential_error):
-        for scope in reversed(self.scope_stack):
+        for idx, scope in enumerate(reversed(self.scope_stack)):
             if name in scope:
-                return scope[name]
+                #converts reversed index to normal index
+                return len(self.scope_stack) - idx - 1
         raise EvaluatorError(self.file, f"Variable {name} not found in current scope", potential_error.line, potential_error.column_start, potential_error.column_end)
 
 
@@ -257,30 +318,42 @@ class Evaluator:
         # probably we are going to want to change these if elif blocks into
         # functions because they are simply meant to differentiate between different types of 
         # left hands which could be arbitrarily large
-        right_hand_type = self.eval_expression(root.right_hand.root_expr)
+
+        assignment_to_normal_ops = {
+            TokenType.T_PLUS_ASSIGN: TokenType.T_PLUS,
+            TokenType.T_MINUS_ASSIGN: TokenType.T_MINUS,
+            TokenType.T_SLASH_ASSIGN: TokenType.T_SLASH,
+            TokenType.T_ASTERISK_ASSIGN: TokenType.T_ASTERISK,
+        }
+
+        left_hand_value = self.eval_expression(root.left_hand)
+        right_hand_value = self.eval_expression(root.right_hand.root_expr)
         op_type = root.op
+        true_right_value = self.eval_expression(BinOpNode(left=left_hand_value, op=assignment_to_normal_ops[op_type], right=right_hand_value, meta_data=root.meta_data)) \
+            if op_type != TokenType.T_ASSIGN else right_hand_value
+
         if type(root.left_hand) == IdentifierNode:
             left_hand_name = root.left_hand.value
-            if op_type in self.ARITH_ASSIGNMENTS:
-                left_hand_type = self.search_for_var(left_hand_name)
-                if not left_hand_type:
-                    raise EvaluatorError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-                if (not ((type(right_hand_type) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand_type))):
-                    raise EvaluatorError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-            self.initalize_var(left_hand_name, right_hand_type)
-        # else for now but with the addition of more assignable types
-        # this will turn into an elif or a seperate function
-        # **if type(left_hand) == IndexNode
+            self.initalize_var(left_hand_name, true_right_value)
+            return
         else:
-            left_hand_type = self.eval_expression(root.left_hand)
-            if left_hand_type.value != None and right_hand_type.value != None:
-                if not left_hand_type:
-                    raise EvaluatorError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-                if (not ((type(right_hand_type) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand_type))):
-                    raise EvaluatorError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-
-
-
+            if type(root.left_hand.base) == IdentifierNode:
+                base_location = self.search_for_var(root.left_hand.base.value, root.meta_data)
+                base_frame = self.scope_stack[base_location]
+                target = base_frame[root.left_hand.base.value]
+                for idx in root.left_hand.index[:-1]:
+                    try:
+                        target = target[self.eval_expression(idx.root_expr)]
+                    except:
+                        raise EvaluatorError(self.file, "Index out of bounds", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                try:
+                    final_idx = self.eval_expression(root.left_hand.index[-1].root_expr)
+                    target[final_idx] = true_right_value
+                except:
+                    raise EvaluatorError(self.file, "Index out of bounds", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end) 
+            else:
+                raise EvaluatorError(self.file, "unassignable entity", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+            
     # where our dispatch always ends
     def eval_expression(self, root):
         
@@ -290,19 +363,14 @@ class Evaluator:
             return actual_value_function(root.value)
         
         elif type(root) == BinOpNode:
-
-            op = root.op
-
-            left = self.eval_expression(root.left)
-            right = self.eval_expression(root.right)
+            # just pass in entire node
             
-            return self.eval_bin_ops(left, op, right)
+            return self.eval_bin_ops(root)
         
         elif type(root) == UnaryOPNode:
+            # just pass in entire node
 
-            op = self.eval_expression(root.operand)
-
-            return self.eval_unary_ops(root.op, op)
+            return self.eval_unary_ops(root)
         
         elif type(root) == ArrayLiteralNode:
 
@@ -310,8 +378,9 @@ class Evaluator:
 
         elif type(root) == IndexNode:
 
+            index_chain = [self.eval_expression(i.root_expr) for i in root.index]
             base = self.eval_expression(root.base)
-            for i in root.index:
+            for i in index_chain:
                 try:
                     base = base[i]
                 except:
@@ -321,23 +390,23 @@ class Evaluator:
         
         elif type(root) == IdentifierNode:
             # making sure each identifier is defined if its used in a given scope
-            return self.search_for_var(root.value, root.meta_data)
-
+            return self.scope_stack[self.search_for_var(root.value, root.meta_data)][root.value]
 
         elif type(root) == CallNode:
-            callee_type = self.search_for_var(root.name)
-            if not callee_type:
-                raise EvaluatorError(self.file, f"function not initalized'{root.name}'", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
-            if type(callee_type) != FunctionType:
+
+            callee = self.scope_stack[self.search_for_var(root.name, root.meta_data)][root.name]
+            if type(callee) != runtime_function:
                 raise EvaluatorError(self.file, f"attempt to call non-function '{root.name}'", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
 
-            # Analyse each argument expression normally.
-            for arg in root.args:
-                self.eval_expression(arg.root_expr)
-            
-            return DynamicType()
+            arg_vals = [self.eval_expression(i.root_expr) for i in root.args]
+            return self.eval_call(callee, arg_vals, root.meta_data)
 
-    def eval_bin_ops(self, left, op, right):
+    def eval_bin_ops(self, root):
+         
+        op = root.op
+
+        left = self.eval_expression(root.left)
+        right = self.eval_expression(root.right)
 
         def eval_int_bin_op(self, left, op, right):
             # every supported operation between two ints in bang
@@ -362,10 +431,10 @@ class Evaluator:
                                 }
             
             if op in (TokenType.T_SLASH, TokenType.T_DSLASH) and right == 0:
-                raise EvaluatorError(self.file, f"division by zero", op.meta_data.line, op.meta_data.column_start, op.meta_data.column_end,)
+                raise EvaluatorError(self.file, f"division by zero", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
                 
             if op not in supported_types:
-                raise EvaluatorError(self.file, f"operation '{op.value}' not supported between type {type(left)} and type {type(right)}", op.meta_data.line, op.meta_data.column_start, op.meta_data.column_end,)
+                raise EvaluatorError(self.file, f"operation '{op.value}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
             
             return supported_types[op](left, right)
         
@@ -398,7 +467,7 @@ class Evaluator:
             }
             
             if op not in supported_types:
-                raise EvaluatorError(self.file, f"operation '{op.value}' not supported between type {type(left)} and type {type(right)}", op.meta_data.line, op.meta_data.column_start, op.meta_data.column_end,)
+                raise EvaluatorError(self.file, f"operation '{op.value}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             
             return supported_types[op](left, right)
         
@@ -413,7 +482,7 @@ class Evaluator:
                     if len(a) != len(b):
                         if 1 not in [len(a), len(b)]:
                             raise EvaluatorError(self.file, "list element-wise multiplication is not supported between lists of different lengths where" \
-                                                "multiplicand length is not one", op.meta_data.line, op.meta_data.column_start, op.meta_data.column_end,
+                                                "multiplicand length is not one", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end
                                                 )
                         multiplier = b[0] if len(b) == 1 else a[0]
                         base = a if len(a) != 1 else b
@@ -430,7 +499,7 @@ class Evaluator:
                     if len(a) != len(b):
                         if 1 not in [len(a), len(b)]:
                             raise EvaluatorError(self.file, "list element-wise divsion is not supported between lists of different lengths where" \
-                                                "divisor length is not one", op.meta_data.line, op.meta_data.column_start, op.meta_data.column_end,
+                                                "divisor length is not one", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end
                                                 )
                         divisor = b[0] if len(b) == 1 else a[0]
                         base = a if len(a) != 1 else b
@@ -443,7 +512,7 @@ class Evaluator:
                     if len(a) != len(b):
                         if 1 not in [len(a), len(b)]:
                             raise EvaluatorError(self.file, "list element-wise divsion is not supported between lists of different lengths where" \
-                                                "divisor length is not one", op.meta_data.line, op.meta_data.column_start, op.meta_data.column_end,
+                                                "divisor length is not one", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end
                                                 )
                         divisor = b[0] if len(b) == 1 else a[0]
                         base = a if len(a) != 1 else b
@@ -479,28 +548,48 @@ class Evaluator:
         dispatcher = type_dispatch.get(type(left))
         return dispatcher(left, op, right)
     
-    def eval_unary_ops(self, operator, operand):
-        
-        # since each unary operation is pretty clear on what it does
-        # we will dispatch based on unary operator not type
+    def eval_unary_ops(self, root):
 
+        operator = root.op
+        operand = self.eval_expression(root.operand)
         operator_dispatch = {
             TokenType.T_NEGATE: eval_negate,
             TokenType.T_UMINUS: eval_uminus,
             TokenType.T_UPLUS: eval_uplus,
         }
+        
+        # since each unary operation is pretty clear on what it does
+        # we will dispatch based on unary operator not type
 
         def eval_negate(self, operand):
             return not operand
         
         def eval_uminus(self, operand):
-            if type(operand) == int:
+            if type(operand) in [int, float]:
                 return -operand
-            raise EvaluatorError(self.file, f"unary negation not supported on type {type(operand)}",operator.meta_data.line, operator.meta_data.column_start, operator.meta_data.column_end)
+            raise EvaluatorError(self.file, f"unary negation not supported on type {type(operand)}",root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
         
         def eval_uplus(self, operand):
 
-            if type(operand) == int:
+            if type(operand) in [int, float]:
                 return abs(operand)
-            raise EvaluatorError(self.file, f"unary plus not supported on type {type(operand)}",operator.meta_data.line, operator.meta_data.column_start, operator.meta_data.column_end)
+            raise EvaluatorError(self.file, f"unary plus not supported on type {type(operand)}",root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+        return operator_dispatch[operator](operand)
+
+    
+    def eval_call(self, callee, args, meta_data):
+
+        saved_stack = self.scope_stack
+        self.scope_stack = [i.copy() for i in callee.closure] + [{}]
+        self.func_depth += 1
+        try:
+            self.initalize_var(callee.params_name, args)
+            try:
+                self.eval_block(callee.body)
+            except _ReturnSignal as sig:
+                return sig.value
+        finally:
+            self.scope_stack = saved_stack
+            self.func_depth -= 1
+
 
