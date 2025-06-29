@@ -111,10 +111,14 @@ class Evaluator:
         self.scope_stack = [{}]
 
         def _built_in_print(args, meta_data):
-            print(*args)
+            print(args[0])
         
         def _built_in_len(args, meta_data):
-            return len(args)
+            if len(args) != 1:
+                raise EvaluatorError(self.file,"len expects exactly one arg", meta_data.line, meta_data.column_start, meta_data.column_end)
+            if type (args[0]) not in [str, list]:
+                raise EvaluatorError(self.file,f"len expects list, str, not {type(args[0])}", meta_data.line, meta_data.column_start, meta_data.column_end)
+            return len(args[0])
         
         def _built_in_sum(args, meta_data):
             if not args:
@@ -164,6 +168,7 @@ class Evaluator:
             
 
         self.scope_stack[0].update(self.built_in_functions)
+
 
         # we need to know the loop depth for the break/continue etc constructs
         # because if we see a break outside of a loop for example we can throw an error
@@ -301,6 +306,15 @@ class Evaluator:
                     continue
                 except _BreakSignal:
                     break
+        elif type(right_hand_val) == int:
+            for i in range(0, right_hand_val, -1 if right_hand_val < 0 else 1):
+                self.initalize_var(left_hand_name, i)
+                try:
+                    self.eval_block(root.body)
+                except _ContinueSignal:
+                    continue
+                except _BreakSignal:
+                    break
         else:
             try:
                 for i in right_hand_val:
@@ -383,14 +397,18 @@ class Evaluator:
 
         right_hand_value = self.eval_expression(root.right_hand.root_expr)
         op_type = root.op
+
         if op_type != TokenType.T_ASSIGN:
             left_hand_value = self.eval_expression(root.left_hand)
-            right_hand_value = self.eval_expression(BinOpNode(left=left_hand_value, op=assignment_to_normal_ops[op_type], right=right_hand_value, meta_data=root.meta_data))
-
+            right_hand_value = self.eval_expression(BinOpNode(left=root.left_hand, op=assignment_to_normal_ops[op_type], right=root.right_hand.root_expr, meta_data=root.meta_data))
 
         if type(root.left_hand) == IdentifierNode:
             left_hand_name = root.left_hand.value
-            self.initalize_var(left_hand_name, right_hand_value)
+            try:
+                 idx = self.search_for_var(left_hand_name, root.meta_data)
+                 self.scope_stack[idx][left_hand_name] = right_hand_value
+            except:
+                self.initalize_var(left_hand_name, right_hand_value)
             return
         else:
             if type(root.left_hand.base) == IdentifierNode:
@@ -413,7 +431,10 @@ class Evaluator:
     # this function handles all expression level contructs such as literals, binary ops,
     # unary ops, and function calls
     def eval_expression(self, root):
-        
+
+        if type(root) == ExpressionNode:
+            root = root.root_expr
+
         if type(root) in self.literals:
             # converting bang literals to python literals
             actual_value_function = self.literals[type(root)]
@@ -451,6 +472,7 @@ class Evaluator:
             # executing a bang block
             callee = self.scope_stack[self.search_for_var(root.name, root.meta_data)][root.name]
             arg_vals = [self.eval_expression(i.root_expr) for i in root.args]
+
 
             if callable(callee) and root.name in self.built_in_functions:
                 return self.built_in_functions[root.name](arg_vals, root.meta_data)
@@ -625,6 +647,11 @@ class Evaluator:
                 TokenType.T_AND:     lambda a, b: a and b,
                 TokenType.T_OR:      lambda a, b: a or  b,
             }
+
+            if op not in supported_types:
+                raise EvaluatorError(self.file, f"operation '{op.value}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+            
+            return supported_types[op](left, right)
         #-------------------------------------------
         #LIST OPERATIONS END
         #-------------------------------------------
