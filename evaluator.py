@@ -110,6 +110,61 @@ class Evaluator:
         # we will have a bunch of scopes
         self.scope_stack = [{}]
 
+        def _built_in_print(args, meta_data):
+            print(*args)
+        
+        def _built_in_len(args, meta_data):
+            return len(args)
+        
+        def _built_in_sum(args, meta_data):
+            if not args:
+                raise EvaluatorError(self.file, "sum function expects argument list of at least length one", meta_data.line, meta_data.column_start, meta_data.column_end)
+            expected_type = type(args[0])
+            if expected_type == int:
+                base = 0
+            elif expected_type == str:
+                base = ""
+            elif expected_type == list:
+                base = []
+            for i in args:
+                if type(i) != expected_type:
+                    raise EvaluatorError(self.file, "sum function expects argument list of homegenous type", meta_data.line, meta_data.column_start, meta_data.column_end)
+                base += i
+            return base
+        
+        def _built_in_min(args, meta_data):
+            if not args:
+                raise EvaluatorError(self.file, "min function expects argument list of at least length one", meta_data.line, meta_data.column_start, meta_data.column_end)
+            expected_type = type(args[0])
+            base = args[0]
+            for i in args:
+                if type(i) != expected_type:
+                    raise EvaluatorError(self.file, "min function expects argument list of homegenous type", meta_data.line, meta_data.column_start, meta_data.column_end)
+                base = min(base, i)
+            return base
+
+        def _built_in_max(args, meta_data):
+            if not args:
+                raise EvaluatorError(self.file, "max function expects argument list of at least length one", meta_data.line, meta_data.column_start, meta_data.column_end)
+            expected_type = type(args[0])
+            base = args[0]
+            for i in args:
+                if type(i) != expected_type:
+                    raise EvaluatorError(self.file, "max function expects argument list of homegenous type", meta_data.line, meta_data.column_start, meta_data.column_end)
+                base = max(base, i)
+            return base
+        
+        self.built_in_functions = {
+            "print": _built_in_print,
+            "len": _built_in_len,
+            "sum": _built_in_sum,
+            "min": _built_in_min,
+            "max": _built_in_max,
+        }
+            
+
+        self.scope_stack[0].update(self.built_in_functions)
+
         # we need to know the loop depth for the break/continue etc constructs
         # because if we see a break outside of a loop for example we can throw an error
         self.loop_depth = 0
@@ -122,7 +177,7 @@ class Evaluator:
                     # we will be converting booleans to
                     # zeroes and ones respectivley and none to zero
                     BooleanLiteralNode: int,
-                    NoneLiteralNode: int,
+                    NoneLiteralNode: lambda _ : 0,
                     }
         
 
@@ -174,7 +229,7 @@ class Evaluator:
         function_name = root.name
         args_name = root.arg_list_name
 
-        self.initalize_var(function_name, runtime_function(body=root.body, params_name=args_name, closure=self.scope_stack))
+        self.initalize_var(function_name, runtime_function(body=root.body, params_name=args_name, closure=[i.copy() for i in self.scope_stack]))
         
     def eval_block(self, root):
         # A block just evals its children in the current scope
@@ -236,8 +291,8 @@ class Evaluator:
                 start = right_hand_val[0]
                 end = right_hand_val[1]
                 jump = right_hand_val[2]
-            if not all(isinstance(i, (int, float)) for i in (start, end, jump)):
-                EvaluatorError(self.file, "start, end, and jump of range list (first three elements) must be numbers", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+            if not all(isinstance(i, (int)) for i in (start, end, jump)):
+                raise EvaluatorError(self.file, "start, end, and jump of range list (first three elements) must be integers", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             for i in range(start, end, jump):
                 self.initalize_var(left_hand_name, i)
                 try:
@@ -326,15 +381,16 @@ class Evaluator:
             TokenType.T_ASTERISK_ASSIGN: TokenType.T_ASTERISK,
         }
 
-        left_hand_value = self.eval_expression(root.left_hand)
         right_hand_value = self.eval_expression(root.right_hand.root_expr)
         op_type = root.op
-        true_right_value = self.eval_expression(BinOpNode(left=left_hand_value, op=assignment_to_normal_ops[op_type], right=right_hand_value, meta_data=root.meta_data)) \
-            if op_type != TokenType.T_ASSIGN else right_hand_value
+        if op_type != TokenType.T_ASSIGN:
+            left_hand_value = self.eval_expression(root.left_hand)
+            right_hand_value = self.eval_expression(BinOpNode(left=left_hand_value, op=assignment_to_normal_ops[op_type], right=right_hand_value, meta_data=root.meta_data))
+
 
         if type(root.left_hand) == IdentifierNode:
             left_hand_name = root.left_hand.value
-            self.initalize_var(left_hand_name, true_right_value)
+            self.initalize_var(left_hand_name, right_hand_value)
             return
         else:
             if type(root.left_hand.base) == IdentifierNode:
@@ -348,13 +404,14 @@ class Evaluator:
                         raise EvaluatorError(self.file, "Index out of bounds", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 try:
                     final_idx = self.eval_expression(root.left_hand.index[-1].root_expr)
-                    target[final_idx] = true_right_value
+                    target[final_idx] = right_hand_value
                 except:
                     raise EvaluatorError(self.file, "Index out of bounds", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end) 
             else:
                 raise EvaluatorError(self.file, "unassignable entity", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             
-    # where our dispatch always ends
+    # this function handles all expression level contructs such as literals, binary ops,
+    # unary ops, and function calls
     def eval_expression(self, root):
         
         if type(root) in self.literals:
@@ -363,21 +420,19 @@ class Evaluator:
             return actual_value_function(root.value)
         
         elif type(root) == BinOpNode:
-            # just pass in entire node
-            
+            # converting bang binary operation into a python literal
             return self.eval_bin_ops(root)
         
         elif type(root) == UnaryOPNode:
-            # just pass in entire node
-
+            # converting bang unary operation into a python literal
             return self.eval_unary_ops(root)
         
         elif type(root) == ArrayLiteralNode:
-
-            return [self.eval_expression(i) for i in root.elements]
+            # converting bang list into python list of python literals
+            return [self.eval_expression(i.root_expr) for i in root.elements]
 
         elif type(root) == IndexNode:
-
+            # converting bang index into python literal
             index_chain = [self.eval_expression(i.root_expr) for i in root.index]
             base = self.eval_expression(root.base)
             for i in index_chain:
@@ -389,17 +444,29 @@ class Evaluator:
 
         
         elif type(root) == IdentifierNode:
-            # making sure each identifier is defined if its used in a given scope
+            # converting every bang identifier into a python literal
             return self.scope_stack[self.search_for_var(root.value, root.meta_data)][root.value]
 
         elif type(root) == CallNode:
-
+            # executing a bang block
             callee = self.scope_stack[self.search_for_var(root.name, root.meta_data)][root.name]
-            if type(callee) != runtime_function:
-                raise EvaluatorError(self.file, f"attempt to call non-function '{root.name}'", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
-
             arg_vals = [self.eval_expression(i.root_expr) for i in root.args]
+
+            if callable(callee) and root.name in self.built_in_functions:
+                return self.built_in_functions[root.name](arg_vals, root.meta_data)
+
+
+            if type(callee) == runtime_function:
+                return self.eval_call(callee, arg_vals, root.meta_data)
+
+
+            
             return self.eval_call(callee, arg_vals, root.meta_data)
+    
+
+    #-------------------------------------------
+    # BINARY OPERATIONS START
+    #-------------------------------------------
 
     def eval_bin_ops(self, root):
          
@@ -408,7 +475,11 @@ class Evaluator:
         left = self.eval_expression(root.left)
         right = self.eval_expression(root.right)
 
-        def eval_int_bin_op(self, left, op, right):
+        #-------------------------------------------
+        # INT OPERATIONS START
+        #-------------------------------------------
+
+        def eval_int_bin_op(left, op, right):
             # every supported operation between two ints in bang
             supported_types = {
                             TokenType.T_PLUS: operator.add, 
@@ -438,12 +509,20 @@ class Evaluator:
             
             return supported_types[op](left, right)
         
-        def eval_str_bin_op(self, left, op, right):
+        #-------------------------------------------
+        # INT OPERATIONS END
+        #-------------------------------------------
+        
+        #-------------------------------------------
+        # STRING OPERATIONS START
+        #-------------------------------------------
+        
+        def eval_str_bin_op(left, op, right):
 
-            def str_sub(self, a, b):
+            def str_sub(a, b):
                 return a.replace(b, "")
             
-            def str_div(self, a, b):
+            def str_div(a, b):
                 return a.split(b)
 
 
@@ -471,13 +550,21 @@ class Evaluator:
             
             return supported_types[op](left, right)
         
-        def eval_list_bin_op(self, left, op, right):
+        #-------------------------------------------
+        # STRING OPERATIONS END
+        #-------------------------------------------
+        
+        #-------------------------------------------
+        #LIST OPERATIONS START
+        #-------------------------------------------
+        
+        def eval_list_bin_op(left, op, right):
 
-            def list_sub(self, a, b):
+            def list_sub(a, b):
                 to_remove = set(b)
                 return [x for x in a if x not in to_remove]
             
-            def list_mul(self, a, b):
+            def list_mul(a, b):
                 if type(a) == list and type(b) == list:
                     if len(a) != len(b):
                         if 1 not in [len(a), len(b)]:
@@ -494,7 +581,7 @@ class Evaluator:
                     pass
                         
                     
-            def list_div(self, a, b):
+            def list_div(a, b):
                 if type(a) == list and type(b) == list:
                     if len(a) != len(b):
                         if 1 not in [len(a), len(b)]:
@@ -507,7 +594,7 @@ class Evaluator:
                     else:
                         return [i / j for i, j in zip(a, b)]
                     
-            def list_floor_div(self, a, b):
+            def list_floor_div(a, b):
                 if type(a) == list and type(b) == list:
                     if len(a) != len(b):
                         if 1 not in [len(a), len(b)]:
@@ -538,43 +625,58 @@ class Evaluator:
                 TokenType.T_AND:     lambda a, b: a and b,
                 TokenType.T_OR:      lambda a, b: a or  b,
             }
+        #-------------------------------------------
+        #LIST OPERATIONS END
+        #-------------------------------------------
 
         type_dispatch = {
             int: eval_int_bin_op,
+            float: eval_int_bin_op,
             str: eval_str_bin_op,
             list: eval_list_bin_op,
         }
 
         dispatcher = type_dispatch.get(type(left))
         return dispatcher(left, op, right)
+    #-------------------------------------------
+    # BINARY OPERATIONS END
+    #-------------------------------------------
+
+
+    #-------------------------------------------
+    # UNARY OPERATIONS START
+    #-------------------------------------------
     
     def eval_unary_ops(self, root):
 
-        operator = root.op
-        operand = self.eval_expression(root.operand)
+        # since each unary operation is pretty clear on what it does
+        # we will dispatch based on unary operator not type
+
+        def eval_negate(operand):
+            return not operand
+        
+        def eval_uminus(operand):
+            if type(operand) in [int, float]:
+                return -operand
+            raise EvaluatorError(self.file, f"unary negation not supported on type {type(operand)}",root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+        
+        def eval_uplus(operand):
+
+            if type(operand) in [int, float]:
+                return +operand
+            raise EvaluatorError(self.file, f"unary plus not supported on type {type(operand)}",root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+        
         operator_dispatch = {
             TokenType.T_NEGATE: eval_negate,
             TokenType.T_UMINUS: eval_uminus,
             TokenType.T_UPLUS: eval_uplus,
         }
-        
-        # since each unary operation is pretty clear on what it does
-        # we will dispatch based on unary operator not type
-
-        def eval_negate(self, operand):
-            return not operand
-        
-        def eval_uminus(self, operand):
-            if type(operand) in [int, float]:
-                return -operand
-            raise EvaluatorError(self.file, f"unary negation not supported on type {type(operand)}",root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-        
-        def eval_uplus(self, operand):
-
-            if type(operand) in [int, float]:
-                return abs(operand)
-            raise EvaluatorError(self.file, f"unary plus not supported on type {type(operand)}",root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+        operator = root.op
+        operand = self.eval_expression(root.operand)
         return operator_dispatch[operator](operand)
+    #-------------------------------------------
+    # UNARY OPERATIONS END
+    #-------------------------------------------
 
     
     def eval_call(self, callee, args, meta_data):
@@ -591,5 +693,6 @@ class Evaluator:
         finally:
             self.scope_stack = saved_stack
             self.func_depth -= 1
+        return None
 
 
