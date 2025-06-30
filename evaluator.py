@@ -111,7 +111,7 @@ class Evaluator:
         self.scope_stack = [{}]
 
         def _built_in_print(args, meta_data):
-            print(args[0])
+            print(*args)
         
         def _built_in_len(args, meta_data):
             if len(args) != 1:

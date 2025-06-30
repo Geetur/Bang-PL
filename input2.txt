@@ -1,4 +1,21 @@
 
-arr = [1,2,3,4,5]
 
-print{len{arr}}
+
+
+fn two_sum args
+    arr = args[0]
+    target = args[1]
+    ans = []
+    for range1 [0, len{arr} - 1]
+        num1 = arr[range1]
+        for range2 [range1 + 1, len{arr}]
+            num2 = arr[range2]
+            if num1 + num2 == target
+                ans += [[num1, num2]]
+            end
+        end
+    end
+    return ans
+end
+
+print{two_sum{[1,2,3,4,5,6], 7}}
