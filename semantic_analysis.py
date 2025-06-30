@@ -85,6 +85,20 @@ class SemanticAnalysis:
 
         self.scope_stack = [{}]
 
+        self.built_in_functions = {
+            "print": FunctionType,
+            "len": FunctionType,
+            "sum": FunctionType,
+            "min": FunctionType,
+            "max": FunctionType,
+        }
+
+        self.scope_stack[0].update(
+                        {name: FunctionType(value=None) for name in self.built_in_functions}
+        )
+        
+    
+
         # we need to know the loop depth for the break/continue etc constructs
         # because if we see a break outside of a loop for example we can throw an error
         self.loop_depth = 0
@@ -113,7 +127,6 @@ class SemanticAnalysis:
 
         self.allowed_unary_ops = {
             NumberType,
-            BoolType,
         }
 
         self.construct_to_walk = {
@@ -194,8 +207,8 @@ class SemanticAnalysis:
         self.loop_depth += 1
         self.scope_stack.append({})
         left_hand_name = root.variable.value
-        right_hand_type = self.walk_expression(root.bound.root_expr)
-        if type(right_hand_type) in {StringType, NoneType}:
+        right_hand_type = DynamicType()
+        if type(right_hand_type) in {NoneType}:
             raise SemanticError(self.file, "For loop bound must be an array, identifier, or number", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
         self.initalize_var(left_hand_name, right_hand_type)
         self.walk_block(root.body)
@@ -240,6 +253,7 @@ class SemanticAnalysis:
             if name in scope:
                 return scope[name]
         return ""
+        
 
 
     def walk_assignments(self, root):
@@ -256,6 +270,7 @@ class SemanticAnalysis:
                 if not left_hand_type:
                     raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 if (not ((type(right_hand_type) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand_type))):
+                    
                     raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             self.initalize_var(left_hand_name, right_hand_type)
         # else for now but with the addition of more assignable types
@@ -268,9 +283,6 @@ class SemanticAnalysis:
                     raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 if (not ((type(right_hand_type) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand_type))):
                     raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-
-
-
         
     def walk_expression(self, root):
         
@@ -285,7 +297,7 @@ class SemanticAnalysis:
             op = root.op
             left = self.walk_expression(root.left)
             right = self.walk_expression(root.right)
-            
+
             if type(left) == DynamicType or type(right) == DynamicType:
                 return DynamicType()
             
@@ -366,15 +378,15 @@ class SemanticAnalysis:
         
         elif type(root) == IdentifierNode:
             # making sure each identifier is defined if its used in a given scope
-            name = self.search_for_var(root.value)
-            if not name:
-                raise SemanticError(self.file, "variabled not initalized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-            return name
-
+            actual_type = self.search_for_var(root.value)
+            if not actual_type:
+                raise SemanticError(self.file, f"variable not initalized '{root.value}'", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
+            return actual_type
+            
         elif type(root) == CallNode:
             callee_type = self.search_for_var(root.name)
             if not callee_type:
-                raise SemanticError(self.file, f"function not initalized'{root.name}'", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
+                raise SemanticError(self.file, f"function not intialized '{root.name}'", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
             if type(callee_type) != FunctionType:
                 raise SemanticError(self.file, f"attempt to call non-function '{root.name}'", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
 
