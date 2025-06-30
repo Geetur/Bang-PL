@@ -123,6 +123,11 @@ class Evaluator:
         def _built_in_sum(args, meta_data):
             if not args:
                 raise EvaluatorError(self.file, "sum function expects argument list of at least length one", meta_data.line, meta_data.column_start, meta_data.column_end)
+            if len(args) == 1:
+                if type(args[0]) in [str, list]:
+                    args = args[0]
+                else:
+                    return args[0]
             expected_type = type(args[0])
             if expected_type == int:
                 base = 0
@@ -139,6 +144,11 @@ class Evaluator:
         def _built_in_min(args, meta_data):
             if not args:
                 raise EvaluatorError(self.file, "min function expects argument list of at least length one", meta_data.line, meta_data.column_start, meta_data.column_end)
+            if len(args) == 1:
+                if type(args[0]) in [str, list]:
+                    args = args[0]
+                else:
+                    return args[0]
             expected_type = type(args[0])
             base = args[0]
             for i in args:
@@ -150,6 +160,11 @@ class Evaluator:
         def _built_in_max(args, meta_data):
             if not args:
                 raise EvaluatorError(self.file, "max function expects argument list of at least length one", meta_data.line, meta_data.column_start, meta_data.column_end)
+            if len(args) == 1:
+                if type(args[0]) in [str, list]:
+                    args = args[0]
+                else:
+                    return args[0]
             expected_type = type(args[0])
             base = args[0]
             for i in args:
