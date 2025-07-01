@@ -1,27 +1,50 @@
 
-input_str = "hello world"
-
-for i input_str
-    print{i}
-end
-
-diff_values = [[1,2,3,4,5,6,7,8,9,10]]
-print{"min_values",len{diff_values}}
+# solution to two sum
 
 fn two_sum args
-    arr = args[0]
-    target = args[1]
-    ans = []
-    for range1 [0, len{arr} - 1]
-        num1 = arr[range1]
-        for range2 [range1 + 1, len{arr}]
-            num2 = arr[range2]
-            if num1 + num2 == target
-                ans += [[num1, num2]]
+
+    target = args[0]
+    input = args[1]
+
+    for range1 [0, len{input} - 1]
+        for range2 [range1 + 1, len{input}]
+            if input[range1] + input[range2] == target
+                print{input[range1], input[range2]}
             end
         end
     end
-    return ans
 end
 
-print{two_sum{[1,2,3,4,5,6], 7}}
+
+
+# solution to fibonacii
+
+fn fib awesome
+
+    n = awesome[0]
+    a = 0
+    b = 1
+    print{a}
+    print{b}
+    for i n
+        c = a + b
+        print{c}
+        a = b
+        b = c
+    end
+end
+
+my_string = "hello,world"
+splitter = ""
+
+arr = my_string / ","
+
+
+
+
+
+
+
+
+
+

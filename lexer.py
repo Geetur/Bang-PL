@@ -9,6 +9,7 @@ from lexer_tokens import (
     DECIMAL,
     SENTINEL,
     UNDERSCORE,
+    STRING,
     COMMENT,
     SYMBOLS,
     KEYWORDS,
@@ -52,6 +53,7 @@ class Lexer:
     NEWLINE = NEWLINE
     DECIMAL = DECIMAL
     SENTINEL = SENTINEL
+    STRING = STRING
     UNDERSCORE = UNDERSCORE
     SYMBOLS = SYMBOLS
     KEYWORDS = KEYWORDS
@@ -126,6 +128,20 @@ class Lexer:
             if self.char == COMMENT:
                 while self.char not in (NEWLINE, SENTINEL):
                     self.advance()
+                continue
+
+            if self.char == STRING:
+                self.prev_start = self.start; self.start = self.col
+                value = ""
+                self.advance()
+                while self.char not in (NEWLINE, SENTINEL, STRING):
+                    value += self.char
+                    self.advance()
+                if self.char != STRING:
+                    self.error_msg = "unterminated string literal"
+                    self.error_handler()
+                self.flush_token(ttype=TokenType.T_STRING, value=value)
+                self.advance()
                 continue
 
             if self.char.isspace() or self.char == NEWLINE:
