@@ -151,6 +151,7 @@ class ExpressionParser:
             TokenType.T_BOOL: lambda tok: BooleanLiteralNode(
             (True if tok.value == "true" else False), tok),
             TokenType.T_NONE: lambda tok:  NoneLiteralNode(tok.value, tok),
+            TokenType.T_STRING: lambda tok: StringLiteralNode(tok.value, tok),
         }
 
 
@@ -653,11 +654,11 @@ class ExpressionParser:
 
                 
             # handling string literal in seperate function
-            elif tok.type == TokenType.T_STRING:
-                expected_string_literal = line[tok_idx:]
-                string_literal, consumed = self.handle_string_literals(expected_string_literal)
-                output.append(string_literal)
-                tok_idx += consumed
+            # elif tok.type == TokenType.T_STRING:
+                # expected_string_literal = line[tok_idx:]
+                # string_literal, consumed = self.handle_string_literals(expected_string_literal)
+                # output.append(string_literal)
+                # tok_idx += consumed
               
             # C) Any operator
             elif tok.type in self.PRECEDENCE:

@@ -84,6 +84,7 @@ DECIMAL = "."
 SENTINEL = "\0"
 UNDERSCORE = "_"
 COMMENT = "#"
+STRING = '"'
 
 SYMBOLS = {
         #single-char tokens
