@@ -37,7 +37,8 @@ end
 my_string = "hello,world"
 splitter = ""
 
-arr = my_string / ","
+print{(sum{"hello", "my", "name", "is"} + "g")[0]}
+
 
 
 
