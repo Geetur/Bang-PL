@@ -417,15 +417,14 @@ class ExpressionParser:
     
     def handle_index(self, base, line):
         # this must be updated any time a new index option is added to the lang
-        INDEXABLE = {
-            IdentifierNode,
-            ArrayLiteralNode,
-            StringLiteralNode,
-            IndexNode,
-            CallNode,
+        NOT_INDEXABLE = {
+            IntegerLiteralNode,
+            FloatLiteralNode,
+            NoneLiteralNode,
+            BooleanLiteralNode
         }
 
-        if type(base) not in INDEXABLE:
+        if type(base) in NOT_INDEXABLE:
             raise ParserError(self.file, f"Can't index into {base}", base.meta_data.line, base.meta_data.column_start, base.meta_data.column_end)
         
         left_bracket = line[0]
@@ -652,13 +651,6 @@ class ExpressionParser:
                 tok_idx += consumed
                 expect_operand = False
 
-                
-            # handling string literal in seperate function
-            # elif tok.type == TokenType.T_STRING:
-                # expected_string_literal = line[tok_idx:]
-                # string_literal, consumed = self.handle_string_literals(expected_string_literal)
-                # output.append(string_literal)
-                # tok_idx += consumed
               
             # C) Any operator
             elif tok.type in self.PRECEDENCE:

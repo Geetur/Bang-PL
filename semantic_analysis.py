@@ -342,8 +342,8 @@ class SemanticAnalysis:
             # so we only throw an error ifs its knowable and an error
             # things that are errors after evaluation will be runtime errors
             if base.value:
-                if type(base) != ArrayType:
-                    raise SemanticError(self.file, "Can't index non-array", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                if type(base) not in [ArrayType, StringType]:
+                    raise SemanticError(self.file, f"object of {type(base)} not indexable", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
 
             indexes = []
 
@@ -360,7 +360,7 @@ class SemanticAnalysis:
             
             for pos, idx in enumerate(indexes):
                 
-                if type(base) != ArrayType:
+                if type(base) not in [ArrayType, StringType]:
                     raise SemanticError(self.file, "Index out of bounds", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 element_list = base.value
 
