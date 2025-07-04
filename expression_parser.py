@@ -533,14 +533,20 @@ class ExpressionParser:
         # or information that defines each operand with a true or false value to determine whether 
         # it merits a state transition, but there are so few you can typically just if statement
         can_follow_operator = {
-            TokenType.T_INT, TokenType.T_FLOAT, TokenType.T_BOOL,
+            TokenType.T_INT, TokenType.T_FLOAT, TokenType.T_BOOL, TokenType.T_NONE,
             TokenType.T_IDENT, 
             TokenType.T_LBRACKET, TokenType.T_LPAREN,
             TokenType.T_UMINUS, TokenType.T_UPLUS, TokenType.T_NEGATE,
             TokenType.T_STRING,
         }
 
-        can_follow_operand = set(self.PRECEDENCE) | {
+        unary_ops = {
+                TokenType.T_UPLUS,
+                TokenType.T_UMINUS,
+                TokenType.T_NEGATE,
+            }
+
+        can_follow_operand = (set(self.PRECEDENCE) - unary_ops) | {
                             TokenType.T_RPAREN,
                             TokenType.T_RBRACKET,
                             # this can follow an operand because in the case an array
@@ -550,12 +556,6 @@ class ExpressionParser:
                             TokenType.T_LBRACE,
                             TokenType.T_RBRACE
         }
-
-        unary_ops = {
-                TokenType.T_UPLUS,
-                TokenType.T_UMINUS,
-                TokenType.T_NEGATE,
-            }
         
         
         def apply_operator():

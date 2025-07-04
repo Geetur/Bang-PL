@@ -446,7 +446,6 @@ class Evaluator:
     # this function handles all expression level contructs such as literals, binary ops,
     # unary ops, and function calls
     def eval_expression(self, root):
-
         if type(root) == ExpressionNode:
             root = root.root_expr
 
