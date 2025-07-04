@@ -278,7 +278,7 @@ class SemanticAnalysis:
         # **if type(left_hand) == IndexNode
         else:
             left_hand_type = self.walk_expression(root.left_hand)
-            if left_hand_type.value != None and right_hand_type.value != None:
+            if left_hand_type != DynamicType and right_hand_type != DynamicType:
                 if not left_hand_type:
                     raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 if (not ((type(right_hand_type) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand_type))):

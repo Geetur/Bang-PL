@@ -36,8 +36,9 @@ end
 
 my_string = "hello,world"
 splitter = ""
-
-print{(sum{"hello", "my", "name", "is"} + "g")[0]}
+if 0 && !0
+    print{"yes"}
+end
 
 
 
