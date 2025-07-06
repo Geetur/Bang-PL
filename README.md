@@ -165,6 +165,8 @@ The suite contains hundreds of assertions split across:
 
 * Add green- & red-path tests—then refactor fearlessly.
 
+* I really tried to make anything possible in bang, if you simply add a built-in function in the evaluator to support the behaviour.
+
 Tip: Each phase is cleanly decoupled; you can unit-test a new feature in isolation before wiring up the next stage.
 
 ## Project Roadmap
