@@ -1,6 +1,6 @@
 # Bang – A Minimalistic Array-Centric Scripting Language
 
-> **Built for learning. Written for fun. Tested for correctness.**
+> **Built for prototyping. Written for fun. Tested for correctness.**
 
 This repository is a **from-scratch reference implementation** of **Bang**, a small scripting language you can read, hack, and extend in a single afternoon. The codebase walks a Bang program through every classic compiler/interpreter stage—**lexing → expression parsing → control-flow parsing → static (semantic) analysis → evaluation**—all in ~2 kLOC of tidy, commented Python.
 
@@ -22,7 +22,7 @@ This repository is a **from-scratch reference implementation** of **Bang**, a sm
 ---
 
 ## Motivation
-Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized language** that proves mastery over parsing, static analysis, and runtime design—without the 50 kLOC overhead of a “real” compiler. Every stage is separately implemented and individually testable, so you can observe _exactly_ how code is transformed step by step.
+Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized language** that proves mastery over parsing, static analysis, and runtime design—without the 50 kLOC overhead of a “real” compiler. Every stage is separately implemented and individually testable, so you can observe _exactly_ how code is transformed step by step. 
 
 ## Key Language Features
 * **Array-first syntax** with intuitive overloading:  
@@ -121,7 +121,7 @@ print{two_sum{8, [1,2,3,4,5,6,7,]}}
 ```
 # 3. printing n fibonacci numbers
 ```
-# printing n fibonacii numbers
+# printing n fibonacci numbers
 
 fn fib awesome
 
