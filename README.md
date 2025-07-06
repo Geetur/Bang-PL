@@ -63,10 +63,13 @@ source .venv/bin/activate
 
 # 3. Install dev dependencies
 pip install -r requirements.txt  # mainly pytest & rich-traceback
+```
 Python 3.10+ is recommended (pattern-matching FTW).
 
-Running Bang Code
+## Running Bang Code
 There isn’t a one-liner CLI yet, but you can run a Bang file in three lines of Python:
+
+```
 
 from lexer import Lexer
 from expression_parser import ExpressionParser
@@ -80,17 +83,26 @@ ex  = ExpressionParser(tokens, lex.file); ex.split(); ex.loading_into_algos()
 cf  = ControlFlowParser(lex.file, ex.post_SYA); roots = cf.blockenize()
 SemanticAnalysis(lex.file, roots).walk_program()  # static checks
 Evaluator(lex.file, roots).eval_program()         # run it!
-Minimal example (hello.bang)
+
+```
+
+## Minimal example (hello.bang)
 
 Input:
+```
 print{"Hello, Bang!"}
 # I wonder what it does!
+```
 
 Output:
+```
 Hello, Bang!
+```
 
 ## Running the Test-Suite
+```
 pytest -q
+```
 The suite contains hundreds of assertions split across:
 
 * lexer_tests.py
