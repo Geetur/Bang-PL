@@ -1,3 +1,4 @@
+a = [5, [2]] 
 
 # solution to two sum
 
@@ -36,9 +37,8 @@ end
 
 my_string = "hello,world"
 splitter = ""
-if 0 && !0
-    print{"yes"}
-end
+print{sum{1,2,3,4,5}}
+
 
 
 
