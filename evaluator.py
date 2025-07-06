@@ -596,6 +596,11 @@ class Evaluator:
         
         def eval_list_bin_op(left, op, right):
 
+            def list_div_helper(a,b,div_type):
+                    if b == 0:
+                        raise EvaluatorError (self.file, "attempted divison by zero", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                    return a / b if div_type == "true" else a // b
+
             def list_sub(a, b):
                 to_remove = set(b)
                 return [x for x in a if x not in to_remove]
@@ -618,6 +623,8 @@ class Evaluator:
                         
                     
             def list_div(a, b):
+
+
                 if type(a) == list and type(b) == list:
                     if len(a) != len(b):
                         if 1 not in [len(a), len(b)]:
@@ -626,9 +633,9 @@ class Evaluator:
                                                 )
                         divisor = b[0] if len(b) == 1 else a[0]
                         base = a if len(a) != 1 else b
-                        return [x / divisor for x in base]
+                        return [list_div_helper(x, divisor, "true") for x in base]
                     else:
-                        return [i / j for i, j in zip(a, b)]
+                        return [list_div_helper(i, j, "true") for i, j in zip(a, b)]
                     
             def list_floor_div(a, b):
                 if type(a) == list and type(b) == list:
@@ -639,9 +646,11 @@ class Evaluator:
                                                 )
                         divisor = b[0] if len(b) == 1 else a[0]
                         base = a if len(a) != 1 else b
-                        return [x // divisor for x in base]
+                        return [list_div_helper(x, divisor, "floor") for x in base]
                     else:
-                        return [i // j for i, j in zip(a, b)]
+                        return [list_div_helper(i, j, "floor") for i, j in zip(a, b)]
+            
+
 
             supported_types = {
 
@@ -664,7 +673,6 @@ class Evaluator:
 
             if op not in supported_types:
                 raise EvaluatorError(self.file, f"operation '{op.value}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-            
             return supported_types[op](left, right)
         #-------------------------------------------
         #LIST OPERATIONS END

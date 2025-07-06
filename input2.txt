@@ -35,9 +35,8 @@ fn fib awesome
     end
 end
 
-my_string = "hello,world"
-splitter = ""
-print{sum{1,2,3,4,5}}
+
+print{[1,2,3] / []}
 
 
 

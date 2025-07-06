@@ -44,6 +44,19 @@ def evaluate(code: str, tmp_path):
     [
         # Simple arithmetic & variable propagation
         "x = 1\ny = 2\nz = x + y\n",
+        "x = 1\ny = true\nz = x + y\n",
+        "x = 1\ny = false\nz = x + y\n",
+
+        #array arithmetic
+        "x = [1]\ny = [2]\nz = x + y\n",
+        "x = [1,2]\ny = [2]\nz = x - y\n",
+        'x = [1]\ny = 2\nz = x * y\n',
+        'x = [1]\ny = [2]\nz = x * y\n',
+        'x = [1,2,3]\ny = [2]\nz = x / y\n',
+
+        'x = "12"\ny = "2"\nz = x - y\n',
+        'x = "1,2"\ny = ","\nz = x / y\n',
+        'x = "1"\ny = 2\nz = x * y\n',
 
         # Array indexing with run‑time index
         "arr = [10, 20, 30]\nidx = 1\nval = arr[idx]\n",
@@ -75,12 +88,12 @@ def test_evaluator_valid(program, tmp_path):
         # illegal indexing
         "a = [5]\n b = a[0+1]",
         "a = [5, [2]]\n b = a[0+1][3]",
-
-
-        "fn bar args\n return 5\nend\nx = bar{} + [2,3,4]\n",
-        'fn bar args\n return 5\nend\nx = bar{} + "3"\n',
         "fn bar args\n return [1]\nend\nx = [2,3,4][bar{}]\n",
         'fn bar args\n return "5"\nend\nx = [2,3,4][bar{}]\n',
+
+        #illegal arithmetic
+        "fn bar args\n return 5\nend\nx = bar{} + [2,3,4]\n",
+        'fn bar args\n return 5\nend\nx = bar{} + "3"\n',
         'fn bar args\n return "5"\nend\nx = 1 + bar{}\n',
         'fn bar args\n return [1]\nend\nx = "1" + bar{}\n',
 
