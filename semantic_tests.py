@@ -139,6 +139,7 @@ def analyze(code: str, tmp_path):
         'x = 1\n x = "shello"\n x && y',
         'x = 1\n x = "shello"\n x || y',
 
+
         # expressions with functions (first class)
 
         "fn foo args\n return [1,2,3]\nend\nfor i foo{}\n x = i\nend\n",
@@ -216,7 +217,6 @@ def test_semantic_valid(program, tmp_path):
         'x = -\"hello\"\n',
 
 
-
         
         # the current grammar says we can only
         # perform arithmetic operations on
@@ -233,6 +233,12 @@ def test_semantic_valid(program, tmp_path):
 
 
         "x = 5\n p= 1 + x{1}",
+
+         'a = [5, [2]]\n b = a["B" + "a"][3]',
+        'a = [5, [2]]\n b = a[[1] + [1]][3]',
+        'a = [5, [2]]\n b = a[[1] + "a"][3]',
+        'a = [5, [2]]\n b = a[1 + "a"][3]',
+        'a = [5, [2]]\n b = a[1 + [1]][3]',
 
 
 

@@ -670,14 +670,35 @@ class Evaluator:
         #LIST OPERATIONS END
         #-------------------------------------------
 
+        def eval_different_bin_op(left, op, right):
+
+
+            supported_types = {
+                TokenType.T_ASTERISK: operator.mul,
+
+                TokenType.T_EQ: operator.eq,
+                TokenType.T_NEQ: operator.ne,
+                TokenType.T_AND:     lambda a, b: a and b,
+                TokenType.T_OR:      lambda a, b: a or  b,
+            }
+            
+            if op not in supported_types:
+                raise EvaluatorError(self.file, f"operation '{op.value}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+            
+            return supported_types[op](left, right)
+            
+
+
         type_dispatch = {
             int: eval_int_bin_op,
             float: eval_int_bin_op,
             str: eval_str_bin_op,
             list: eval_list_bin_op,
         }
-
-        dispatcher = type_dispatch.get(type(left))
+        same_type = [int, float]
+        dispatcher = eval_different_bin_op
+        if type(left) == type(right) or (type(left) in same_type and type(right) in same_type):
+            dispatcher = type_dispatch.get(type(left))
         return dispatcher(left, op, right)
     #-------------------------------------------
     # BINARY OPERATIONS END
@@ -734,6 +755,7 @@ class Evaluator:
         finally:
             self.scope_stack = saved_stack
             self.func_depth -= 1
-        return None
+        return 0
+
 
 

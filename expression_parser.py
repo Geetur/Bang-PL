@@ -428,16 +428,20 @@ class ExpressionParser:
             raise ParserError(self.file, f"Can't index into {base}", base.meta_data.line, base.meta_data.column_start, base.meta_data.column_end)
         
         left_bracket = line[0]
-
+        depth = 0
         for tok_idx, tok in enumerate(line):
             if tok.type == TokenType.T_RBRACKET:
-                expected_expression = line[1:tok_idx]
-                evaluated_expression = self.shunting_yard_algo(expected_expression)
-                if type(base) != IndexNode:
-                    return IndexNode(base=base, index=[evaluated_expression], meta_data=left_bracket), tok_idx
-                else:
-                    base.index.append(evaluated_expression)
-                    return base, tok_idx
+                depth -= 1
+                if depth == 0:
+                    expected_expression = line[1:tok_idx]
+                    evaluated_expression = self.shunting_yard_algo(expected_expression)
+                    if type(base) != IndexNode:
+                        return IndexNode(base=base, index=[evaluated_expression], meta_data=left_bracket), tok_idx
+                    else:
+                        base.index.append(evaluated_expression)
+                        return base, tok_idx
+            elif tok.type == TokenType.T_LBRACKET:
+                depth += 1
         raise ParserError(self.file, "Mismatched brackets", base.meta_data.line, base.meta_data.column_start, base.meta_data.column_end)
 
 
@@ -447,6 +451,7 @@ class ExpressionParser:
     # because its the root expression. all an expression node is in this lanaguge is the root of whatever is passed into
     # the SYA, which is why its attribute is root_expr
     def handle_array_literals(self, line):
+        
         elements = []
         current = []
         depth = 0                   
@@ -523,7 +528,6 @@ class ExpressionParser:
         # but it avoids lexer hacks that would raise modularity and
         # clarity problems
         line = self.handle_unary_ambiguity(line)
-
         expect_operand = True
         # can_follow is a really elegant way to handle errors in the shunting yard algorithm
         # we essentially define a two-state transition, and based on our
