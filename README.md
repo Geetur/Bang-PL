@@ -88,7 +88,7 @@ Evaluator(lex.file, roots).eval_program()         # run it!
 
 ## Examples! 
 
-1. # the first program
+# 1. the first program
 Input:
 ```
 print{"Hello, Bang!"}
@@ -100,7 +100,7 @@ Output:
 Hello, Bang!
 ```
 
-2. # solution to two sum
+# 2. solution to two sum
    
 ```
 fn two_sum args
@@ -119,7 +119,7 @@ end
 
 print{two_sum{8, [1,2,3,4,5,6,7,]}}
 ```
-3. # printing n fibonacci numbers
+# 3. printing n fibonacci numbers
 ```
 # printing n fibonacii numbers
 
@@ -193,6 +193,6 @@ PRs and issue reports are welcome! Please run pytest and ruff (or your formatter
 
 * Open a PR 🥳
 
-License
+## License
 MIT © 2025 Jeter Pontes
 See LICENSE for full text.
