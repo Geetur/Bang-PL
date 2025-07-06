@@ -81,6 +81,8 @@ def test_evaluator_valid(program, tmp_path):
     [
         # Division by zero caught at run‑time
         "x = 5\ny = 0\nz = x / y\n",
+        "x = [5]\ny = [0]\nz = x / y\n",
+        "x = [5,5,5]\ny = [1,2,0]\nz = x / y\n",
 
         # Index out of bounds that was not detectable statically
         "arr = [1]\nidx = 3\nval = arr[idx+5]\n",

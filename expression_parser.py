@@ -401,7 +401,7 @@ class ExpressionParser:
         left_hand_node = self.shunting_yard_algo(left_hand).root_expr
 
         if type(left_hand_node) not in valid_left_hands:
-            raise ParserError(self.file, "assignment statement syntax is [some identifier][=][some expression]", assignment_op_token.meta_data.line, assignment_op_token.column_start, assignment_op_token.column_end)
+            raise ParserError(self.file, "assignment statement syntax is [identifier][=][expression]", assignment_op_token.line, assignment_op_token.column_start, assignment_op_token.column_end)
         
         self.illegal_assignment = 1
 
