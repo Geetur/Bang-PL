@@ -26,11 +26,11 @@ Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized
 
 ## Key Language Features
 * **Array-first syntax** with intuitive overloading:  
-  `arr - 3`, `3 - arr`, `arr - arr2`, and `arr / 4` to chunk.
+  `[1,2,3] + [4]`, `[1,2,3] / [5]`, `[1,2,3] / [4,5,6]`, and `[1,2,3] * 2`, to append, element-wise divise, and duplicate, respectivley.
 * Familiar operators `+ - * / // **`, Boolean logic `&&`, `||`, unary `!`, and compound assignments `+=`, `-=`, …
 * Tiny but expressive **control flow** (`if / elif / else`, `for`, `while`, `break`, `continue`).
 * **First-class functions** with variadic argument lists passed as a single `args` array.
-* **Built-ins**: `print`, `len`, `sum`, `min`, `max` — easy to extend.
+* **Built-ins**: `print`, `len`, `sum`, `min`, `max` — super easy to extend, essentially just have to write a function defining the behaviour.
 * **Strong static guarantees** before runtime: undefined variables, invalid operators, out-of-scope `break`, etc. are caught by the semantic pass.
 
 ## Architecture Overview
@@ -86,8 +86,9 @@ Evaluator(lex.file, roots).eval_program()         # run it!
 
 ```
 
-## Minimal example (hello.bang)
+## Examples! 
 
+1. # the first program
 Input:
 ```
 print{"Hello, Bang!"}
@@ -99,6 +100,47 @@ Output:
 Hello, Bang!
 ```
 
+2. # solution to two sum
+   
+```
+fn two_sum args
+
+    target = args[0]
+    input = args[1]
+
+    for range1 [0, len{input} - 1]
+        for range2 [range1 + 1, len{input}]
+            if input[range1] + input[range2] == target
+                print{input[range1], input[range2]}
+            end
+        end
+    end
+end
+
+print{two_sum{8, [1,2,3,4,5,6,7,]}}
+```
+3. # printing n fibonacci numbers
+```
+# printing n fibonacii numbers
+
+fn fib awesome
+
+    n = awesome[0]
+    a = 0
+    b = 1
+    print{a}
+    print{b}
+    for i n-2
+        c = a + b
+        print{c}
+        a = b
+        b = c
+    end
+end
+
+fib{9}
+
+```
 ## Running the Test-Suite
 ```
 pytest -q
@@ -127,13 +169,15 @@ Tip: Each phase is cleanly decoupled; you can unit-test a new feature in isolati
 
 ## Project Roadmap
 
- CLI runner (bang run file.bang)
+* add way more built-in functions (this is really easy you should try it)
 
- Interpret in c++ or similar for faster runtimes
+* CLI runner (bang run file.bang)
 
- REPL with auto-completion
+* Interpret in c++ or similar for faster runtimes
 
- Standard library (stats, maybe sockets?)
+* REPL with auto-completion
+
+* Standard library (stats, maybe sockets?)
 
 ## Contributing
 
@@ -150,5 +194,5 @@ PRs and issue reports are welcome! Please run pytest and ruff (or your formatter
 * Open a PR 🥳
 
 License
-MIT © 2025 Dan James
+MIT © 2025 Jeter Pontes
 See LICENSE for full text.
