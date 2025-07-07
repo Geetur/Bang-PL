@@ -2,7 +2,7 @@
 
 > **Built for prototyping. Written for fun. Tested for correctness.**
 
-This repository is a **from-scratch reference implementation** of **Bang**, a small scripting language you can read, hack, and extend in a single afternoon. The codebase walks a Bang program through every classic compiler/interpreter stage—**lexing → expression parsing → control-flow parsing → static (semantic) analysis → evaluation**—all in ~2 kLOC of tidy, commented Python.
+This repository is a **from-scratch reference implementation** of **Bang**, a small scripting language you can read, hack, and extend in a single afternoon. The codebase walks a Bang program through every classic compiler/interpreter stage—**lexing → expression parsing → control-flow parsing → static (semantic) analysis → evaluation**—all in ~2.5 kLOC of tidy, commented Python.
 
 ---
 
@@ -22,7 +22,7 @@ This repository is a **from-scratch reference implementation** of **Bang**, a sm
 ---
 
 ## Motivation
-Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized language** that proves mastery over parsing, static analysis, and runtime design—without the 50 kLOC overhead of a “real” compiler. Every stage is separately implemented and individually testable, so you can observe _exactly_ how code is transformed step by step. 
+Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized language** that proves mastery over parsing, static analysis, runtime design, and project architecture—without the 50 kLOC overhead of a “real” compiler. Every stage is separately implemented and individually testable, so you can observe _exactly_ how code is transformed step by step. 
 
 ## Key Language Features
 * **Array-first syntax** with intuitive overloading:  
@@ -62,20 +62,21 @@ python -m venv .venv
 source .venv/bin/activate
 
 # 3. Install dev dependencies
-pip install -r requirements.txt  # mainly pytest & rich-traceback
+pip install pytest
 ```
 Python 3.10+ is recommended (pattern-matching FTW).
 
 ## Running Bang Code
-There isn’t a one-liner CLI yet, but you can run a Bang file in three lines of Python:
+Although somewhat bush-league, just change the file path in bang\__main__.py; after that, you can either
+do "python -m bang" if you didnt create a venv and install -e . or if you did, just type "bang."
 
 ```
 
-from lexer import Lexer
-from expression_parser import ExpressionParser
-from control_flow_parser import ControlFlowParser
-from semantic_analysis import SemanticAnalysis
-from evaluator import Evaluator
+from bang.lexing.lexer import Lexer
+from bang.parsing.expression_parser import ExpressionParser, ParserError
+from bang.parsing.control_flow_parser import ControlFlowParser
+from bang.semantic.semantic_analysis import SemanticAnalysis, SemanticError
+from bang.runtime.evaluator import Evaluator, EvaluatorError
 
 src = "examples/hello.bang"
 lex = Lexer(src); tokens = lex.tokenizer()
@@ -107,17 +108,22 @@ fn two_sum args
 
     target = args[0]
     input = args[1]
-
+    ans = [
     for range1 [0, len{input} - 1]
         for range2 [range1 + 1, len{input}]
             if input[range1] + input[range2] == target
-                print{input[range1], input[range2]}
+                ans += [input[range1], input[range2]]
             end
         end
     end
+return ans
 end
 
 print{two_sum{8, [1,2,3,4,5,6,7,]}}
+```
+Output:
+```
+[[1,7], [2,6], [3,5]]
 ```
 # 3. printing n fibonacci numbers
 ```
@@ -141,9 +147,21 @@ end
 fib{9}
 
 ```
-## Running the Test-Suite
+output:
 ```
-pytest -q
+0
+1
+1
+2
+3
+5
+8
+13
+21
+```
+## Running the Test-Suite (example for semantic tests)
+```
+pytest bang\semantic\semantic_tests.py
 ```
 The suite contains hundreds of assertions split across:
 
@@ -173,13 +191,11 @@ Tip: Each phase is cleanly decoupled; you can unit-test a new feature in isolati
 
 * add way more built-in functions (this is really easy you should try it)
 
-* CLI runner (bang run file.bang)
+* Classes and dataclasses
 
 * Interpret in c++ or similar for faster runtimes
 
 * REPL with auto-completion
-
-* Standard library (stats, maybe sockets?)
 
 ## Contributing
 
