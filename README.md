@@ -120,6 +120,12 @@ end
 
 print{two_sum{8, [1,2,3,4,5,6,7,]}}
 ```
+Output:
+```
+1 7
+2 6
+3 5
+```
 # 3. printing n fibonacci numbers
 ```
 # printing n fibonacci numbers
@@ -141,6 +147,18 @@ end
 
 fib{9}
 
+```
+output:
+```
+0
+1
+1
+2
+3
+5
+8
+13
+21
 ```
 ## Running the Test-Suite (example for semantic tests)
 ```
