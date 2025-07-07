@@ -108,23 +108,22 @@ fn two_sum args
 
     target = args[0]
     input = args[1]
-
+    ans = [
     for range1 [0, len{input} - 1]
         for range2 [range1 + 1, len{input}]
             if input[range1] + input[range2] == target
-                print{input[range1], input[range2]}
+                ans += [input[range1], input[range2]]
             end
         end
     end
+return ans
 end
 
 print{two_sum{8, [1,2,3,4,5,6,7,]}}
 ```
 Output:
 ```
-1 7
-2 6
-3 5
+[[1,7], [2,6], [3,5]]
 ```
 # 3. printing n fibonacci numbers
 ```
