@@ -68,7 +68,7 @@ Python 3.10+ is recommended (pattern-matching FTW).
 
 ## Running Bang Code
 Although somewhat bush-league, just change the file path in bang\__main__.py; after that, you can either
-do "python -m bang" if you didnt create a venv and install -e . or if you did, just type "bang."
+do "python -m bang" if you didnt create a venv and install -e . or if you did, just type "bang".
 
 ```
 
@@ -189,7 +189,7 @@ Tip: Each phase is cleanly decoupled; you can unit-test a new feature in isolati
 
 ## Project Roadmap
 
-* add way more built-in functions (this is really easy you should try it)
+* Add more built-in functions (this is really easy you should try it)
 
 * Classes and dataclasses
 
