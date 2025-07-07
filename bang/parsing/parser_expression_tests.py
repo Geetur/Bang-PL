@@ -1,9 +1,9 @@
 import pytest
 from pathlib import Path
 
-from lexer import Lexer
-from expression_parser import ExpressionParser, ParserError
-from parser_nodes import (
+from bang.lexing.lexer import Lexer
+from bang.parsing.expression_parser import ExpressionParser, ParserError
+from bang.parsing.parser_nodes import (
     IntegerLiteralNode, FloatLiteralNode, BooleanLiteralNode,
     IdentifierNode, BinOpNode, UnaryOPNode, ArrayLiteralNode,
     StringLiteralNode, IndexNode, AssignmentNode,
@@ -62,7 +62,7 @@ def test_unary_and_binary_operations(tmp_path):
     # Left should be a UnaryOPNode
     assert isinstance(left, UnaryOPNode)
     # Operator should be multiplication
-    from lexer import TokenType as TT
+    from bang.lexing.lexer import TokenType as TT
     assert op == TT.T_ASTERISK
     # Right should be an ExpressionNode nested
     assert isinstance(right, BinOpNode)
@@ -214,7 +214,7 @@ def test_nested_parentheses(tmp_path):
     assert len(nodes) == 1
     assign = nodes[0]
     # should parse without error and produce an AssignmentNode
-    from parser_nodes import AssignmentNode, BinOpNode
+    from bang.parsing.parser_nodes import AssignmentNode, BinOpNode
     assert isinstance(assign, AssignmentNode)
     # check that inside the ExpressionNode there's a BinOpNode
     expr = assign.right_hand
@@ -232,7 +232,7 @@ def test_multiple_unary_operators(tmp_path):
     code = "x = + - + - 5"
     nodes = parse_lines(code + "\n", tmp_path)
     assert len(nodes) == 1
-    from parser_nodes import AssignmentNode
+    from bang.parsing.parser_nodes import AssignmentNode
     assert isinstance(nodes[0], AssignmentNode)
 
 def test_unary_missing_operand_error(tmp_path):
@@ -246,7 +246,7 @@ def test_chained_indexing(tmp_path):
     code = "val = arr[1][2][i + 1]"
     nodes = parse_lines(code + "\n", tmp_path)
     assert len(nodes) == 1
-    from parser_nodes import AssignmentNode
+    from bang.parsing.parser_nodes import AssignmentNode
     assert isinstance(nodes[0], AssignmentNode)
 
 
@@ -264,7 +264,7 @@ def test_float_without_leading_zero(tmp_path):
     code = "x = .5 * 2"
     nodes = parse_lines(code + "\n", tmp_path)
     assert len(nodes) == 1
-    from parser_nodes import AssignmentNode
+    from bang.parsing.parser_nodes import AssignmentNode
     assert isinstance(nodes[0], AssignmentNode)
 
 

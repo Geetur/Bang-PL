@@ -6,8 +6,8 @@
 # tree-walking; in the semantic analyzer we are tree walking for types, and in this we are tree walking for runtime values
 import operator
 
-from lexer import TokenType
-from parser_nodes import (
+from bang.lexing.lexer import TokenType
+from bang.parsing.parser_nodes import (
     IntegerLiteralNode,
     FloatLiteralNode,
     StringLiteralNode,
@@ -34,7 +34,7 @@ from parser_nodes import (
     CallNode,
 )
 
-from semantic_nodes import (
+from bang.semantic.semantic_nodes import (
     NumberType,
     BoolType,
     StringType,
@@ -46,7 +46,7 @@ from semantic_nodes import (
     DynamicType,
 )
 
-from evaluator_nodes import (
+from bang.runtime.evaluator_nodes import (
     runtime_function,
 )
 

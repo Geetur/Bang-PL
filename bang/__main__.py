@@ -1,12 +1,12 @@
-from lexer import Lexer
-from expression_parser import ExpressionParser, ParserError
-from control_flow_parser import ControlFlowParser
-from semantic_analysis import SemanticAnalysis, SemanticError
-from evaluator import Evaluator, EvaluatorError
+from bang.lexing.lexer import Lexer
+from bang.parsing.expression_parser import ExpressionParser, ParserError
+from bang.parsing.control_flow_parser import ControlFlowParser
+from bang.semantic.semantic_analysis import SemanticAnalysis, SemanticError
+from bang.runtime.evaluator import Evaluator, EvaluatorError
 
 def main():
     # 1) Lex & tokenize
-    lexer = Lexer("input2.txt")
+    lexer = Lexer("examples\input2.bang")
     tokens = lexer.tokenizer()
     file = lexer.file                # source‐file lines for error reporting
     

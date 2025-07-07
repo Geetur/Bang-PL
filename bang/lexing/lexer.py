@@ -2,7 +2,7 @@
 # after this pass we are guaranteed to have a list
 # of valid bang tokens
 
-from lexer_tokens import (
+from bang.lexing.lexer_tokens import (
     Lexeme,
     TokenType,
     NEWLINE,

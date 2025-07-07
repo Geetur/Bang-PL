@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: bang-lang
+Version: 0.1.0
+Summary: Bang – a minimalistic array-centric scripting language.
+Author-email: Jeter Pontes <jeter.pontes@outlook.com>
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown

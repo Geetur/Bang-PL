@@ -18,7 +18,7 @@ end
 
 
 
-# solution to fibonacii
+# printing n fibonacii numbers
 
 fn fib awesome
 
@@ -27,7 +27,7 @@ fn fib awesome
     b = 1
     print{a}
     print{b}
-    for i n
+    for i n-2
         c = a + b
         print{c}
         a = b
@@ -35,8 +35,10 @@ fn fib awesome
     end
 end
 
+fib{9}
 
--p = 5
+
+
 
 
 

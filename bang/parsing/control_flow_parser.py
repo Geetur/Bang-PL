@@ -2,7 +2,7 @@
 # all constructs were able to be formed and now we have a proper nested structuring of the program,
 # with essentially a control-flow-graph on the macro "block" level, and nested ASTS on the micro "line" level
 
-from parser_nodes import (
+from bang.parsing.parser_nodes import (
     IntegerLiteralNode,
     FloatLiteralNode,
     StringLiteralNode,
@@ -28,7 +28,7 @@ from parser_nodes import (
     ExpressionNode,
 )
 
-from expression_parser import ParserError
+from bang.parsing.expression_parser import ParserError
 
 
 class ControlFlowParser:

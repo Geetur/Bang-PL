@@ -5,8 +5,8 @@
 # all bin ops and unary ops are guaranteed to be valid if performed on literals
 # every error that can be statically determined is determined.
 
-from lexer import TokenType
-from parser_nodes import (
+from bang.lexing.lexer import TokenType
+from bang.parsing.parser_nodes import (
     IntegerLiteralNode,
     FloatLiteralNode,
     StringLiteralNode,
@@ -33,7 +33,7 @@ from parser_nodes import (
     CallNode,
 )
 
-from semantic_nodes import (
+from bang.semantic.semantic_nodes import (
     NumberType,
     BoolType,
     StringType,

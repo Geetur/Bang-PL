@@ -1,0 +1,13 @@
+[project]
+name            = "bang-lang"          # whatever you want to publish under
+version         = "0.1.0"
+description     = "Bang – a minimalistic array-centric scripting language."
+authors         = [{ name = "Jeter Pontes", email = "jeter.pontes@outlook.com" }]
+readme          = "README.md"
+requires-python = ">=3.10"
+
+# ─────────────────────────────────────────────────────────
+# Everything below builds the CLI entry-point named  “bang”
+# ─────────────────────────────────────────────────────────
+[project.scripts]
+bang = "bang.__main__:main"
