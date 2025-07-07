@@ -129,6 +129,20 @@ class SemanticAnalysis:
             NumberType,
         }
 
+        self.BIN_OP_DIFFERENT_RULES = {
+            # I honestly should just merge number type and booltype
+            # but thatll be for another day
+            (StringType, NumberType, TokenType.T_ASTERISK): StringType,
+            (NumberType, StringType, TokenType.T_ASTERISK): StringType,
+            (StringType, BoolType, TokenType.T_ASTERISK): StringType,
+            (BoolType, StringType, TokenType.T_ASTERISK): StringType,
+
+            (ArrayType, NumberType, TokenType.T_ASTERISK): ArrayType,
+            (NumberType, ArrayType, TokenType.T_ASTERISK): ArrayType,
+            (ArrayType, BoolType, TokenType.T_ASTERISK): ArrayType,
+            (BoolType, ArrayType, TokenType.T_ASTERISK): ArrayType,
+        }
+
         self.construct_to_walk = {
             AssignmentNode: self.walk_assignments,
             IFNode:         self.walk_if,
@@ -265,9 +279,11 @@ class SemanticAnalysis:
                 left_hand_type = self.search_for_var(left_hand_name)
                 if not left_hand_type:
                     raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                # is it the same type?
                 if (not ((type(right_hand_type) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand_type))):
-                    
-                    raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                    # does it adhere to different type operation rules?
+                    if (type(left_hand_type), type(right_hand_type), op_type) not in self.BIN_OP_DIFFERENT_RULES:
+                        raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             self.initalize_var(left_hand_name, right_hand_type)
         # else for now but with the addition of more assignable types
         # this will turn into an elif or a seperate function
@@ -278,7 +294,8 @@ class SemanticAnalysis:
                 if not left_hand_type:
                     raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 if (not ((type(right_hand_type) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand_type))):
-                    raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                    if (type(left_hand_type), type(right_hand_type), op_type) not in self.BIN_OP_DIFFERENT_RULES:
+                        raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
         
     def walk_expression(self, root):
         
@@ -298,7 +315,10 @@ class SemanticAnalysis:
                 return DynamicType()
             
             if (not ((type(right) in [NumberType, BoolType] and type(left) in [NumberType, BoolType]) or type(left) == type(right))) and op in self.ARITH_OPS:
-                raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                if (type(left), type(right), op) not in self.BIN_OP_DIFFERENT_RULES:
+                    raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                else:
+                    return self.BIN_OP_DIFFERENT_RULES[(type(left), type(right), op)](value=None)
             
             # the value is none because we aren't evaluating anything just determining its type
             # anythingt that requires binop to be evaluated to throw an error will be a runtime error
