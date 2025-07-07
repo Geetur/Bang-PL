@@ -1,6 +1,6 @@
 (* ------------------------------------------------------------ *)
 (*  Bang Programming Language — Comprehensive Grammar (EBNF)   *)
-(*  Author: Me                                 *)
+(*  Author: Jeter Pontes                                 *)
 (*  Last‑updated: 8 Jun 2025                                      *)
 (* ------------------------------------------------------------ *)
 

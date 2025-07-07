@@ -41,7 +41,7 @@ class ControlFlowParser:
 
         # so you can imagine all of the expression level lines will either live
         # with a control flow construct or not. if it dosen't, then it will appear in 
-        # post_blockenize as a bare expression node, if it does, it will be apart
+        # post_blockenize as a bare expression node (global node), if it does, it will be apart
         # of one of the control flow contructs' blocks
 
         self.post_blockenize = []

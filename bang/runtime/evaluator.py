@@ -181,9 +181,7 @@ class Evaluator:
             "max": _built_in_max,
         }
             
-
         self.scope_stack[0].update(self.built_in_functions)
-
 
         # we need to know the loop depth for the break/continue etc constructs
         # because if we see a break outside of a loop for example we can throw an error
@@ -276,19 +274,6 @@ class Evaluator:
             self.scope_stack.pop()
             return
     
-    #def eval_elif(self, root):
-
-        #self.eval_expression(root.condition.root_expr)
-        #self.scope_stack.append({})
-        #self.eval_block(root.body)
-        #self.scope_stack.pop()
-    
-    #def eval_else(self, root):
-        #self.scope_stack.append({})
-        #self.eval_block(root.body)
-        #self.scope_stack.pop()
-    
-    
     def eval_for(self, root):
 
         self.loop_depth += 1
@@ -345,7 +330,6 @@ class Evaluator:
         self.scope_stack.pop()
         self.loop_depth -= 1
 
-
     def eval_while(self, root):
         self.loop_depth += 1
         self.scope_stack.append({})
@@ -377,15 +361,10 @@ class Evaluator:
         value = self.eval_expression(root.expression.root_expr)
         raise _ReturnSignal(value=value)
 
-
     # every time a var is assigned we throw it into our current scope
     # to let expressions which use the var in the future know that exists in the current scope
     # with each initalized var being associated with its respective type 
     def initalize_var(self, left_hand, right_hand):
-
-        #print(f"left_hand: {left_hand}")
-        #print(f"right_hand: {right_hand}")
-        #print(f"scope: {self.scope_stack}")
 
         self.scope_stack[-1][left_hand] = right_hand
     
@@ -477,7 +456,6 @@ class Evaluator:
                     raise EvaluatorError(self.file, "Index out of bounds", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             return base
 
-        
         elif type(root) == IdentifierNode:
             # converting every bang identifier into a python literal
             return self.scope_stack[self.search_for_var(root.value, root.meta_data)][root.value]
@@ -487,19 +465,14 @@ class Evaluator:
             callee = self.scope_stack[self.search_for_var(root.name, root.meta_data)][root.name]
             arg_vals = [self.eval_expression(i.root_expr) for i in root.args]
 
-
             if callable(callee) and root.name in self.built_in_functions:
                 return self.built_in_functions[root.name](arg_vals, root.meta_data)
 
-
             if type(callee) == runtime_function:
                 return self.eval_call(callee, arg_vals, root.meta_data)
-
-
             
             return self.eval_call(callee, arg_vals, root.meta_data)
-    
-
+        
     #-------------------------------------------
     # BINARY OPERATIONS START
     #-------------------------------------------
@@ -695,8 +668,6 @@ class Evaluator:
             
             return supported_types[op](left, right)
             
-
-
         type_dispatch = {
             int: eval_int_bin_op,
             float: eval_int_bin_op,
@@ -711,7 +682,6 @@ class Evaluator:
     #-------------------------------------------
     # BINARY OPERATIONS END
     #-------------------------------------------
-
 
     #-------------------------------------------
     # UNARY OPERATIONS START
@@ -747,8 +717,7 @@ class Evaluator:
     #-------------------------------------------
     # UNARY OPERATIONS END
     #-------------------------------------------
-
-    
+ 
     def eval_call(self, callee, args, meta_data):
 
         saved_stack = self.scope_stack
@@ -764,6 +733,3 @@ class Evaluator:
             self.scope_stack = saved_stack
             self.func_depth -= 1
         return 0
-
-
-
