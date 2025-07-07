@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field, replace
 
-from lexer import TokenType, Lexeme, Lexer
+from bang.lexing.lexer import TokenType, Lexeme, Lexer
 from typing import Any, List, Optional
 
 # data types

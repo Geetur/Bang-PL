@@ -1,7 +1,7 @@
 
 from dataclasses import dataclass
 from typing import Any, List, Optional
-from parser_nodes import (
+from bang.parsing.parser_nodes import (
     BlockNode
 )
 

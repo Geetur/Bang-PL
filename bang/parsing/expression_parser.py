@@ -4,9 +4,9 @@
 
 from dataclasses import replace
 
-from lexer import TokenType, Lexeme, Lexer
+from bang.lexing.lexer import TokenType, Lexeme, Lexer
 
-from parser_nodes import (
+from bang.parsing.parser_nodes import (
     IntegerLiteralNode,
     FloatLiteralNode,
     StringLiteralNode,

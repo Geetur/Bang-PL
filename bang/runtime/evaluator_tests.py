@@ -1,10 +1,10 @@
 import pytest
 
-from lexer import Lexer
-from expression_parser import ExpressionParser
-from control_flow_parser import ControlFlowParser
-from semantic_analysis import SemanticAnalysis
-from evaluator import Evaluator, EvaluatorError
+from bang.lexing.lexer import Lexer
+from bang.parsing.expression_parser import ExpressionParser
+from bang.parsing.control_flow_parser import ControlFlowParser
+from bang.semantic.semantic_analysis import SemanticAnalysis
+from bang.runtime.evaluator import Evaluator, EvaluatorError
 
 
 def evaluate(code: str, tmp_path):

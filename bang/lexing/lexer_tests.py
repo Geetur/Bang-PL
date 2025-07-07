@@ -1,5 +1,5 @@
 import pytest
-from lexer import Lexer, TokenType, LexerError
+from bang.lexing.lexer import Lexer, TokenType, LexerError
 
 def lex_string(source_code: str):
     with open("temp.txt", "w") as f:

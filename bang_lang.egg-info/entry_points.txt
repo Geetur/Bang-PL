@@ -1,0 +1,2 @@
+[console_scripts]
+bang = bang.__main__:main
