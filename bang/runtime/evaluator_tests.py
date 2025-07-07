@@ -53,10 +53,13 @@ def evaluate(code: str, tmp_path):
         'x = [1]\ny = 2\nz = x * y\n',
         'x = [1]\ny = [2]\nz = x * y\n',
         'x = [1,2,3]\ny = [2]\nz = x / y\n',
+        "x = 2\ny = [1]\nz = x * y\n",
 
+        # string arithmetic
         'x = "12"\ny = "2"\nz = x - y\n',
         'x = "1,2"\ny = ","\nz = x / y\n',
         'x = "1"\ny = 2\nz = x * y\n',
+        'x = 1\ny = "2"\nz = x * y\n',
 
         # Array indexing with run‑time index
         "arr = [10, 20, 30]\nidx = 1\nval = arr[idx]\n",
@@ -66,6 +69,49 @@ def evaluate(code: str, tmp_path):
 
         # Boolean logic evaluated at run‑time
         "flag = true\nother = false\nres = flag && !other\n",
+
+        #built in sum function
+        'sum{1,2,3,4}\n',
+        'sum{1,2,false,true}\n'
+        'sum{[1],[2],[3],[4]}\n',
+        'sum{[1,2,3,4]}\n',
+        'sum{"1","2","3","4"}\n',
+        'sum{["1","2","3","4"]}\n',
+
+        #built in min function
+        'min{1,2,3,4}\n',
+        'min{1,2,false,true}\n'
+        'min{[1],[2],[3],[4]}\n',
+        'min{[1,2,3,4]}\n',
+        'min{"1","2","3","4"}\n',
+        'min{["1","2","3","4"]}\n',
+
+        #built in max function
+        'max{1,2,3,4}\n',
+        'max{1,2,false,true}\n'
+        'max{[1],[2],[3],[4]}\n',
+        'max{[1,2,3,4]}\n',
+        'max{"1","2","3","4"}\n',
+        'max{["1","2","3","4"]}\n',
+
+        #built in len function
+        'len{[1,2,3,4,5]}\n',
+        'len{[1,2,3,4,"5"]}\n',
+        'len{[1,2,3,4,[5]]}\n',
+        'len{"12fgdgd"}\n',
+
+        #built in print function
+        'print{[1,2,3,4,5]}\n'
+        'print{1,2,3,4,5}\n'
+        'print{[1,2,3,4,5], 1}\n'
+        'print{[1,2,3,4,5], "1"}\n'
+        'print{"ffsfsfsfs"}\n'
+        'print{true, false}\n'
+        'print{"ffsfsfsfs"}\n'
+        'x = "12"\ny = 2\nz = true\n print{x,y,z}\n',
+        'x = [[0] * 5] * 5\nprint{x}\n',
+        'print{["sfdsdffsfsd", 1, false, true, ["hello"]]}\n'
+
     ],
 )
 def test_evaluator_valid(program, tmp_path):
@@ -98,6 +144,23 @@ def test_evaluator_valid(program, tmp_path):
         'fn bar args\n return 5\nend\nx = bar{} + "3"\n',
         'fn bar args\n return "5"\nend\nx = 1 + bar{}\n',
         'fn bar args\n return [1]\nend\nx = "1" + bar{}\n',
+
+        #built in sum function
+        'sum{1,2,3,"4"}\n',
+        "sum{}\n",
+
+        #built in min function
+        'min{1,2,3,"4"}\n',
+        "min{}\n",
+
+        #built in max function
+        'max{1,2,3,"4"}\n',
+        "max{}\n",
+
+        #built in len function
+        'len{1}\n',
+        "len{}\n",
+
 
 
     ],

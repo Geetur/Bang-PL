@@ -38,6 +38,10 @@ end
 fib{9}
 
 print{"hello:, world"}
+x = [[0] * 5] * 5
+
+print{x}
+
 
 
 
