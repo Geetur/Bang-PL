@@ -22,7 +22,7 @@ This repository is a **from-scratch reference implementation** of **Bang**, a sm
 ---
 
 ## Motivation
-Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized language** that proves mastery over parsing, static analysis, and runtime design—without the 50 kLOC overhead of a “real” compiler. Every stage is separately implemented and individually testable, so you can observe _exactly_ how code is transformed step by step. 
+Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized language** that proves mastery over parsing, static analysis, runtime design, and project architecture—without the 50 kLOC overhead of a “real” compiler. Every stage is separately implemented and individually testable, so you can observe _exactly_ how code is transformed step by step. 
 
 ## Key Language Features
 * **Array-first syntax** with intuitive overloading:  
