@@ -143,7 +143,7 @@ fib{9}
 ```
 ## Running the Test-Suite
 ```
-pytest -q
+pytest bang\semantic\semantic_tests.py
 ```
 The suite contains hundreds of assertions split across:
 
