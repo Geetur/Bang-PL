@@ -62,20 +62,21 @@ python -m venv .venv
 source .venv/bin/activate
 
 # 3. Install dev dependencies
-pip install -r requirements.txt  # mainly pytest & rich-traceback
+pip install pytest
 ```
 Python 3.10+ is recommended (pattern-matching FTW).
 
 ## Running Bang Code
-There isn’t a one-liner CLI yet, but you can run a Bang file in three lines of Python:
+Although somewhat bush-league, just change the file path in bang\__main__.py; after that, you can either
+do "python -m bang" if you didnt create a venv and install -e . or did you did, just type "bang."
 
 ```
 
-from lexer import Lexer
-from expression_parser import ExpressionParser
-from control_flow_parser import ControlFlowParser
-from semantic_analysis import SemanticAnalysis
-from evaluator import Evaluator
+from bang.lexing.lexer import Lexer
+from bang.parsing.expression_parser import ExpressionParser, ParserError
+from bang.parsing.control_flow_parser import ControlFlowParser
+from bang.semantic.semantic_analysis import SemanticAnalysis, SemanticError
+from bang.runtime.evaluator import Evaluator, EvaluatorError
 
 src = "examples/hello.bang"
 lex = Lexer(src); tokens = lex.tokenizer()
@@ -141,7 +142,7 @@ end
 fib{9}
 
 ```
-## Running the Test-Suite
+## Running the Test-Suite (example for semantic tests)
 ```
 pytest bang\semantic\semantic_tests.py
 ```
@@ -173,13 +174,11 @@ Tip: Each phase is cleanly decoupled; you can unit-test a new feature in isolati
 
 * add way more built-in functions (this is really easy you should try it)
 
-* CLI runner (bang run file.bang)
+* Classes and dataclasses
 
 * Interpret in c++ or similar for faster runtimes
 
 * REPL with auto-completion
-
-* Standard library (stats, maybe sockets?)
 
 ## Contributing
 
