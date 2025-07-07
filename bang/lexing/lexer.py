@@ -120,16 +120,17 @@ class Lexer:
 
         while self.char != SENTINEL:
             
-            # a really interesting snippet of knowledge about programming lang
-            # development is that comments are usually handled in the lexer
+            #comments are usually handled in the lexer
             # so, the idea is that anything after the comment until the newline
             # is just not tokenized; you could however store them in a seperate structure
-            # so that if you transpile to another lang, the file still maintains comments however
+            # so that if you transpile to another lang, the file still maintains comments
             if self.char == COMMENT:
                 while self.char not in (NEWLINE, SENTINEL):
                     self.advance()
                 continue
-
+            
+            # strings are a sort of exception to lexing because it is so much simpler to create an entire
+            # string literal via lexing than to parse one out, suprisingly.
             if self.char == STRING:
                 self.prev_start = self.start; self.start = self.col
                 value = ""

@@ -1,4 +1,4 @@
-
+# ONLY APPLIES TO STATICALLY KNOWABLE THINGS
 # after this pass we are every variable is guaranteed to be defined before use; 
 # every break, continue, return, is guaranteed to bee associated with a loop/function;
 # all indexes are guaranteed to be numbers;
@@ -242,10 +242,6 @@ class SemanticAnalysis:
     # with each initalized var being associated with its respective type 
     def initalize_var(self, left_hand, right_hand):
 
-        #print(f"left_hand: {left_hand}")
-        #print(f"right_hand: {right_hand}")
-        #print(f"scope: {self.scope_stack}")
-
         self.scope_stack[-1][left_hand] = right_hand
     
     def search_for_var(self, name):
@@ -304,7 +300,7 @@ class SemanticAnalysis:
             if (not ((type(right) in [NumberType, BoolType] and type(left) in [NumberType, BoolType]) or type(left) == type(right))) and op in self.ARITH_OPS:
                 raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             
-            # the value is none because we aren't evaluation anything just determining its type
+            # the value is none because we aren't evaluating anything just determining its type
             # anythingt that requires binop to be evaluated to throw an error will be a runtime error
             cls = type(left) if op in self.ARITH_OPS else BoolType
             return cls(value=None)
@@ -319,7 +315,7 @@ class SemanticAnalysis:
             if type(op) not in self.allowed_unary_ops and root.op != TokenType.T_NEGATE:
                 raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             
-            # the value is none because we aren't evaluation anything just determining its type
+            # the value is none because we aren't evaluating anything just determining its type
             # anythingt that requires binop to be evaluated to throw an error will be a runtime error
             return BoolType(value=None) if root.op == TokenType.T_NEGATE else NumberType(value=None)
         
@@ -341,6 +337,8 @@ class SemanticAnalysis:
             # remember that if it dosent have a value its not staically knowable
             # so we only throw an error ifs its knowable and an error
             # things that are errors after evaluation will be runtime errors
+
+            # pretty sure from here down there is some redundant code but it is only redundant, and working
             if base.value:
                 if type(base) not in [ArrayType, StringType]:
                     raise SemanticError(self.file, f"object of {type(base)} not indexable", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)

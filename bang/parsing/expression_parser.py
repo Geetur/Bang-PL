@@ -144,7 +144,7 @@ class ExpressionParser:
         self.illegal_assignment = 0
 
         # these are literals that can be instantly determined, unlike
-        # strings and arrays which must be determined over n tokens
+        # arrays which must be determined over n tokens
         self._literal_map = {
             TokenType.T_INT:   lambda tok: IntegerLiteralNode(int(tok.value), tok),
             TokenType.T_FLOAT: lambda tok: FloatLiteralNode(float(tok.value), tok),
@@ -158,8 +158,6 @@ class ExpressionParser:
     
     # we're going to split the tokens into seperate lines,
     # where each line will be transformed into a singular node
-    # we will then "blockenize" the nodes so that nodes
-    # are grouped together under their specific control flows
     def split(self):
         past = -1
         for tok in self.tokens:
@@ -429,6 +427,7 @@ class ExpressionParser:
         
         left_bracket = line[0]
         depth = 0
+        # it's very important to make sure that we're matching the correct depth
         for tok_idx, tok in enumerate(line):
             if tok.type == TokenType.T_RBRACKET:
                 depth -= 1
@@ -445,9 +444,7 @@ class ExpressionParser:
         raise ParserError(self.file, "Mismatched brackets", base.meta_data.line, base.meta_data.column_start, base.meta_data.column_end)
 
 
-    # its really important to remember here that an array isn't an expression
-    # in our langauge, its a container of expressions. this might be somewhat confusing
-    # because if you pass an array into the SYA it will be wrapped in a expression node, but that is only
+    # if you pass an array into the SYA it will be wrapped in a expression node, but that is only
     # because its the root expression. all an expression node is in this lanaguge is the root of whatever is passed into
     # the SYA, which is why its attribute is root_expr
     def handle_array_literals(self, line):
@@ -491,27 +488,7 @@ class ExpressionParser:
 
             tok_idx += 1
         
-        raise ParserError(self.file, f"Unterminated {creators[0].value if creators else line[0].value}", line[0].line, line[0].column_start, line[0].column_end)
-    
-    def handle_string_literals(self, line):
-        string_value = ""
-        left_quote_lexeme = line[0]
-        if len(line) <= 1:
-            raise ParserError(self.file, "Mismatched string", left_quote_lexeme.line, left_quote_lexeme.column_start, left_quote_lexeme.column_end)
-        rest_of_string = line[1:]
-        # we ignore the tok because in the case of strings
-        # we don't really care what's inside of them,
-        # just that they're strings
-        for tok_idx, ignored_tok in enumerate(rest_of_string):
-            if ignored_tok.type == TokenType.T_STRING:
-                return StringLiteralNode(value=string_value, meta_data=left_quote_lexeme), tok_idx + 1
-            # remember in our lexeme definition we defined the lexeme value
-            # to always be a string because we are always reading from a file/string
-            # format so we don't have to do any type conversion here
-            string_value += ignored_tok.value
-        raise ParserError(self.file, "Mismatched string", left_quote_lexeme.line, left_quote_lexeme.column_start, left_quote_lexeme.column_end)
-        
-
+        raise ParserError(self.file, f"Unterminated {creators[0].value if creators else line[0].value}", line[0].line, line[0].column_start, line[0].column_end)     
 
     # this is our expression handler
     # whenever we expect an expression in a different handler
@@ -591,7 +568,7 @@ class ExpressionParser:
                 tok_idx = len(line)
                 continue
             
-            # ERROR CHECKING START
+            # ----------------------------------------------------------------ERROR CHECKING START
 
             # define the can_follow groups with all expression-level syntax
             # and so if a token isn't in these two, it isn't a token meant for expressions
@@ -617,7 +594,7 @@ class ExpressionParser:
                 if tok.type not in [TokenType.T_LBRACKET, TokenType.T_RPAREN]:
                     expect_operand = True
                 
-            # ERROR CHECKING FINISHED
+            # --------------------------------------------------------------------------------ERROR CHECKING FINISHED
 
             # A) Literals & identifiers → output
             if tok.type in self._literal_map:
@@ -654,7 +631,6 @@ class ExpressionParser:
                 output.append(call_node)
                 tok_idx += consumed
                 expect_operand = False
-
               
             # C) Any operator
             elif tok.type in self.PRECEDENCE:
@@ -683,7 +659,6 @@ class ExpressionParser:
             
             tok_idx += 1
         
-
         if self.illegal_assignment != 2:
             while op_stack:
                 top = op_stack[-1]
