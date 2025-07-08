@@ -159,6 +159,32 @@ output:
 13
 21
 ```
+## 4. house robber (for the dp gods)
+```
+fn rob args
+    nums = args[0]
+
+    if len{nums} <= 2
+        return max{nums}
+    end
+
+    nums[-2] = max{nums[-1], nums[-2]}
+
+    for range1 [len{nums} - 3, -1, -1]
+        nums[range1] = max{nums[range1] + nums[range1 + 2], nums[range1 + 1]}
+    end
+
+    return nums[0]
+end
+
+print{rob{[2,7,9,3,1]}}
+
+```
+output:
+```
+12
+```
+
 ## Running the Test-Suite (example for semantic tests)
 ```
 pytest bang\semantic\semantic_tests.py
