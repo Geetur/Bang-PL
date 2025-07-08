@@ -39,8 +39,9 @@ fib{9}
 
 print{"hello:, world"}
 x = [[0] * 5] * 5
-
+x[0][4] = 1
 print{x}
+
 
 
 
