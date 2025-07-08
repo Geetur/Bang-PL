@@ -247,8 +247,14 @@ class Evaluator:
     def eval_function(self, root):
         function_name = root.name
         args_name = root.arg_list_name
+        # with this, were limiting the number of frames on the scope stack at function creation
+        # but were not limiting the contents of those frames.
+        # so, we're saying, if this function was declared on the 7th scope, this function can only see the seven scopes 
+        # (no new scopes the function can see)
+        # but we can add infinitely many new variables to those frozen scopes (because we want the function to be able to, say, call itself)
+        closure = self.scope_stack[:]
 
-        self.initalize_var(function_name, runtime_function(body=root.body, params_name=args_name, closure=[i.copy() for i in self.scope_stack]))
+        self.initalize_var(function_name, runtime_function(body=root.body, params_name=args_name, closure=closure))
         
     def eval_block(self, root):
         # A block just evals its children in the current scope

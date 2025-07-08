@@ -39,9 +39,18 @@ fib{9}
 
 print{"hello:, world"}
 x = [[0] * 5] * 5
-x[0][4] = 1
-print{x}
 
+fn fibb args
+    n = args[0]
+    if n == 0
+        return 0
+    end
+    if n == 1
+        return 1
+    end
+    return fibb{n - 1} + fibb{n - 2}
+end
+print{fibb{9}}
 
 
 

@@ -180,7 +180,7 @@ class SemanticAnalysis:
 
         self.func_depth += 1
         self.scope_stack.append({})
-        self.initalize_var(args_name, CallListType(value=[]))
+        self.initalize_var(args_name, DynamicType())
 
         self.walk_block(root.body)
         self.scope_stack.pop()
@@ -317,6 +317,7 @@ class SemanticAnalysis:
             
             if (not ((type(right) in [NumberType, BoolType] and type(left) in [NumberType, BoolType]) or type(left) == type(right))) and op in self.ARITH_OPS:
                 if (type(left), type(right), op) not in self.BIN_OP_DIFFERENT_RULES:
+
                     raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 else:
                     return self.BIN_OP_DIFFERENT_RULES[(type(left), type(right), op)](value=None)
