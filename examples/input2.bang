@@ -1,12 +1,8 @@
 a = [5, [2]] 
-
 # solution to two sum
-
 fn two_sum args
-
     target = args[0]
     input = args[1]
-
     for range1 [0, len{input} - 1]
         for range2 [range1 + 1, len{input}]
             if input[range1] + input[range2] == target
@@ -19,9 +15,7 @@ end
 
 
 # printing n fibonacii numbers
-
 fn fib awesome
-
     n = awesome[0]
     a = 0
     b = 1
@@ -34,12 +28,10 @@ fn fib awesome
         b = c
     end
 end
-
 fib{9}
 
 print{"hello:, world"}
 x = [[0] * 5] * 5
-
 fn fibb args
     n = args[0]
     if n == 0
@@ -50,7 +42,35 @@ fn fibb args
     end
     return fibb{n - 1} + fibb{n - 2}
 end
-print{fibb{9}}
+
+accounts = [[2,8,7],[7,1,3],[1,9,5]]
+fn max_sum args
+    ans = 0
+    for i args[0]
+        ans = max{ans, sum{i}}
+    end
+    return ans
+end
+
+fn rob args
+    nums = args[0]
+
+    if len{nums} <= 2
+        return max{nums}
+    end
+
+    nums[-2] = max{nums[-1], nums[-2]}
+
+    for range1 [len{nums} - 3, -1, -1]
+        nums[range1] = max{nums[range1] + nums[range1 + 2], nums[range1 + 1]}
+    end
+
+    return nums[0]
+end
+
+print{rob{[2,7,9,3,1]}}
+
+
 
 
 
