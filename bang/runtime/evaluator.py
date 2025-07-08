@@ -5,6 +5,7 @@
 # this file shares many simulator with our semantic analyzer because in both we essentially just
 # tree-walking; in the semantic analyzer we are tree walking for types, and in this we are tree walking for runtime values
 import operator
+from copy import deepcopy
 
 from bang.lexing.lexer import TokenType
 from bang.parsing.parser_nodes import (
@@ -652,10 +653,17 @@ class Evaluator:
         #-------------------------------------------
 
         def eval_different_bin_op(left, op, right):
+            
 
+                    
 
             supported_types = {
-                TokenType.T_ASTERISK: operator.mul,
+
+                (list, int, TokenType.T_ASTERISK): lambda a, b: [deepcopy(i) for i in a for _ in range(b)],
+                (int, list, TokenType.T_ASTERISK): lambda a, b: [deepcopy(i) for i in b for _ in range(a)],
+
+                (str, int, TokenType.T_ASTERISK): operator.mul,
+                (int, str, TokenType.T_ASTERISK): operator.mul,
 
                 TokenType.T_EQ: operator.eq,
                 TokenType.T_NEQ: operator.ne,
@@ -663,10 +671,11 @@ class Evaluator:
                 TokenType.T_OR:      lambda a, b: a or  b,
             }
             
-            if op not in supported_types:
+
+            if op not in supported_types and (type(left), type(right), op) not in supported_types:
                 raise EvaluatorError(self.file, f"operation '{op.value}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             
-            return supported_types[op](left, right)
+            return supported_types[op](left, right) if op in supported_types else  supported_types[(type(left), type(right), op)](left, right)
             
         type_dispatch = {
             int: eval_int_bin_op,
