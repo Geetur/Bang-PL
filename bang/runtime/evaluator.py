@@ -442,6 +442,8 @@ class Evaluator:
         
         elif type(root) == BinOpNode:
             # converting bang binary operation into a python literal
+            if root is None:
+                print(root)
             return self.eval_bin_ops(root)
         
         elif type(root) == UnaryOPNode:
@@ -686,10 +688,12 @@ class Evaluator:
         type_dispatch = {
             int: eval_int_bin_op,
             float: eval_int_bin_op,
+            bool: eval_int_bin_op,
             str: eval_str_bin_op,
             list: eval_list_bin_op,
+
         }
-        same_type = [int, float]
+        same_type = [int, float, bool]
         dispatcher = eval_different_bin_op
         if type(left) == type(right) or (type(left) in same_type and type(right) in same_type):
             dispatcher = type_dispatch.get(type(left))
