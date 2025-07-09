@@ -23,7 +23,6 @@ def main():
         block_nodes = cf_parser.blockenize()
 
 
-
         sem = SemanticAnalysis(file, block_nodes)
         sem.walk_program()
 

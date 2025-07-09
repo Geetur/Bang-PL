@@ -68,13 +68,33 @@ fn rob args
     return nums[0]
 end
 
-print{rob{[2,7,9,3,1]}}
 
 
 
+fn minPathSum args
+        grid = args[0]
+        for range1 [len{grid}]
+            i = range1
+            for range2 [len{grid[0]}]
+                j = range2
+                if i == 0 && j == 0
+                    continue
+                elif i == 0
+                    grid[i][j] += grid[i][j]
+                    end
+                elif range2 == 0
+                    grid[i][j] += grid[i - 1][j]
+                    end
+                else
+                    grid[i][j] += min{grid[i][j - 1], grid[i - 1][j]}
+                    end
+                end
+            end
+        end
+        return grid[-1][-1]
+        end
 
-
-
+print{minPathSum{[[1,2,3],[4,5,6]]}}
 
 
 
