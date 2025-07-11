@@ -184,6 +184,25 @@ output:
 ```
 12
 ```
+## 5. recursive factorial
+```
+fn fact args
+    n = args[0]
+    acc = args[1]  # accumulator defaults to 1 at top call
+    if n <= 1
+        return acc
+    end
+    return fact{n - 1, acc * n}
+end
+
+print{fact{6, 1}} 
+
+```
+
+output: 
+```
+720
+```
 
 ## Running the Test-Suite (example for semantic tests)
 ```
