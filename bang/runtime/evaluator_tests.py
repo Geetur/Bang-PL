@@ -112,6 +112,15 @@ def evaluate(code: str, tmp_path):
         'x = [[0] * 5] * 5\nprint{x}\n',
         'print{["sfdsdffsfsd", 1, false, true, ["hello"]]}\n'
 
+        #built in sort function
+        'sort{1,2, 3}\n'
+        'sort{[1,2, 3]}\n'
+        'sort{[1,2, 3], [1,2,4]}\n'
+        'sort{"1","2", "3"}\n'
+        'sort{["1","2", "3"]}\n'
+        'sort{"323425232353456"}\n'
+        'sort{1,true, false}\n'
+
     ],
 )
 def test_evaluator_valid(program, tmp_path):
@@ -160,6 +169,11 @@ def test_evaluator_valid(program, tmp_path):
         #built in len function
         'len{1}\n',
         "len{}\n",
+
+        #built in sort function
+        'sort{1,2, "5"}\n'
+        'sort{1,2, [5]}\n'
+        'sort{}\n'
 
 
 
