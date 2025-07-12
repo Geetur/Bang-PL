@@ -174,12 +174,27 @@ class Evaluator:
                 base = max(base, i)
             return base
         
+        def _built_in_sort(args, meta_data):
+            if not args:
+                raise EvaluatorError(self.file, "sort function expects argument list of at least one", meta_data.line, meta_data.column_start, meta_data.column_end)
+            if len(args) == 1:
+                if type(args[0]) in [str, list]:
+                    args = args[0]
+                else:
+                    return args[0]
+            try:
+                return sorted(args)
+            except TypeError:
+                raise EvaluatorError(self.file, "sort function expects argument list of homogenous type", meta_data.line, meta_data.column_start, meta_data.column_end)
+
+        
         self.built_in_functions = {
             "print": _built_in_print,
             "len": _built_in_len,
             "sum": _built_in_sum,
             "min": _built_in_min,
             "max": _built_in_max,
+            "sort": _built_in_sort,
         }
             
         self.scope_stack[0].update(self.built_in_functions)
@@ -523,7 +538,7 @@ class Evaluator:
                 raise EvaluatorError(self.file, f"division by zero", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
                 
             if op not in supported_types:
-                raise EvaluatorError(self.file, f"operation '{op.value}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
+                raise EvaluatorError(self.file, f"operation '{op}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
             
             return supported_types[op](left, right)
         
@@ -564,7 +579,7 @@ class Evaluator:
             }
             
             if op not in supported_types:
-                raise EvaluatorError(self.file, f"operation '{op.value}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                raise EvaluatorError(self.file, f"operation '{op}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             
             return supported_types[op](left, right)
         
@@ -654,7 +669,7 @@ class Evaluator:
             }
 
             if op not in supported_types:
-                raise EvaluatorError(self.file, f"operation '{op.value}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                raise EvaluatorError(self.file, f"operation '{op}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             return supported_types[op](left, right)
         #-------------------------------------------
         #LIST OPERATIONS END
@@ -681,7 +696,7 @@ class Evaluator:
             
 
             if op not in supported_types and (type(left), type(right), op) not in supported_types:
-                raise EvaluatorError(self.file, f"operation '{op.value}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                raise EvaluatorError(self.file, f"operation '{op}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             
             return supported_types[op](left, right) if op in supported_types else  supported_types[(type(left), type(right), op)](left, right)
             
