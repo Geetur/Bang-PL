@@ -46,6 +46,13 @@ def analyze(code: str, tmp_path):
         "x = -1.1\ny = 2\nz = x * y\n",
         "x = -1.1\ny = 2\nz = x // y\n",
         "x = -1.1\ny = 2\nz = x ** y\n",
+
+        "x = 1\ny = 2\nx += y\n",
+        "x = 1.1\ny = 2\nx += y\n",
+        "x = -1.1\ny = 2\nx += y\n",
+        "x = -1.1\ny = 2\nx -= y\n",
+        "x = -1.1\ny = 2\nx /= y\n",
+        "x = -1.1\ny = 2\nx *= y\n",
         
 
         # Mixing numbers and booleans in arithmetic (permitted by Bang semantics)
@@ -59,6 +66,13 @@ def analyze(code: str, tmp_path):
         "x = 1\ny = false\nz = x // y\n",
 
 
+         "x = 1\ny = true\nx += y\n",
+        "x = 1\ny = false\nx += y\n",
+        "x = 1\ny = !true\nx += y\n",
+        "x = 1\ny = true\nx -= y\n",
+        "x = 1\ny = false\nx *= y\n",
+        "x = 1\ny = !true\nx /= y\n",
+
         # String concatenation of matching types
         'a = \"hello\"\nb = \"world\"\nc = a + b\n',
         'a = \"hello\"\nb = \"world\"\nc = a - b\n',
@@ -66,6 +80,12 @@ def analyze(code: str, tmp_path):
         'a = \"hello\"\nb = \"world\"\nc = a / b\n',
         'a = \"hello\"\nb = \"world\"\nc = a // b\n',
         'a = \"hello\"\nb = \"world\"\nc = a ** b\n',
+
+        'a = \"hello\"\nb = \"world\"\na += b\n',
+        'a = \"hello\"\nb = \"world\"\na -= b\n',
+        'a = \"hello\"\nb = \"world\"\na *= b\n',
+        'a = \"hello\"\nb = \"world\"\na /= b\n',
+
 
         # Unary on a number
         "x = -5\n",
@@ -225,7 +245,8 @@ def test_semantic_valid(program, tmp_path):
         # is when you do arr - 1 to pop an item of an arr
         'a = ["1"]\nb = [2]\n a[0] += b[0]\n',
         'a = ["1"]\nb = [true]\n a[0] -= b[0]\n',
-        'a = ["1", 4]\nb = [a[1]]\n a[0] *= b[0]\n',
+
+
         'a = [1]\nb = ["2"]\n a[0] /= b[0]\n',
 
         'a = ["1"]\nb = [[1]]\n a[0] += b[0]\n',
@@ -234,7 +255,7 @@ def test_semantic_valid(program, tmp_path):
 
         "x = 5\n p= 1 + x{1}",
 
-         'a = [5, [2]]\n b = a["B" + "a"][3]',
+        'a = [5, [2]]\n b = a["B" + "a"][3]',
         'a = [5, [2]]\n b = a[[1] + [1]][3]',
         'a = [5, [2]]\n b = a[[1] + "a"][3]',
         'a = [5, [2]]\n b = a[1 + "a"][3]',

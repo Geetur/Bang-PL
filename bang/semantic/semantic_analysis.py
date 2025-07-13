@@ -120,9 +120,18 @@ class SemanticAnalysis:
             TokenType.T_DSLASH, TokenType.T_EXPO,
         }
 
+        self.assignment_to_normal = {
+           TokenType.T_PLUS_ASSIGN: TokenType.T_PLUS,
+           TokenType.T_MINUS_ASSIGN: TokenType.T_MINUS,
+           TokenType.T_ASTERISK_ASSIGN: TokenType.T_ASTERISK,
+           TokenType.T_SLASH_ASSIGN: TokenType.T_SLASH,
+        }
+
         self.ARITH_ASSIGNMENTS = {
-            TokenType.T_PLUS_ASSIGN, TokenType.T_MINUS_ASSIGN,
-            TokenType.T_SLASH_ASSIGN, TokenType.T_ASTERISK_ASSIGN,
+            TokenType.T_PLUS_ASSIGN, 
+            TokenType.T_MINUS_ASSIGN,
+            TokenType.T_SLASH_ASSIGN, 
+            TokenType.T_ASTERISK_ASSIGN,
         }
 
 
@@ -277,6 +286,7 @@ class SemanticAnalysis:
         if type(root.left_hand) == IdentifierNode:
             left_hand_name = root.left_hand.value
             if op_type in self.ARITH_ASSIGNMENTS and type(right_hand_type) != DynamicType:
+                op_type = self.assignment_to_normal[op_type]
                 left_hand_type = self.search_for_var(left_hand_name)
                 if not left_hand_type:
                     raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
@@ -295,6 +305,7 @@ class SemanticAnalysis:
                 if not left_hand_type:
                     raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 if op_type in self.ARITH_ASSIGNMENTS:
+                    op_type = self.assignment_to_normal[op_type]
                     if (not ((type(right_hand_type) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand_type))):
                         if (type(left_hand_type), type(right_hand_type), op_type) not in self.BIN_OP_DIFFERENT_RULES:
                             raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
