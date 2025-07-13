@@ -91,6 +91,7 @@ class SemanticAnalysis:
             "sum": FunctionType,
             "min": FunctionType,
             "max": FunctionType,
+            "sort": FunctionType,
         }
 
         self.scope_stack[0].update(
@@ -275,7 +276,7 @@ class SemanticAnalysis:
         op_type = root.op
         if type(root.left_hand) == IdentifierNode:
             left_hand_name = root.left_hand.value
-            if op_type in self.ARITH_ASSIGNMENTS:
+            if op_type in self.ARITH_ASSIGNMENTS and type(right_hand_type) != DynamicType:
                 left_hand_type = self.search_for_var(left_hand_name)
                 if not left_hand_type:
                     raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
@@ -317,7 +318,6 @@ class SemanticAnalysis:
             
             if (not ((type(right) in [NumberType, BoolType] and type(left) in [NumberType, BoolType]) or type(left) == type(right))) and op in self.ARITH_OPS:
                 if (type(left), type(right), op) not in self.BIN_OP_DIFFERENT_RULES:
-
                     raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 else:
                     return self.BIN_OP_DIFFERENT_RULES[(type(left), type(right), op)](value=None)
