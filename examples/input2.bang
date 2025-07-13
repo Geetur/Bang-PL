@@ -129,11 +129,9 @@ print{sort{[[[["453435534", "1", "2",]]]]}}
 
 
 fn minMoves2 args
-        nums = args[0]
-        nums = sort{nums}
+        nums = sort{args[0]}
         c = 0
         mid = nums[len{nums} // 2]
-
         for i nums
             if i < mid
                 c += mid - i

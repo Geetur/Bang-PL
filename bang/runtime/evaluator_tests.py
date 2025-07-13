@@ -55,11 +55,34 @@ def evaluate(code: str, tmp_path):
         'x = [1,2,3]\ny = [2]\nz = x / y\n',
         "x = 2\ny = [1]\nz = x * y\n",
 
+        "x = [1]\ny = [2]\nx += y\n",
+        "x = [1,2]\ny = [2]\nx -= y\n",
+        'x = [1]\ny = 2\nx *= y\n',
+        'x = [1]\ny = [2]\nx *= y\n',
+        'x = [1,2,3]\ny = [2]\nx /= y\n',
+        "x = 2\ny = [1]\nx *= y\n",
+
         # string arithmetic
         'x = "12"\ny = "2"\nz = x - y\n',
         'x = "1,2"\ny = ","\nz = x / y\n',
         'x = "1"\ny = 2\nz = x * y\n',
         'x = 1\ny = "2"\nz = x * y\n',
+
+        'x = "12"\ny = "2"\nx -= y\n',
+        'x = "1,2"\ny = ","\nx /= y\n',
+        'x = "1"\ny = 2\nx *= y\n',
+        'x = 1\ny = "2"\nx *= y\n',
+
+        'x = ["1"]\ny = ["2"]\nx[0] += y[0]\n',
+
+        'x = ["1"]\n y = ["2"]\n x[0] -= y[0]\n',
+
+        'x = ["1"]\ny = 2\nx[0] *= y\n',
+
+        'x = ["1"]\ny = [2]\nx[0] *= y[0]\n',
+
+        'x = ["1,2,3"]\ny = ["2"]\nx[0] /= y[0]\n',
+        'x = "2"\ny = [1]\nx *= y[0]\n',
 
         # Array indexing with run‑time index
         "arr = [10, 20, 30]\nidx = 1\nval = arr[idx]\n",
