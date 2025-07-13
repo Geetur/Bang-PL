@@ -125,9 +125,26 @@ end
 
 print{fact{5, 1}}  # → 120
 
-print{sort{["453435534", "1", "2",]}}
+print{sort{[[[["453435534", "1", "2",]]]]}}
 
 
+fn minMoves2 args
+        nums = args[0]
+        nums = sort{nums}
+        c = 0
+        mid = nums[len{nums} // 2]
+
+        for i nums
+            if i < mid
+                c += mid - i
+            else
+                c += i - mid
+                end
+            end
+        end
+        return c
+    end
+print{minMoves2{[1,10,2,9]}}
 
 
 
