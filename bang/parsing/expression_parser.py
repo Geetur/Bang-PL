@@ -74,6 +74,7 @@ class ExpressionParser:
     # equality
     TokenType.T_EQ:              4,   # ==
     TokenType.T_NEQ:             4,   # !=
+    TokenType.T_IN:              4,
 
     # relational
     TokenType.T_LT:              5,   # <
@@ -119,6 +120,7 @@ class ExpressionParser:
         TokenType.T_GT, TokenType.T_GTEQ,
         TokenType.T_PLUS, TokenType.T_MINUS,
         TokenType.T_ASTERISK, TokenType.T_SLASH, TokenType.T_DSLASH,
+        TokenType.T_IN,
     )},
 }
     ASSIGNMENT = {

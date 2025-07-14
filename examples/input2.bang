@@ -142,7 +142,10 @@ fn minMoves2 args
         end
         return c
     end
-print{minMoves2{[1,10,2,9]}}
+
+[5] in "34343"
+
+
 
 
 

@@ -4,7 +4,7 @@
 # all indexes are guaranteed to be numbers;
 # all bin ops and unary ops are guaranteed to be valid if performed on literals
 # every error that can be statically determined is determined.
-
+from typing import Any
 from bang.lexing.lexer import TokenType
 from bang.parsing.parser_nodes import (
     IntegerLiteralNode,
@@ -137,6 +137,19 @@ class SemanticAnalysis:
 
         self.allowed_unary_ops = {
             NumberType,
+        }
+
+        # boolean operations with specific constraints such as in operator
+        # must have an iterable right hand
+        self.BOOL_OP_RULES = {
+            (NumberType, ArrayType, TokenType.T_IN),
+            (BoolType, ArrayType, TokenType.T_IN),
+            (StringType, ArrayType, TokenType.T_IN),
+            (ArrayType, ArrayType, TokenType.T_IN),
+
+            (StringType, StringType, TokenType.T_IN),
+            
+
         }
 
         self.BIN_OP_DIFFERENT_RULES = {
@@ -323,6 +336,7 @@ class SemanticAnalysis:
             op = root.op
             left = self.walk_expression(root.left)
             right = self.walk_expression(root.right)
+            print(left, right, op)
 
             if type(left) == DynamicType or type(right) == DynamicType:
                 return DynamicType()
@@ -335,6 +349,10 @@ class SemanticAnalysis:
             
             # the value is none because we aren't evaluating anything just determining its type
             # anythingt that requires binop to be evaluated to throw an error will be a runtime error
+            if (type(left), type(right), op) in self.BOOL_OP_RULES:
+                if op == TokenType.T_IN:
+                    raise SemanticError(self.file, f"in operator not supported between {type(left)} and {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                
             cls = type(left) if op in self.ARITH_OPS else BoolType
             return cls(value=None)
         
