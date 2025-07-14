@@ -176,6 +176,18 @@ def analyze(code: str, tmp_path):
         # Function result used as index
         "fn indexer args\n return 1\nend\narr = [10, 20, 30]\nx = arr[indexer{}]\n",
 
+        # in operator
+        'a=[5] in [5, 4, 3]\n',
+        'a=[5] in [1]\n',
+        'a=5 in [5]\n',
+        'a="5" in [5]\n',
+        'a=true in [5]\n',
+        'a=false in [5]\n',
+        
+        'a="5" in "543534"\n',
+        'a="5" in ""\n',
+
+
 
         # there are many examples that pass the semantic analyzer but
         # would throw a runetime error because in this semantic analyzer we are simply
@@ -261,6 +273,25 @@ def test_semantic_valid(program, tmp_path):
         'a = [5, [2]]\n b = a[1 + "a"][3]',
         'a = [5, [2]]\n b = a[1 + [1]][3]',
 
+        #in operator
+        'a = [5] in 5\n',
+        'a = 5 in 5\n',
+        'a=true in 5\n'
+        'a=false in 5\n',
+        'a="5" in 5\n',
+
+        'a=5 in true\n',
+        'a=5 in false\n'
+        'a=[1] in true\n',
+        'a=[1] in false\n',
+        'a=true in true\n',
+        'a=false in false\n'
+        'a="hello" in true\n',
+        'a="hello" in false\n',
+
+        'a=5 in "hello"\n',
+        'a=[1] in "hello"\n',
+        'a=true in "hello"\n',
 
 
     ],

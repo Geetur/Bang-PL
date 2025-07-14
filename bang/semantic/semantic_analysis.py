@@ -349,7 +349,7 @@ class SemanticAnalysis:
             
             # the value is none because we aren't evaluating anything just determining its type
             # anythingt that requires binop to be evaluated to throw an error will be a runtime error
-            if (type(left), type(right), op) in self.BOOL_OP_RULES:
+            if (type(left), type(right), op) not in self.BOOL_OP_RULES:
                 if op == TokenType.T_IN:
                     raise SemanticError(self.file, f"in operator not supported between {type(left)} and {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 
