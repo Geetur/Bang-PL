@@ -127,7 +127,7 @@ print{fact{5, 1}}  # → 120
 
 print{sort{[[[["453435534", "1", "2",]]]]}}
 
-
+arr = [1,2,3]
 fn minMoves2 args
         nums = sort{args[0]}
         c = 0
@@ -143,9 +143,7 @@ fn minMoves2 args
         return c
     end
 
-print{[5] in "34343"}
-
-a=[5] in [5, 4, 3]
+[hello, world] = arr
 
 
 

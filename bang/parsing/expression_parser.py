@@ -393,7 +393,7 @@ class ExpressionParser:
 
     def handle_assignments(self, line, assignment_idx):
 
-        valid_left_hands = {IndexNode, IdentifierNode}
+        valid_left_hands = {IndexNode, IdentifierNode, ArrayLiteralNode}
 
         assignment_op_token = line[assignment_idx]
         left_hand = line[:assignment_idx]
@@ -402,12 +402,16 @@ class ExpressionParser:
 
         if type(left_hand_node) not in valid_left_hands:
             raise ParserError(self.file, "assignment statement syntax is [identifier][=][expression]", assignment_op_token.line, assignment_op_token.column_start, assignment_op_token.column_end)
+
+        if type(left_hand_node) == ArrayLiteralNode:
+            for i in left_hand_node.elements:
+                if type(i.root_expr) != IdentifierNode:
+                    raise ParserError(self.file, "multi-initalization syntax is [list of identifiers][=][list of expressions]",assignment_op_token.line, assignment_op_token.column_start, assignment_op_token.column_end)
         
-        self.illegal_assignment = 1
-
         expected_expression = line[assignment_idx + 1:]
-
         expr_node = self.shunting_yard_algo(expected_expression)
+
+        self.illegal_assignment = 1
 
         assignment_node = AssignmentNode(left_hand=left_hand_node, op=assignment_op_token.type, meta_data=assignment_op_token, right_hand=expr_node)
 
