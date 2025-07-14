@@ -21,8 +21,7 @@ def main():
         # 4) Nest by control flow
         cf_parser = ControlFlowParser(file, all_expr_nodes)  
         block_nodes = cf_parser.blockenize()
-
-
+        
         sem = SemanticAnalysis(file, block_nodes)
         sem.walk_program()
 

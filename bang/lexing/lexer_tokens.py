@@ -44,6 +44,7 @@ class TokenType(Enum):
     T_AND = auto()
     T_OR = auto()
 
+
     # Literals
     T_NONE = auto()
     T_INT = auto()
@@ -63,6 +64,7 @@ class TokenType(Enum):
     T_RETURN = auto()
     T_END = auto()
     T_FN = auto()
+    T_IN = auto()
 
 
 @dataclass 
@@ -121,6 +123,7 @@ SYMBOLS = {
     '**': TokenType.T_EXPO,
     "&&": TokenType.T_AND,
     "||": TokenType.T_OR,
+    "in": TokenType.T_IN
     }
 
 KEYWORDS = {
@@ -134,5 +137,5 @@ KEYWORDS = {
     'continue': TokenType.T_CONTINUE,
     'return': TokenType.T_RETURN,
     "end": TokenType.T_END,
-    "fn": TokenType.T_FN
+    "fn": TokenType.T_FN,
     }

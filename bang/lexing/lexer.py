@@ -185,6 +185,8 @@ class Lexer:
                     ttype = TokenType.T_BOOL
                 elif self.token == "none":
                     ttype = TokenType.T_NONE
+                elif self.token == "in":
+                    ttype = TokenType.T_IN
                 elif self.token in KEYWORDS:
                     ttype = KEYWORDS[self.token]
                 else:

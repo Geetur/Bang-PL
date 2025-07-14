@@ -457,8 +457,7 @@ class Evaluator:
         
         elif type(root) == BinOpNode:
             # converting bang binary operation into a python literal
-            if root is None:
-                print(root)
+            
             return self.eval_bin_ops(root)
         
         elif type(root) == UnaryOPNode:
@@ -576,6 +575,8 @@ class Evaluator:
                 TokenType.T_AND:     lambda a, b: a and b,
                 TokenType.T_OR:      lambda a, b: a or  b,
 
+                TokenType.T_IN: lambda a, b: a in b,
+
             }
             
             if op not in supported_types:
@@ -666,6 +667,8 @@ class Evaluator:
 
                 TokenType.T_AND:     lambda a, b: a and b,
                 TokenType.T_OR:      lambda a, b: a or  b,
+
+                TokenType.T_IN: lambda a, b: a in b,
             }
 
             if op not in supported_types:
@@ -677,8 +680,11 @@ class Evaluator:
 
         def eval_different_bin_op(left, op, right):
             
-
-                    
+            def eval_different_in(a, b):
+                if (type(b) not in [list, str]) or (type(a) != str and type(b) == str):
+                    raise EvaluatorError(self.file, f"in binary operation not supported between {type(a)} and {type(b)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end) 
+                return a in b
+                
 
             supported_types = {
 
@@ -692,6 +698,8 @@ class Evaluator:
                 TokenType.T_NEQ: operator.ne,
                 TokenType.T_AND:     lambda a, b: a and b,
                 TokenType.T_OR:      lambda a, b: a or  b,
+
+                TokenType.T_IN: eval_different_in
             }
             
 
@@ -712,6 +720,7 @@ class Evaluator:
         dispatcher = eval_different_bin_op
         if type(left) == type(right) or (type(left) in same_type and type(right) in same_type):
             dispatcher = type_dispatch.get(type(left))
+        
         return dispatcher(left, op, right)
     #-------------------------------------------
     # BINARY OPERATIONS END
