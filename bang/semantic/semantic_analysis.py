@@ -290,38 +290,60 @@ class SemanticAnalysis:
 
 
     def walk_assignments(self, root):
-
-        # probably we are going to want to change these if elif blocks into
-        # functions because they are simply meant to differentiate between different types of 
-        # left hands which could be arbitrarily large
-        right_hand_type = self.walk_expression(root.right_hand.root_expr)
-        op_type = root.op
-        if type(root.left_hand) == IdentifierNode:
-            left_hand_name = root.left_hand.value
-            if op_type in self.ARITH_ASSIGNMENTS and type(right_hand_type) != DynamicType:
+        
+        def walk_assignment_typical(left_hand, op_type, right_hand):
+            left_hand_name = left_hand.value
+            if op_type in self.ARITH_ASSIGNMENTS and type(right_hand) != DynamicType:
                 op_type = self.assignment_to_normal[op_type]
                 left_hand_type = self.search_for_var(left_hand_name)
                 if not left_hand_type:
                     raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 # is it the same type?
-                if (not ((type(right_hand_type) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand_type))):
+                if (not ((type(right_hand) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand))):
                     # does it adhere to different type operation rules?
-                    if (type(left_hand_type), type(right_hand_type), op_type) not in self.BIN_OP_DIFFERENT_RULES:
+                    if (type(left_hand_type), type(right_hand), op_type) not in self.BIN_OP_DIFFERENT_RULES:
                         raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-            self.initalize_var(left_hand_name, right_hand_type)
-        # else for now but with the addition of more assignable types
-        # this will turn into an elif or a seperate function
-        # **if type(left_hand) == IndexNode
-        else:
-            left_hand_type = self.walk_expression(root.left_hand)
-            if left_hand_type != DynamicType and right_hand_type != DynamicType:
+            self.initalize_var(left_hand_name, right_hand)
+
+        def walk_assignment_index(left_hand, op_type, right_hand):
+            left_hand_type = self.walk_expression(left_hand)
+            if left_hand_type != DynamicType and right_hand != DynamicType:
                 if not left_hand_type:
                     raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 if op_type in self.ARITH_ASSIGNMENTS:
                     op_type = self.assignment_to_normal[op_type]
-                    if (not ((type(right_hand_type) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand_type))):
-                        if (type(left_hand_type), type(right_hand_type), op_type) not in self.BIN_OP_DIFFERENT_RULES:
+                    if (not ((type(right_hand) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand))):
+                        if (type(left_hand_type), type(right_hand), op_type) not in self.BIN_OP_DIFFERENT_RULES:
                             raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+        
+        def walk_assignment_multi(left_hand, op_type, right_hand):
+            if type(right_hand) != DynamicType:
+                if type(right_hand) != ArrayType:
+                    raise SemanticError(self.file, "multi-initialization requires right hand to be dynamic type or static array type", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                if len(left_hand.elements) > len(right_hand.value):
+                    raise SemanticError(self.file, "multi-initialization requires right hand length to be equal to or greater than left hand length", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                for i, n in enumerate(left_hand.elements):
+                    left_hand_name = n.root_expr.value
+                    right_hand_type = self.walk_expression(right_hand.value[i])
+                    if op_type in self.ARITH_ASSIGNMENTS and type(right_hand_type) != DynamicType:
+                        op_type = self.assignment_to_normal[op_type]
+                        left_hand_type = self.search_for_var(left_hand_name)
+                        if not left_hand_type:
+                            raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                        # is it the same type?
+                        if (not ((type(right_hand) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand))):
+                            # does it adhere to different type operation rules?
+                            if (type(left_hand_type), type(right_hand), op_type) not in self.BIN_OP_DIFFERENT_RULES:
+                                raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                    self.initalize_var(left_hand_name, right_hand_type)
+                
+        find_assignment_type = {
+            IdentifierNode: walk_assignment_typical,
+            IndexNode: walk_assignment_index,
+            ArrayLiteralNode: walk_assignment_multi,
+        }
+
+        find_assignment_type[type(root.left_hand)](root.left_hand, root.op, self.walk_expression(root.right_hand.root_expr))
         
     def walk_expression(self, root):
         
@@ -336,7 +358,7 @@ class SemanticAnalysis:
             op = root.op
             left = self.walk_expression(root.left)
             right = self.walk_expression(root.right)
-            print(left, right, op)
+            
 
             if type(left) == DynamicType or type(right) == DynamicType:
                 return DynamicType()
