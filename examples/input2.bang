@@ -143,7 +143,9 @@ fn minMoves2 args
         return c
     end
 
-[5] in "34343"
+print{[5] in "34343"}
+
+a=[5] in [5, 4, 3]
 
 
 
