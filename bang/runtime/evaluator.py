@@ -411,42 +411,66 @@ class Evaluator:
             TokenType.T_ASTERISK_ASSIGN: TokenType.T_ASTERISK,
         }
 
-        right_hand_value = self.eval_expression(root.right_hand.root_expr)
-        op_type = root.op
-
-        if op_type != TokenType.T_ASSIGN:
-            left_hand_value = self.eval_expression(root.left_hand)
-            right_hand_value = self.eval_expression(BinOpNode(left=root.left_hand, op=assignment_to_normal_ops[op_type], right=root.right_hand.root_expr, meta_data=root.meta_data))
-
-        if type(root.left_hand) == IdentifierNode:
-            left_hand_name = root.left_hand.value
+        def eval_assignment_typical(left_hand, right_hand_value):
+            left_hand_name = left_hand.value
             try:
                  idx = self.search_for_var(left_hand_name, root.meta_data)
                  self.scope_stack[idx][left_hand_name] = right_hand_value
             except:
                 self.initalize_var(left_hand_name, right_hand_value)
-            return
-        else:
-            if type(root.left_hand.base) == IdentifierNode:
-                base_location = self.search_for_var(root.left_hand.base.value, root.meta_data)
-                base_frame = self.scope_stack[base_location]
-                target = base_frame[root.left_hand.base.value]
-                for idx in root.left_hand.index[:-1]:
-                    try:
-                        target = target[self.eval_expression(idx.root_expr)]
-                    except:
-                        raise EvaluatorError(self.file, "Index out of bounds", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-                try:
-                    final_idx = self.eval_expression(root.left_hand.index[-1].root_expr)
-                    target[final_idx] = right_hand_value
-                except:
-                    raise EvaluatorError(self.file, "Index out of bounds", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end) 
-            else:
+        
+        def eval_assignment_index(left_hand, right_hand_value):
+            if type(left_hand.base) != IdentifierNode:
                 raise EvaluatorError(self.file, "unassignable entity", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-            
+            base_location = self.search_for_var(left_hand.base.value, root.meta_data)
+            base_frame = self.scope_stack[base_location]
+            target = base_frame[left_hand.base.value]
+            for idx in left_hand.index[:-1]:
+                try:
+                    target = target[self.eval_expression(idx.root_expr)]
+                except:
+                    raise EvaluatorError(self.file, "Index out of bounds", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+            try:
+                final_idx = self.eval_expression(left_hand.index[-1].root_expr)
+                target[final_idx] = right_hand_value
+            except:
+                raise EvaluatorError(self.file, "Index out of bounds", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end) 
+        
+        def eval_assignment_multi(left_hand, right_hand_value):
+            for i,n in enumerate(left_hand.elements):
+
+                left_hand_name = n.root_expr.value
+                assignee = right_hand_value[i]
+                if op_type != TokenType.T_ASSIGN:
+                    assignee = self.eval_bin_ops(BinOpNode(left=n.root_expr, op=assignment_to_normal_ops[op_type], right=assignee, meta_data=root.meta_data))
+                try:
+                    idx = self.search_for_var(left_hand_name, root.meta_data)
+                    self.scope_stack[idx][left_hand_name] = assignee
+                except:
+                    self.initalize_var(left_hand=left_hand_name, right_hand=assignee)
+
+        right_hand_value = self.eval_expression(root.right_hand.root_expr)
+        op_type = root.op
+
+        if op_type != TokenType.T_ASSIGN and type(root.left_hand) != ArrayLiteralNode:
+            right_hand_value = self.eval_expression(BinOpNode(left=root.left_hand, op=assignment_to_normal_ops[op_type], right=root.right_hand.root_expr, meta_data=root.meta_data))
+        
+        find_assignment_type = {
+            IdentifierNode: eval_assignment_typical,
+            IndexNode: eval_assignment_index,
+            ArrayLiteralNode: eval_assignment_multi,
+        }
+        
+        find_assignment_type[type(root.left_hand)](left_hand=root.left_hand, right_hand_value=right_hand_value)
+
+
     # this function handles all expression level contructs such as literals, binary ops,
     # unary ops, and function calls
     def eval_expression(self, root):
+
+        if type(root) in [int, bool, str, float, list]:
+            return root
+        
         if type(root) == ExpressionNode:
             root = root.root_expr
 
