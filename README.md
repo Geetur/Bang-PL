@@ -107,10 +107,7 @@ Hello, Bang!
    
 ```
 fn two_sum args
-
-    target = args[0]
-    input = args[1]
-    ans = []
+    [target, input, ans] = [args[0], args[1], []]
     for range1 [0, len{input} - 1]
         for range2 [range1 + 1, len{input}]
             if input[range1] + input[range2] == target
@@ -132,20 +129,15 @@ Output:
 # printing n fibonacci numbers
 
 fn fib awesome
-
-    n = awesome[0]
-    a = 0
-    b = 1
+    [n, a, b] = [awesome[0], 0, 1]
     print{a}
     print{b}
     for i n-2
         c = a + b
+        [a,b] = [b, c]
         print{c}
-        a = b
-        b = c
     end
 end
-
 fib{9}
 
 ```
