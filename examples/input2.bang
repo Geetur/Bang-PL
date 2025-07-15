@@ -1,17 +1,18 @@
 a = [5, [2]] 
 # solution to two sum
 fn two_sum args
-    target = args[0]
-    input = args[1]
+    [target, input, ans] = [args[0], args[1], []]
     for range1 [0, len{input} - 1]
         for range2 [range1 + 1, len{input}]
             if input[range1] + input[range2] == target
-                print{input[range1], input[range2]}
+                ans += [[input[range1], input[range2]]]
             end
         end
     end
+return ans
 end
 
+print{two_sum{8, [1,2,3,4,5,6,7,]}}
 
 
 # printing n fibonacii numbers
@@ -25,9 +26,9 @@ fn fib awesome
         [a,b] = [b, c]
     end
 end
-fib{9}
 
-print{"hello:, world"}
+
+
 x = [[0] * 5] * 5
 fn fibb args
     n = args[0]
@@ -120,9 +121,6 @@ fn fact args
     return fact{n - 1, acc * n}
 end
 
-print{fact{5, 1}}  # → 120
-
-print{sort{[[[["453435534", "1", "2",]]]]}}
 
 arr = ["1",2]
 fn minMoves2 args
