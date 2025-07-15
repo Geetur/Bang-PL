@@ -187,6 +187,41 @@ def analyze(code: str, tmp_path):
         'a="5" in "543534"\n',
         'a="5" in ""\n',
 
+        # multi-variable assignments
+
+        '[hello, world] = [5, 2]\n',
+        '[hello, world] = [5, true]\n',
+        '[hello, world] = [5, false]\n',
+        '[hello, world] = [5, "2"]\n',
+        '[hello, world] = [5, [2]]\n'
+        '[hello, world] = [5, [[2]]]\n',
+
+        '[] = [5, 2]\n',
+
+        '[hello, world] = [5, 2]\n [hello, world] += [1, 2]\n',
+        '[hello, world] = [5, 2]\n [hello, world] += [true, false]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] += ["1", 2]\n',
+        '[hello, world] = [[5], 2]\n [hello, world] += [[1], 2]\n',
+
+        '[hello, world] = [5, 2]\n [hello, world] -= [1, 2]\n',
+        '[hello, world] = [5, 2]\n [hello, world] -= [true, false]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] -= ["1", 2]\n',
+        '[hello, world] = [[5], 2]\n [hello, world] -= [[1], 2]\n',
+
+        '[hello, world] = [5, 2]\n [hello, world] *= [1, 2]\n',
+        '[hello, world] = [5, 2]\n [hello, world] *= [true, false]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] *= ["1", 2]\n',
+        '[hello, world] = [[5], 2]\n [hello, world] *= [[1], 2]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] *= [2, 2]\n',
+        '[hello, world] = [[5], 2]\n [hello, world] *= [2, 2]\n',
+
+        '[hello, world] = [5, 2]\n [hello, world] /= [1, 2]\n',
+        '[hello, world] = [5, 2]\n [hello, world] /= [true, false]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] /= ["1", 2]\n',
+        '[hello, world] = [[5], 2]\n [hello, world] /= [[1], 2]\n',
+
+        "fn bar args\n return 5\nend\n[x, y] = [bar{}, bar{}+1]\n",
+
 
 
         # there are many examples that pass the semantic analyzer but
@@ -203,6 +238,8 @@ def analyze(code: str, tmp_path):
         "fn bar args\n return 5\nend\nx = bar{} + true\n",
         "fn bar args\n return 5\nend\nx = bar{} + false\n",
         'fn bar args\n return 5\nend\nx = bar{} + "3"\n',
+
+
 
 
     ],
@@ -292,6 +329,26 @@ def test_semantic_valid(program, tmp_path):
         'a=5 in "hello"\n',
         'a=[1] in "hello"\n',
         'a=true in "hello"\n',
+
+        # multi-variable assignments
+
+        '[hello, world] = [5]\n',
+
+        '[hello, world] = ["5", 2]\n [hello, world] += [1, 2]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] += [true, false]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] += [[1], 2]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] += [false, false]\n',
+
+        '[hello, world] = ["5", 2]\n [hello, world] -= [1, 2]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] -= [true, false]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] -= [[1], 2]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] -= [false, false]\n',
+
+        '[hello, world] = ["5", 2]\n [hello, world] *= [[1], 2]\n',
+
+        '[hello, world] = ["5", 2]\n [hello, world] /= [1, 2]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] /= [[1], false]\n',
+        '[hello, world] = ["5", 2]\n [hello, world] /= [true, 2]\n',
 
 
     ],
