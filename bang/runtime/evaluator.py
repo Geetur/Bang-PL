@@ -437,8 +437,9 @@ class Evaluator:
                 raise EvaluatorError(self.file, "Index out of bounds", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end) 
         
         def eval_assignment_multi(left_hand, right_hand_value):
+            if type(right_hand_value) not in [list, ArrayLiteralNode]:
+                raise EvaluatorError(self.file, "multi-variable assignment right hand must be type list", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
             for i,n in enumerate(left_hand.elements):
-
                 left_hand_name = n.root_expr.value
                 assignee = right_hand_value[i]
                 if op_type != TokenType.T_ASSIGN:

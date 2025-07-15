@@ -144,6 +144,44 @@ def evaluate(code: str, tmp_path):
         'sort{"323425232353456"}\n'
         'sort{1,true, false}\n'
 
+        # in operator
+        "fn bar args\n return 5\nend\nbar{} in [1]\n",
+        
+        'fn bar args\n return "5"\nend\nbar{} in "5"\n',
+        'fn bar args\n return "5"\nend\nbar{} in [true]\n',
+        
+        'fn bar args\n return [5]\nend\nbar{} in [5]\n',
+
+        "fn bar args\n return true\nend\nbar{} in [1]\n",
+
+        # multivariable assignment
+
+        'fn bar args\n return [5]\nend\n[hello] = bar{}\n',
+        'fn bar args\n return [true]\nend\n[hello] = bar{}\n',
+        'fn bar args\n return ["5"]\nend\n[hello] = bar{}\n',
+        'fn bar args\n return [[4]]\nend\n[hello] = bar{}\n',
+
+        'fn bar args\n return [5]\nend\n hello = 5\n [hello] += bar{}\n',
+        'fn bar args\n return [true]\nend\n hello = 5\n[hello] += bar{}\n',
+        'fn bar args\n return ["5"]\nend\n hello = "5"\n[hello] += bar{}\n',
+        'fn bar args\n return [[4]]\nend\n hello = [5]\n[hello] += bar{}\n',
+
+        'fn bar args\n return [5]\nend\n hello = 5\n [hello] -= bar{}\n',
+        'fn bar args\n return [true]\nend\n hello = 5\n[hello] -= bar{}\n',
+        'fn bar args\n return ["5"]\nend\n hello = "5"\n[hello] -= bar{}\n',
+        'fn bar args\n return [[4]]\nend\n hello = [5]\n[hello] -= bar{}\n',
+
+        'fn bar args\n return [5]\nend\n hello = 5\n [hello] *= bar{}\n',
+        'fn bar args\n return [true]\nend\n hello = 5\n[hello] *= bar{}\n',
+        'fn bar args\n return [5]\nend\n hello = "5"\n[hello] *= bar{}\n',
+        'fn bar args\n return [[4]]\nend\n hello = [5]\n[hello] *= bar{}\n',
+        'fn bar args\n return [4]\nend\n hello = [5]\n[hello] *= bar{}\n',
+
+        'fn bar args\n return [5]\nend\n hello = 5\n [hello] /= bar{}\n',
+        'fn bar args\n return [true]\nend\n hello = 5\n[hello] /= bar{}\n',
+        'fn bar args\n return ["5"]\nend\n hello = "5"\n[hello] /= bar{}\n',
+        'fn bar args\n return [[4]]\nend\n hello = [5]\n[hello] /= bar{}\n',
+        
     ],
 )
 def test_evaluator_valid(program, tmp_path):
@@ -198,7 +236,32 @@ def test_evaluator_valid(program, tmp_path):
         'sort{1,2, [5]}\n'
         'sort{}\n'
 
+        # illegal in operator
+        "fn bar args\n return 5\nend\nbar{} in 1\n",
+        "fn bar args\n return 5\nend\nbar{} in true\n",
+        'fn bar args\n return 5\nend\nbar{} in "5"\n',
+        
+        'fn bar args\n return "5"\nend\nbar{} in 5\n',
+        'fn bar args\n return "5"\nend\nbar{} in true\n',
+        
+        'fn bar args\n return [5]\nend\nbar{} in 5\n',
+        'fn bar args\n return [5]\nend\nbar{} in true\n',
+        'fn bar args\n return [5]\nend\nbar{} in "5"\n',
 
+        "fn bar args\n return true\nend\nbar{} in 1\n",
+        "fn bar args\n return false\nend\nbar{} in true\n",
+        'fn bar args\n return true\nend\nbar{} in "5"\n',
+
+        # illegal multi-variable assignment
+        
+        'fn bar args\n return 5\nend\n[hello] = bar{}\n',
+        'fn bar args\n return true\nend\n[hello] = bar{}\n',
+        'fn bar args\n return "5"\nend\n[hello] = bar{}\n',
+        'fn bar args\n return 4\nend\n[hello] = bar{}\n',
+
+        'fn bar args \nend\n hello = [5]\n[hello] = bar{}\n',
+
+        'fn bar args\n return ["5"]\nend\n hello = "5"\n[hello] *= bar{}\n',
 
     ],
 )
