@@ -111,7 +111,7 @@ fn two_sum args
     for range1 [0, len{input} - 1]
         for range2 [range1 + 1, len{input}]
             if input[range1] + input[range2] == target
-                ans += [input[range1], input[range2]]
+                ans += [[input[range1], input[range2]]]
             end
         end
     end
