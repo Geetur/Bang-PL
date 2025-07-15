@@ -324,16 +324,16 @@ class SemanticAnalysis:
                     raise SemanticError(self.file, "multi-initialization requires right hand length to be equal to or greater than left hand length", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 for i, n in enumerate(left_hand.elements):
                     left_hand_name = n.root_expr.value
-                    right_hand_type = self.walk_expression(right_hand.value[i])
+                    right_hand_type = right_hand.value[i]
                     if op_type in self.ARITH_ASSIGNMENTS and type(right_hand_type) != DynamicType:
                         op_type = self.assignment_to_normal[op_type]
                         left_hand_type = self.search_for_var(left_hand_name)
                         if not left_hand_type:
                             raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                         # is it the same type?
-                        if (not ((type(right_hand) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand))):
+                        if (not ((type(right_hand_type) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand_type))):
                             # does it adhere to different type operation rules?
-                            if (type(left_hand_type), type(right_hand), op_type) not in self.BIN_OP_DIFFERENT_RULES:
+                            if (type(left_hand_type), type(right_hand_type), op_type) not in self.BIN_OP_DIFFERENT_RULES:
                                 raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                     self.initalize_var(left_hand_name, right_hand_type)
                 
