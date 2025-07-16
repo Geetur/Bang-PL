@@ -26,6 +26,7 @@ class TokenType(Enum):
     T_LBRACKET = auto()     # [
     T_RBRACKET = auto()     # ]
     T_COMMA = auto()        # ,
+    T_SEMICOLON = auto()
 
     # Double-character tokens
     T_PLUS_ASSIGN = auto()      # +=
@@ -106,6 +107,7 @@ SYMBOLS = {
     ']': TokenType.T_RBRACKET,
     '"': TokenType.T_STRING,
     ',': TokenType.T_COMMA,
+    ';': TokenType.T_SEMICOLON,
 
     #double characters
     '+=': TokenType.T_PLUS_ASSIGN,
