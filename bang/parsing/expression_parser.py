@@ -163,10 +163,20 @@ class ExpressionParser:
     def split(self):
         past = -1
         for tok in self.tokens:
+
+            if tok.type == TokenType.T_SEMICOLON:
+                if self.post_split and self.post_split[-1]:   # don’t keep double blanks
+                    self.post_split.append([])
+                continue
+
             if tok.line != past:
                 self.post_split.append([])
                 past = tok.line
             self.post_split[-1].append(tok)
+        # for cases such as i = 5; \n
+        if self.post_split and not self.post_split[-1]:
+            self.post_split.pop()
+            
         return self.post_split
 
 
