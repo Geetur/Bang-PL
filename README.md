@@ -112,10 +112,8 @@ fn two_sum args
         for range2 [range1 + 1, len{input}]
             if input[range1] + input[range2] == target
                 ans += [[input[range1], input[range2]]]
-            end
-        end
-    end
-return ans
+            end ; end ; end 
+return ans  
 end
 
 print{two_sum{8, [1,2,3,4,5,6,7,]}}
