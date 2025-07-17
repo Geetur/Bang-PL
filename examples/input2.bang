@@ -1,9 +1,9 @@
 a = [5, [2]] 
 # solution to two sum
 fn two_sum args
-    [target, input, ans] = [args[0], args[1], []]
-    for range1 [0, len{input} - 1] 
-        for range2 [range1 + 1, len{input}]
+    [target, input, ans] = [args[0], args[1], []] 
+    for range1 [0, len{input} - 1]; 
+    for range2 [range1 + 1, len{input}]
             if input[range1] + input[range2] == target
                 ans += [[input[range1], input[range2]]]
             end; end; end
@@ -16,12 +16,10 @@ print{two_sum{8, [1,2,3,4,5,6,7,]}}
 # printing n fibonacii numbers
 fn fib awesome
     [n, a, b] = [awesome[0], 0, 1]
-    print{a}
-    print{b}
+    print{a}; print{b}
     for i n-2
-        c = a + b
+        c = a + b ; [a,b] = [b, c]
         print{c}
-        [a,b] = [b, c]
     end
 end
 
