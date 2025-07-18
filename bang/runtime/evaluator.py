@@ -490,7 +490,7 @@ class Evaluator:
     # unary ops, and function calls
     def eval_expression(self, root):
 
-        if type(root) in [int, bool, str, float, list]:
+        if type(root) in [int, bool, str, float, list, set, dict]:
             return root
         
         if type(root) == ExpressionNode:
@@ -727,9 +727,10 @@ class Evaluator:
         def eval_different_bin_op(left, op, right):
             
             def eval_different_in(a, b):
-                if (type(b) not in [list, str]) or (type(a) != str and type(b) == str):
+                try:
+                  return a in b
+                except:
                     raise EvaluatorError(self.file, f"in binary operation not supported between {type(a)} and {type(b)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end) 
-                return a in b
                 
 
             supported_types = {
