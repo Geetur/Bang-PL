@@ -134,6 +134,15 @@ fn minMoves2 args
 
 [hello, world] *= arr
 
+a = dict{[3,2]}
+print{a[3]}
+a[3] = 5
+a[4] = 5
+a[4] = 6
+
+print{a[3]}
+print{a + 1}
+
 
 
 

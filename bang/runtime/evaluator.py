@@ -186,8 +186,27 @@ class Evaluator:
                 return sorted(args)
             except TypeError:
                 raise EvaluatorError(self.file, "sort function expects argument list of homogenous type", meta_data.line, meta_data.column_start, meta_data.column_end)
-
+            
+        def _built_in_set(args, meta_data):
+            if len(args) == 1:
+                if type(args[0]) == list:
+                    args = args[0]
+            try:
+                return set(args)
+            except:
+                raise EvaluatorError(self.file, "set expects hashable types only", meta_data.line, meta_data.column_start, meta_data.column_end)
         
+        def _built_in_dict(args, meta_data):
+            if len(args) == 1 and type(args[0]) == list:
+                args = args[0]
+            if len(args) != 2:
+                raise EvaluatorError(self.file, "dict initalization expects array of length two [key, value]", meta_data.line, meta_data.column_start, meta_data.column_end)
+            try:
+                return {args[0]: args[1]}
+            except:
+                raise EvaluatorError(self.file, "dict initalization expects key to be hashable", meta_data.line, meta_data.column_start, meta_data.column_end)
+
+
         self.built_in_functions = {
             "print": _built_in_print,
             "len": _built_in_len,
@@ -195,6 +214,8 @@ class Evaluator:
             "min": _built_in_min,
             "max": _built_in_max,
             "sort": _built_in_sort,
+            "set": _built_in_set,
+            "dict": _built_in_dict,
         }
             
         self.scope_stack[0].update(self.built_in_functions)

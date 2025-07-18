@@ -92,6 +92,8 @@ class SemanticAnalysis:
             "min": FunctionType,
             "max": FunctionType,
             "sort": FunctionType,
+            "set": FunctionType,
+            "dict": FunctionType,
         }
 
         self.scope_stack[0].update(
