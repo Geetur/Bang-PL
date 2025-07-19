@@ -107,14 +107,18 @@ Hello, Bang!
    
 ```
 fn two_sum args
-    [target, input, ans] = [args[0], args[1], []]
-    for range1 [0, len{input} - 1]
-        for range2 [range1 + 1, len{input}]
-            if input[range1] + input[range2] == target
-                ans += [[input[range1], input[range2]]]
-            end ; end ; end 
-return ans  
-end
+
+    [target, input] = [args[0], args[1]]
+    [ans, seen] = [[], set{}]
+
+    for i input
+        if target - i in seen
+            ans += [[target - i, i]] 
+            end
+        seen += set{i} 
+        end
+    return ans 
+    end
 
 print{two_sum{8, [1,2,3,4,5,6,7,]}}
 ```
