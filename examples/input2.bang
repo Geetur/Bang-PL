@@ -137,7 +137,7 @@ fn minMoves2 args
 a = dict{1,3}
 b = dict{1, 2} + dict{"hello", "world"}
 
-print{a == b}
+print{set{1,2,none}[1]}
 
 
 
