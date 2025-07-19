@@ -197,6 +197,8 @@ class Evaluator:
                 raise EvaluatorError(self.file, "set expects hashable types only", meta_data.line, meta_data.column_start, meta_data.column_end)
         
         def _built_in_dict(args, meta_data):
+            if not args:
+                return {}
             if len(args) == 1 and type(args[0]) == list:
                 args = args[0]
             if len(args) != 2:
