@@ -134,10 +134,10 @@ fn minMoves2 args
 
 [hello, world] *= arr
 
-a = dict{2,3}
+a = dict{1,3}
 b = dict{1, 2} + dict{"hello", "world"}
 
-print{a + b}
+print{a == b}
 
 
 
