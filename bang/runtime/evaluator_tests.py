@@ -84,8 +84,9 @@ def evaluate(code: str, tmp_path):
         'x = ["1,2,3"]\ny = ["2"]\nx[0] /= y[0]\n',
         'x = "2"\ny = [1]\nx *= y[0]\n',
 
-        # Array indexing with run‑time index
+        # indexing
         "arr = [10, 20, 30]\nidx = 1\nval = arr[idx]\n",
+        'dict{1,2}[1]\n',
 
         # Function definition & call
         "fn add args\n return args[0] + args[1]\nend\nresult = add{2,3}\n",
@@ -259,12 +260,17 @@ def test_evaluator_valid(program, tmp_path):
         "a = [5, [2]]\n b = a[0+1][3]",
         "fn bar args\n return [1]\nend\nx = [2,3,4][bar{}]\n",
         'fn bar args\n return "5"\nend\nx = [2,3,4][bar{}]\n',
+        'a = dict{1,2}\n b = a[0]\n',
+        'a = set{1,2}\n b = a[1]\n',
+
 
         #illegal arithmetic
         "fn bar args\n return 5\nend\nx = bar{} + [2,3,4]\n",
         'fn bar args\n return 5\nend\nx = bar{} + "3"\n',
         'fn bar args\n return "5"\nend\nx = 1 + bar{}\n',
         'fn bar args\n return [1]\nend\nx = "1" + bar{}\n',
+        'fn bar args\n return "5"\nend\nx = set{1} + bar{}\n',
+        'fn bar args\n return [1]\nend\nx = dict{1,2} + bar{}\n',
 
         #built in sum function
         'sum{1,2,3,"4"}\n',
@@ -288,8 +294,36 @@ def test_evaluator_valid(program, tmp_path):
         'sort{}\n',
 
         #built in set function
+        'set{1,2, [5]}\n',
+        'set{1,2, set{1,2}}\n',
+        'set{1,2, dict{1,2}}\n',
+
+        'set{1,2, 5} * set{1,2, 5}\n',
+        'set{1,2, 5} / set{1,2, 5}\n',
+        'set{1,2, 5} // set{1,2, 5}\n',
+        'set{1,2, 5} ** set{1,2, 5}\n',
+        '1 + set{1,2, 5}\n',
+        'false + set{1,2, 5}\n',
+        '"1" + set{1,2, 5}\n',
+        '[1] + set{1,2, 5}\n',
+        'dict{1,2} + set{1,2, 5}\n',
+        'set{1,2, 5} in set{1,2, 5}\n',
 
         #built in dict function
+        'dict{1,2, 5}\n',
+        'dict{[1],2}\n',
+        'dict{set{1},2}\n',
+        'dict{dict{1,2},2}\n',
+
+        'dict{1,2} * dict{1,2}\n',
+        'dict{1,2} / dict{1,2}\n',
+        'dict{1,2} // dict{1,2}\n',
+        'dict{1,2} ** dict{1,2}\n',
+        'dict{1,2} > dict{1,2}\n',
+        'dict{1,2} >= dict{1,2}\n',
+        'dict{1,2} < dict{1,2}\n',
+        'dict{1,2} <= dict{1,2}\n',
+        'dict{1,2} in dict{1,2}\n',
 
         # illegal in operator
         "fn bar args\n return 5\nend\nbar{} in 1\n",
