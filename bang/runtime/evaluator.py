@@ -724,6 +724,59 @@ class Evaluator:
         #LIST OPERATIONS END
         #-------------------------------------------
 
+        def eval_set_bin_op(left, op, right):
+             
+            def set_add(a,b):
+                return a | b
+
+            supported_types = {
+
+                TokenType.T_PLUS: set_add,
+                TokenType.T_MINUS: operator.sub,
+                TokenType.T_LT: operator.lt,
+                TokenType.T_LEQ: operator.le,
+                TokenType.T_GT: operator.gt,
+                TokenType.T_GTEQ: operator.ge,
+
+                TokenType.T_EQ: operator.eq,
+                TokenType.T_NEQ: operator.ne,
+
+                TokenType.T_AND:     lambda a, b: a and b,
+                TokenType.T_OR:      lambda a, b: a or  b,
+
+                }
+             
+            if op not in supported_types:
+                raise EvaluatorError(self.file, f"operation '{op}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+            return supported_types[op](left, right)
+        
+        def eval_dict_bin_op(left, op, right):
+
+            def dict_add(a,b):
+                return a | b
+            
+            def dict_sub(a,b):
+                return {k:v for k,v in a.items() if k not in b}
+
+            supported_types = {
+
+                TokenType.T_PLUS: dict_add,
+                TokenType.T_MINUS: dict_sub,
+
+                TokenType.T_EQ: operator.eq,
+                TokenType.T_NEQ: operator.ne,
+
+                TokenType.T_AND:     lambda a, b: a and b,
+                TokenType.T_OR:      lambda a, b: a or  b,
+
+                }
+             
+            if op not in supported_types:
+                raise EvaluatorError(self.file, f"operation '{op}' not supported between type {type(left)} and type {type(right)}", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+            return supported_types[op](left, right)
+
+
+
         def eval_different_bin_op(left, op, right):
             
             def eval_different_in(a, b):
@@ -761,6 +814,8 @@ class Evaluator:
             bool: eval_int_bin_op,
             str: eval_str_bin_op,
             list: eval_list_bin_op,
+            set: eval_set_bin_op,
+            dict: eval_dict_bin_op,
 
         }
         same_type = [int, float, bool]
