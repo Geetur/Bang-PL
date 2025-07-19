@@ -134,14 +134,10 @@ fn minMoves2 args
 
 [hello, world] *= arr
 
-a = dict{[3,2]}
-print{a[3]}
-a[3] = 5
-a[4] = 5
-a[4] = 6
-a = set{1,2}
+a = dict{2,3}
+b = dict{1, 2} + dict{"hello", "world"}
 
-print{0 in (0 in a)}
+print{a + b}
 
 
 
