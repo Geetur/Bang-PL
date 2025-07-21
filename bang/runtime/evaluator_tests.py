@@ -95,12 +95,12 @@ def evaluate(code: str, tmp_path):
         "flag = true\nother = false\nres = flag && !other\n",
 
         #built in sum function
-        'sum{1,2,3,4}\n',
-        'sum{1,2,false,true}\n'
-        'sum{[1],[2],[3],[4]}\n',
         'sum{[1,2,3,4]}\n',
-        'sum{"1","2","3","4"}\n',
+        'sum{[1,2,false,true]}\n'
+        'sum{[[1],[2],[3],[4]]}\n',
+        'sum{[1,2,3,4]}\n',
         'sum{["1","2","3","4"]}\n',
+        'sum{["12","3","4"]}\n',
 
         #built in min function
         'min{1,2,3,4}\n',
@@ -276,7 +276,8 @@ def test_evaluator_valid(program, tmp_path):
         'fn bar args\n return [1]\nend\nx = dict{1,2} + bar{}\n',
 
         #built in sum function
-        'sum{1,2,3,"4"}\n',
+        'sum{[1,2,3,"4"]}\n',
+        'sum{1,2,3,4}\n',
         "sum{}\n",
 
         #built in min function
