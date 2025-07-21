@@ -101,21 +101,23 @@ def evaluate(code: str, tmp_path):
         'sum{[1,2,3,4]}\n',
         'sum{["1","2","3","4"]}\n',
         'sum{["12","3","4"]}\n',
+        'print{sum{[dict{1, 2}, dict{2, 3}, dict{4, 5}]}}\n',
+        'print{sum{[set{[1, 2]}, set{[2, 3]}, set{[4, 5]}]}}\n',
 
         #built in min function
-        'min{1,2,3,4}\n',
-        'min{1,2,false,true}\n'
-        'min{[1],[2],[3],[4]}\n',
         'min{[1,2,3,4]}\n',
-        'min{"1","2","3","4"}\n',
+        'min{[1,2,false,true]}\n'
+        'min{[[1],[2],[3],[4]]}\n',
+        'min{[1,2,3,4]}\n',
+        'min{["1","2","3","4"]}\n',
         'min{["1","2","3","4"]}\n',
 
         #built in max function
-        'max{1,2,3,4}\n',
-        'max{1,2,false,true}\n'
-        'max{[1],[2],[3],[4]}\n',
         'max{[1,2,3,4]}\n',
-        'max{"1","2","3","4"}\n',
+        'max{[1,2,false,true]}\n'
+        'max{[[1],[2],[3],[4]]}\n',
+        'max{[1,2,3,4]}\n',
+        'max{["1","2","3","4"]}\n',
         'max{["1","2","3","4"]}\n',
 
         #built in len function
@@ -135,52 +137,52 @@ def evaluate(code: str, tmp_path):
         'x = "12"\ny = 2\nz = true\n print{x,y,z}\n',
         'x = [[0] * 5] * 5\nprint{x}\n',
         'print{["sfdsdffsfsd", 1, false, true, ["hello"]]}\n',
-        'print{set{1,2,3}}\n',
+        'print{set{[1,2,3]}}\n',
         'print{dict{1,2}}\n',
+        'print{dict{[[1,2], [2,3], [4,5]]}}\n',
 
 
         #built in sort function
-        'sort{1,2, 3}\n',
         'sort{[1,2, 3]}\n',
-        'sort{[1,2, 3], [1,2,4]}\n',
-        'sort{"1","2", "3"}\n',
+        'sort{[1,2, 3]}\n',
+        'sort{[[1,2, 3], [1,2,4]]}\n',
         'sort{["1","2", "3"]}\n',
-        'sort{"323425232353456"}\n',
-        'sort{1,true, false}\n',
+        'sort{["323425232353456"]}\n',
+        'sort{[1,true, false]}\n',
         
 
         # built in set function
 
-        'set{1,2, "5"}\n',
-        'set{1,2, 4}\n',
-        'set{1,2, true}\n',
-        'set{1,2, false}\n',
+        'set{[1,2, "5"]}\n',
+        'set{[1,2, 4]}\n',
+        'set{[1,2, true]}\n',
+        'set{[1,2, false]}\n',
         'set{}\n',
 
-        'a= set{1,2, 4} + set{1,6,7}\n',
-        'a= set{} + set{1,6,7}\n',
-        'a= set{1,2, 4} - set{1,6,7}\n',
-        'a= set{1,2, 4} - set{}\n',
+        'a= set{[1,2, 4]} + set{[1,6,7]}\n',
+        'a= set{} + set{[1,6,7]}\n',
+        'a= set{[1,2, 4]} - set{[1,6,7]}\n',
+        'a= set{[1,2, 4]} - set{}\n',
 
-        'a= set{1,2, 4} > set{1,6,7}\n',
-        'a= set{} >= set{1,6,7}\n',
-        'a= set{1,2, 4} < set{1,6,7}\n',
-        'a= set{1,2, 4} <= set{}\n',
+        'a= set{[1,2, 4]} > set{[1,6,7]}\n',
+        'a= set{} >= set{[1,6,7]}\n',
+        'a= set{[1,2, 4]} < set{[1,6,7]}\n',
+        'a= set{[1,2, 4]} <= set{}\n',
 
-        'a= set{1,2, 4} == set{1,6,7}\n',
-        'a= set{} != set{1,6,7}\n',
-        'a= set{1,2, 4} && set{1,6,7}\n',
-        'a= set{1,2, 4} || set{}\n',
+        'a= set{[1,2, 4]} == set{[1,6,7]}\n',
+        'a= set{} != set{[1,6,7]}\n',
+        'a= set{[1,2, 4]} && set{[1,6,7]}\n',
+        'a= set{[1,2, 4]} || set{}\n',
 
         #built in dict function
         'dict{1,2}\n',
         'dict{1,false}\n',
         'dict{1,"2"}\n',
         'dict{1,[3]}\n',
-        'dict{1,set{1}}\n',
+        'dict{1,set{[1]}}\n',
         'dict{1,dict{1, 2}}\n',
 
-        'dict{[[1,dict{1, 2}], [1, 2], [2, set{1}], [9, false], [10, "hi"]]}\n',
+        'dict{[[1,dict{1, 2}], [1, 2], [2, set{[1]}], [9, false], [10, "hi"]]}\n',
         
         'dict{}\n',
 
@@ -281,11 +283,13 @@ def test_evaluator_valid(program, tmp_path):
         "sum{}\n",
 
         #built in min function
-        'min{1,2,3,"4"}\n',
+        'min{[1,2,3,"4"]}\n',
+        'min{1,2,3,4}\n',
         "min{}\n",
 
         #built in max function
-        'max{1,2,3,"4"}\n',
+        'max{[1,2,3,"4"]}\n',
+        'max{1,2,3,4}\n',
         "max{}\n",
 
         #built in len function
@@ -293,25 +297,26 @@ def test_evaluator_valid(program, tmp_path):
         "len{}\n",
 
         #built in sort function
-        'sort{1,2, "5"}\n',
-        'sort{1,2, [5]}\n',
+        'sort{[1,2, "5"]}\n',
+        'sort{[1,2, [5]]}\n',
+        'sort{1,2,5}\n',
         'sort{}\n',
 
         #built in set function
-        'set{1,2, [5]}\n',
-        'set{1,2, set{1,2}}\n',
-        'set{1,2, dict{1,2}}\n',
+        'set{[1,2, [5]]}\n',
+        'set{[1,2, set{1,2}]}\n',
+        'set{[1,2, dict{1,2}]}\n',
 
-        'set{1,2, 5} * set{1,2, 5}\n',
-        'set{1,2, 5} / set{1,2, 5}\n',
-        'set{1,2, 5} // set{1,2, 5}\n',
-        'set{1,2, 5} ** set{1,2, 5}\n',
-        '1 + set{1,2, 5}\n',
-        'false + set{1,2, 5}\n',
-        '"1" + set{1,2, 5}\n',
-        '[1] + set{1,2, 5}\n',
-        'dict{1,2} + set{1,2, 5}\n',
-        'set{1,2, 5} in set{1,2, 5}\n',
+        'set{[1,2, 5]} * set{[1,2, 5]}\n',
+        'set{[1,2, 5]} / set{[1,2, 5]}\n',
+        'set{[1,2, 5]} // set{[1,2, 5]}\n',
+        'set{[1,2, 5]} ** set{[1,2, 5]}\n',
+        '1 + set{[1,2, 5]}\n',
+        'false + set{[1,2, 5]}\n',
+        '"1" + set{[1,2, 5]}\n',
+        '[1] + set{[1,2, 5]}\n',
+        'dict{1,2} + set{[1,2, 5]}\n',
+        'set{[1,2, 5]} in set{[1,2, 5]}\n',
 
         #built in dict function
         'dict{1,2, 5}\n',

@@ -111,11 +111,13 @@ class Evaluator:
         # we will have a bunch of scopes
         self.scope_stack = [{}]
 
+        # remember args is potentially a list of lists
+
         def _built_in_print(args, meta_data):
             print(*args)
         
         def _built_in_len(args, meta_data):
-            # changet this len args == 1 to accomodate any number of expected arguments
+            # changet this len args != 1 to accomodate any number of expected arguments
             if len(args) != 1:
                 raise EvaluatorError(self.file,"len expects exactly one arg", meta_data.line, meta_data.column_start, meta_data.column_end)
             if type (args[0]) not in [str, list]:
@@ -123,6 +125,7 @@ class Evaluator:
             return len(args[0])
         
         def _built_in_sum(args, meta_data):
+
             if len(args) != 1:
                 raise EvaluatorError(self.file, "sum function expects one arg", meta_data.line, meta_data.column_start, meta_data.column_end)
             if type(args[0]) in [str, list]:
@@ -137,61 +140,79 @@ class Evaluator:
                 base = ""
             elif expected_type == list:
                 base = []
+            elif expected_type == set:
+                base = set()
+            elif expected_type == dict:
+                base = {}
+
             for i in args:
                 if type(i) != expected_type:
                     raise EvaluatorError(self.file, "sum function expects argument list of homegenous type", meta_data.line, meta_data.column_start, meta_data.column_end)
-                base += i
+                if type(i) in [set, dict]:
+                    base |= i
+                else:
+                    base += i
             return base
         
         def _built_in_min(args, meta_data):
-            if not args:
-                raise EvaluatorError(self.file, "min function expects argument list of at least length one", meta_data.line, meta_data.column_start, meta_data.column_end)
-            if len(args) == 1:
-                if type(args[0]) in [str, list]:
-                    args = args[0]
-                else:
-                    return args[0]
+
+            if len(args) != 1:
+                raise EvaluatorError(self.file, "min function expects one arg", meta_data.line, meta_data.column_start, meta_data.column_end)
+            if type(args[0]) in [str, list]:
+                args = args[0]
+            else:
+                return args[0]
             expected_type = type(args[0])
             base = args[0]
             for i in args:
                 if type(i) != expected_type:
                     raise EvaluatorError(self.file, "min function expects argument list of homegenous type", meta_data.line, meta_data.column_start, meta_data.column_end)
-                base = min(base, i)
+                try:
+                    base = min(base, i)
+                except:
+                    raise EvaluatorError(self.file, f"comparison not supported between type {type(base)} and {type(i)}", meta_data.line, meta_data.column_start, meta_data.column_end)
             return base
 
         def _built_in_max(args, meta_data):
-            if not args:
-                raise EvaluatorError(self.file, "max function expects argument list of at least length one", meta_data.line, meta_data.column_start, meta_data.column_end)
-            if len(args) == 1:
-                if type(args[0]) in [str, list]:
-                    args = args[0]
-                else:
-                    return args[0]
+            if len(args) != 1:
+                raise EvaluatorError(self.file, "max function expects one arg", meta_data.line, meta_data.column_start, meta_data.column_end)
+            if type(args[0]) in [str, list]:
+                args = args[0]
+            else:
+                return args[0]
             expected_type = type(args[0])
             base = args[0]
             for i in args:
                 if type(i) != expected_type:
                     raise EvaluatorError(self.file, "max function expects argument list of homegenous type", meta_data.line, meta_data.column_start, meta_data.column_end)
-                base = max(base, i)
+                try:
+                    base = max(base, i)
+                except:
+                    raise EvaluatorError(self.file, f"comparison not supported between type {type(base)} and {type(i)}", meta_data.line, meta_data.column_start, meta_data.column_end)
             return base
         
         def _built_in_sort(args, meta_data):
-            if not args:
-                raise EvaluatorError(self.file, "sort function expects argument list of at least one", meta_data.line, meta_data.column_start, meta_data.column_end)
-            if len(args) == 1:
-                if type(args[0]) in [str, list]:
-                    args = args[0]
-                else:
-                    return args[0]
+            if len(args) != 1:
+                raise EvaluatorError(self.file, "sort function expects one arg", meta_data.line, meta_data.column_start, meta_data.column_end)
+            if type(args[0]) in [str, list]:
+                args = args[0]
+            else:
+                return args[0]
             try:
                 return sorted(args)
-            except TypeError:
-                raise EvaluatorError(self.file, "sort function expects argument list of homogenous type", meta_data.line, meta_data.column_start, meta_data.column_end)
+            except:
+                raise EvaluatorError(self.file, "sort function expects argument list of homogenous, sortable type", meta_data.line, meta_data.column_start, meta_data.column_end)
             
         def _built_in_set(args, meta_data):
-            if len(args) == 1:
-                if type(args[0]) == list:
-                    args = args[0]
+            if not args:
+                return set()
+            if len(args) != 1:
+                raise EvaluatorError(self.file, "set function expects one argument", meta_data.line, meta_data.column_start, meta_data.column_end)
+            if type(args[0]) != list:
+                raise EvaluatorError(self.file, "set function expects iterable type as argument", meta_data.line, meta_data.column_start, meta_data.column_end)
+            
+            args = args[0]
+
             try:
                 return set(args)
             except:
@@ -385,7 +406,7 @@ class Evaluator:
                         continue
                     except _BreakSignal:
                         break
-            except:
+            except TypeError:
                 raise EvaluatorError(self.file, "bound not iterable", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
         self.scope_stack.pop()
         self.loop_depth -= 1
