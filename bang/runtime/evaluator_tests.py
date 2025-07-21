@@ -179,6 +179,9 @@ def evaluate(code: str, tmp_path):
         'dict{1,[3]}\n',
         'dict{1,set{1}}\n',
         'dict{1,dict{1, 2}}\n',
+
+        'dict{[[1,dict{1, 2}], [1, 2], [2, set{1}], [9, false], [10, "hi"]]}\n',
+        
         'dict{}\n',
 
         'dict{1,2} + dict{3,2}\n',
@@ -314,6 +317,8 @@ def test_evaluator_valid(program, tmp_path):
         'dict{[1],2}\n',
         'dict{set{1},2}\n',
         'dict{dict{1,2},2}\n',
+        'dict{[1,2]}\n',
+        
 
         'dict{1,2} * dict{1,2}\n',
         'dict{1,2} / dict{1,2}\n',

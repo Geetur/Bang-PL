@@ -197,16 +197,30 @@ class Evaluator:
                 raise EvaluatorError(self.file, "set expects hashable types only", meta_data.line, meta_data.column_start, meta_data.column_end)
         
         def _built_in_dict(args, meta_data):
+            expected_return = {}
+            # if empty initialization
             if not args:
                 return {}
-            if len(args) == 1 and type(args[0]) == list:
-                args = args[0]
-            if len(args) != 2:
-                raise EvaluatorError(self.file, "dict initalization expects array of length two [key, value]", meta_data.line, meta_data.column_start, meta_data.column_end)
-            try:
-                return {args[0]: args[1]}
-            except:
-                raise EvaluatorError(self.file, "dict initalization expects key to be hashable", meta_data.line, meta_data.column_start, meta_data.column_end)
+            
+            # if dict{1,2}
+            if len(args) == 2:
+                try:
+                    return {args[0]: args[1]}
+                except:
+                    raise EvaluatorError(self.file, "dict initalization expects key to be hashable", meta_data.line, meta_data.column_start, meta_data.column_end)
+
+            # if dict{[[1,2], [3,4], [5,6]]}
+            if len(args) != 1 or type(args[0]) != list:
+                raise EvaluatorError(self.file, "multi-key dict initalization expects list of lists of length two", meta_data.line, meta_data.column_start, meta_data.column_end)
+            for key_val_list in args[0]:
+                if (type(key_val_list) != list) or len(key_val_list) != 2:
+                    raise EvaluatorError(self.file, "multi-key dict initalization expects list of lists of length two", meta_data.line, meta_data.column_start, meta_data.column_end)
+                try:
+                    expected_return[key_val_list[0]] = key_val_list[1]
+                except:
+                    raise EvaluatorError(self.file, "dict initalization expects key to be hashable", meta_data.line, meta_data.column_start, meta_data.column_end)
+                
+            return expected_return
 
 
         self.built_in_functions = {
