@@ -115,6 +115,7 @@ class Evaluator:
             print(*args)
         
         def _built_in_len(args, meta_data):
+            # changet this len args == 1 to accomodate any number of expected arguments
             if len(args) != 1:
                 raise EvaluatorError(self.file,"len expects exactly one arg", meta_data.line, meta_data.column_start, meta_data.column_end)
             if type (args[0]) not in [str, list]:
@@ -122,13 +123,13 @@ class Evaluator:
             return len(args[0])
         
         def _built_in_sum(args, meta_data):
-            if not args:
-                raise EvaluatorError(self.file, "sum function expects argument list of at least length one", meta_data.line, meta_data.column_start, meta_data.column_end)
-            if len(args) == 1:
-                if type(args[0]) in [str, list]:
-                    args = args[0]
-                else:
-                    return args[0]
+            if len(args) != 1:
+                raise EvaluatorError(self.file, "sum function expects one arg", meta_data.line, meta_data.column_start, meta_data.column_end)
+            if type(args[0]) in [str, list]:
+                args = args[0]
+            else:
+                return args[0]
+            
             expected_type = type(args[0])
             if expected_type == int:
                 base = 0
