@@ -120,7 +120,7 @@ class Evaluator:
             # changet this len args != 1 to accomodate any number of expected arguments
             if len(args) != 1:
                 raise EvaluatorError(self.file,"len expects exactly one arg", meta_data.line, meta_data.column_start, meta_data.column_end)
-            if type (args[0]) not in [str, list]:
+            if not hasattr(args[0], "__len__"):
                 raise EvaluatorError(self.file,f"len expects list, str, not {type(args[0])}", meta_data.line, meta_data.column_start, meta_data.column_end)
             return len(args[0])
         

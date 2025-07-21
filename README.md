@@ -110,12 +110,11 @@ fn two_sum args
 
     [target, input] = [args[0], args[1]]
     [ans, seen] = [[], set{}]
-
     for i input
         if target - i in seen
             ans += [[target - i, i]] 
             end
-        seen += set{i} 
+        seen += set{[i]} 
         end
     return ans 
     end
