@@ -324,20 +324,20 @@ class SemanticAnalysis:
                     raise SemanticError(self.file, "multi-initialization requires right hand to be dynamic type or static array type", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
                 if len(left_hand.elements) > len(right_hand.value):
                     raise SemanticError(self.file, "multi-initialization requires right hand length to be equal to or greater than left hand length", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+                
+                rhs_types = right_hand.value if type(right_hand) == ArrayType else \
+                    [DynamicType()] * len(left_hand.elements)
+                
+                dispatch = {
+                IdentifierNode:   walk_assignment_typical,
+                IndexNode:        walk_assignment_index,
+                ArrayLiteralNode: walk_assignment_multi,   # nested destructuring
+            }
+                
                 for i, n in enumerate(left_hand.elements):
-                    left_hand_name = n.root_expr.value
-                    right_hand_type = right_hand.value[i]
-                    if op_type in self.ARITH_ASSIGNMENTS and type(right_hand_type) != DynamicType:
-                        op_type = self.assignment_to_normal[op_type]
-                        left_hand_type = self.search_for_var(left_hand_name)
-                        if not left_hand_type:
-                            raise SemanticError(self.file, "variable not initialized", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-                        # is it the same type?
-                        if (not ((type(right_hand_type) in [NumberType, BoolType] and type(left_hand_type) in [NumberType, BoolType]) or type(left_hand_type) == type(right_hand_type))):
-                            # does it adhere to different type operation rules?
-                            if (type(left_hand_type), type(right_hand_type), op_type) not in self.BIN_OP_DIFFERENT_RULES:
-                                raise SemanticError(self.file, "Invalid operation", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-                    self.initalize_var(left_hand_name, right_hand_type)
+                    left_hand_node = n.root_expr
+                    rhs_type  = rhs_types[i] if i < len(rhs_types) else DynamicType()
+                    dispatch[type(left_hand_node)](left_hand_node, op_type, rhs_type)
                 
         find_assignment_type = {
             IdentifierNode: walk_assignment_typical,
