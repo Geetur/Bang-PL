@@ -498,16 +498,21 @@ class Evaluator:
         def eval_assignment_multi(left_hand, right_hand_value):
             if type(right_hand_value) not in [list, ArrayLiteralNode]:
                 raise EvaluatorError(self.file, "multi-variable assignment right hand must be type list", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+            if len(left_hand.elements) > len(right_hand_value):
+                raise EvaluatorError(self.file, "not enough values to unpack", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+            
+            dispatch = {
+                IdentifierNode:  eval_assignment_typical,
+                IndexNode:       eval_assignment_index,
+                ArrayLiteralNode: eval_assignment_multi,      # nested
+            }
+
             for i,n in enumerate(left_hand.elements):
-                left_hand_name = n.root_expr.value
+                left_hand_side = n.root_expr
                 assignee = right_hand_value[i]
-                if op_type != TokenType.T_ASSIGN:
-                    assignee = self.eval_bin_ops(BinOpNode(left=n.root_expr, op=assignment_to_normal_ops[op_type], right=assignee, meta_data=root.meta_data))
-                try:
-                    idx = self.search_for_var(left_hand_name, root.meta_data)
-                    self.scope_stack[idx][left_hand_name] = assignee
-                except:
-                    self.initalize_var(left_hand=left_hand_name, right_hand=assignee)
+                if op_type != TokenType.T_ASSIGN and type(left_hand_side) != ArrayLiteralNode:
+                    assignee = self.eval_bin_ops(BinOpNode(left=left_hand_side, op=assignment_to_normal_ops[op_type], right=assignee, meta_data=root.meta_data))
+                dispatch[type(left_hand_side)](left_hand=left_hand_side, right_hand_value=assignee)
 
         right_hand_value = self.eval_expression(root.right_hand.root_expr)
         op_type = root.op

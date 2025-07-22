@@ -415,7 +415,7 @@ class ExpressionParser:
 
         if type(left_hand_node) == ArrayLiteralNode:
             for i in left_hand_node.elements:
-                if type(i.root_expr) != IdentifierNode:
+                if type(i.root_expr) not in valid_left_hands:
                     raise ParserError(self.file, "multi-initalization syntax is [list of identifiers][=][list of expressions]",assignment_op_token.line, assignment_op_token.column_start, assignment_op_token.column_end)
         
         expected_expression = line[assignment_idx + 1:]
