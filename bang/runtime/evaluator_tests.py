@@ -218,6 +218,10 @@ def evaluate(code: str, tmp_path):
         'fn bar args\n return ["5"]\nend\n[hello] = bar{}\n',
         'fn bar args\n return [[4]]\nend\n[hello] = bar{}\n',
 
+        'fn bar args\n return ["5", "4"]\nend\n[hello, dict{5, "place_holder"}[5]] = bar{}\n',
+        'fn bar args\n return [[4], [1, 2]]\nend\n[hello, [x, y]] = bar{}\n',
+        'fn bar args\n return ["5", "4"]\nend\n[hello, [1, 2][1]] = bar{}\n',
+
         'fn bar args\n return [5]\nend\n hello = 5\n [hello] += bar{}\n',
         'fn bar args\n return [true]\nend\n hello = 5\n[hello] += bar{}\n',
         'fn bar args\n return ["5"]\nend\n hello = "5"\n[hello] += bar{}\n',
@@ -238,6 +242,8 @@ def evaluate(code: str, tmp_path):
         'fn bar args\n return [true]\nend\n hello = 5\n[hello] /= bar{}\n',
         'fn bar args\n return ["5"]\nend\n hello = "5"\n[hello] /= bar{}\n',
         'fn bar args\n return [[4]]\nend\n hello = [5]\n[hello] /= bar{}\n',
+
+
         
     ],
 )
