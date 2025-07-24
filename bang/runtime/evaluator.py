@@ -479,11 +479,12 @@ class Evaluator:
                 self.initalize_var(left_hand_name, right_hand_value)
         
         def eval_assignment_index(left_hand, right_hand_value):
-            if type(left_hand.base) != IdentifierNode:
-                raise EvaluatorError(self.file, "unassignable entity", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-            base_location = self.search_for_var(left_hand.base.value, root.meta_data)
-            base_frame = self.scope_stack[base_location]
-            target = base_frame[left_hand.base.value]
+            if type(left_hand.base) == IdentifierNode:
+                base_location = self.search_for_var(left_hand.base.value, root.meta_data)
+                base_frame = self.scope_stack[base_location]
+                target = base_frame[left_hand.base.value]
+            else:
+                target = self.eval_expression(left_hand.base)
             for idx in left_hand.index[:-1]:
                 try:
                     target = target[self.eval_expression(idx.root_expr)]

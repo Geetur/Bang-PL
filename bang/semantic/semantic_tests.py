@@ -195,6 +195,11 @@ def analyze(code: str, tmp_path):
         '[hello, world] = [5, "2"]\n',
         '[hello, world] = [5, [2]]\n'
         '[hello, world] = [5, [[2]]]\n',
+        'b = dict{3, 1}\n [a, b[3], [x, y]] = [1, 2, [1, 4]]\n',
+        '[[1,2,3,4,5][1], a, [x, y]] = [1, 2, [1, 4]]\n [x, y] += [1, 1]\n',
+        '[1,2,3,4,5][1] = [2, 3]\n',
+        
+
 
         '[] = [5, 2]\n',
 
@@ -349,6 +354,7 @@ def test_semantic_valid(program, tmp_path):
         '[hello, world] = ["5", 2]\n [hello, world] /= [1, 2]\n',
         '[hello, world] = ["5", 2]\n [hello, world] /= [[1], false]\n',
         '[hello, world] = ["5", 2]\n [hello, world] /= [true, 2]\n',
+        
 
 
     ],
