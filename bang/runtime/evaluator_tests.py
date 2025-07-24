@@ -9,8 +9,8 @@ from bang.runtime.evaluator import Evaluator, EvaluatorError
 
 def evaluate(code: str, tmp_path):
     """Tokenises, parses, semantically analyses **and** executes a small Bang
-    program.  Any *EvaluatorError* raised at run‑time will bubble up to the test
-    layer just like *SemanticError* does in the compile‑time suite.
+    program.  Any *EvaluatorError* raised at run-time will bubble up to the test
+    layer just like *SemanticError* does in the compile-time suite.
     """
     src = tmp_path / "temp.bang"
     src.write_text(code)

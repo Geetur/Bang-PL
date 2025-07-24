@@ -149,6 +149,10 @@ end
 [1,2,3,4,5][1] = [2, 3]
 [hello, dict{5, "place_holder"}[5]] = bar{}
 print{a,b,c}; print{x, y}
+func_dic = dict{"bar", bar}
+
+print{func_dic["bar"]{}}
+
 
 
 

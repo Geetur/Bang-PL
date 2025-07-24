@@ -575,7 +575,9 @@ class Evaluator:
 
         elif type(root) == CallNode:
             # executing a bang block
+           
             callee = self.scope_stack[self.search_for_var(root.name, root.meta_data)][root.name]
+
             arg_vals = [self.eval_expression(i.root_expr) for i in root.args]
 
             if callable(callee) and root.name in self.built_in_functions:

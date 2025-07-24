@@ -348,9 +348,8 @@ class ExpressionParser:
         tok_idx = 1
         creators = []
 
-        if type(function_name) != IdentifierNode:
-            raise ParserError(self.file, "function call syntax is [identifier][{args1, args2, etc.}]]")
-        
+        if type(function_name) in self._literal_map or type(function_name) in [ArrayLiteralNode]:
+            raise ParserError(self.file, "function call syntax is [function name][args]", function_name.meta_data.line, function_name.meta_data.column_start,function_name.meta_data.column_end )
         while tok_idx < len(line):
             tok = line[tok_idx]
 
@@ -364,7 +363,10 @@ class ExpressionParser:
                 if depth == 0:    
                     if current:
                         elements.append(self.shunting_yard_algo(current))
-                    return CallNode(name=function_name.value,args=elements,meta_data=function_name.meta_data), tok_idx
+                    if type(function_name) == IdentifierNode:
+                        return CallNode(name=function_name.value,args=elements,meta_data=function_name.meta_data), tok_idx
+                    else:
+                        raise ParserError(self.file, "undefined feature coming soon", function_name.meta_data.line, function_name.meta_data.column_start, function_name.meta_data.column_end)
                 if (not creators or tok.type != self.DEPTH_CREATORS[creators[-1].type]):
                     raise ParserError(self.file, "mismatched brackets", tok.line, tok.column_start, tok.column_end)
                 depth -= 1
