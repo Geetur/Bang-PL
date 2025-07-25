@@ -144,17 +144,17 @@ c = max{[1, 2]}
 [a, b[3], [x, y]] = [1, 2, [1, 4]]
 
 fn bar args 
-return ["5", "4"]
+return dict
 end
 [1,2,3,4,5][1] = [2, 3]
-[hello, dict{5, "place_holder"}[5]] = bar{}
+
 print{a,b,c}; print{x, y}
 func_dic = dict{[["bar", bar], ["hello", dict]]}
 
 to_call = func_dic["hello"]
 print{to_call{[[1,2], [4, 5]]}}
 
-print{func_dic["hello"]{1,2}}
+print{bar{}{1,2}}
 
 
 
