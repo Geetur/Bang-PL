@@ -244,7 +244,7 @@ class Evaluator:
                 
             return expected_return
 
-
+        # by name
         self.built_in_functions = {
             "print": _built_in_print,
             "len": _built_in_len,
@@ -255,6 +255,8 @@ class Evaluator:
             "set": _built_in_set,
             "dict": _built_in_dict,
         }
+
+        self.built_in_function_objects = set([obj for obj in self.built_in_functions.values()])
             
         self.scope_stack[0].update(self.built_in_functions)
 
@@ -575,18 +577,23 @@ class Evaluator:
 
         elif type(root) == CallNode:
             # executing a bang block
-           
-            callee = self.scope_stack[self.search_for_var(root.name, root.meta_data)][root.name]
 
-            arg_vals = [self.eval_expression(i.root_expr) for i in root.args]
+            if type(root.name) == IdentifierNode:
+                func_name = root.name.value
+                callee = self.scope_stack[self.search_for_var(func_name, root.meta_data)][func_name]
+            else:
+                func_name = None
+                callee = self.eval_expression(root.name)
 
-            if callable(callee) and root.name in self.built_in_functions:
-                return self.built_in_functions[root.name](arg_vals, root.meta_data)
-
+            arg_vals = [self.eval_expression(i.root_expr) for i in root.args]                                                                                          
+            
             if type(callee) == runtime_function:
                 return self.eval_call(callee, arg_vals, root.meta_data)
             
-            if callable(callee):                    # any other plain callable → built‑in
+            if func_name in self.built_in_functions:
+                return self.built_in_functions[func_name](arg_vals, root.meta_data)
+            
+            if callee in self.built_in_function_objects:
                 return callee(arg_vals, root.meta_data)
 
             raise EvaluatorError(self.file, f"'{root.name}' is not callable", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
