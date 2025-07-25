@@ -593,12 +593,12 @@ class Evaluator:
             if func_name in self.built_in_functions:
                 return self.built_in_functions[func_name](arg_vals, root.meta_data)
             
+            # this is required because, for ex., callee the case of bar{}{1,2},
+            # where bar returns a function signature, is a raw function object
             if callee in self.built_in_function_objects:
                 return callee(arg_vals, root.meta_data)
 
             raise EvaluatorError(self.file, f"'{root.name}' is not callable", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
-        
-            #return self.eval_call(callee, arg_vals, root.meta_data)
         
     #-------------------------------------------
     # BINARY OPERATIONS START
@@ -659,6 +659,8 @@ class Evaluator:
                 return a.replace(b, "")
             
             def str_div(a, b):
+                if b == "":
+                    return list(a)
                 return a.split(b)
 
 
@@ -725,7 +727,6 @@ class Evaluator:
                         
                     
             def list_div(a, b):
-
 
                 if type(a) == list and type(b) == list:
                     if len(a) != len(b):
