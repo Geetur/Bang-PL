@@ -151,7 +151,8 @@ end
 print{a,b,c}; print{x, y}
 func_dic = dict{"bar", bar}
 
-print{func_dic["bar"]{}}
+to_call = func_dic["bar"]
+print{to_call{}}
 
 
 

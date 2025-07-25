@@ -457,6 +457,7 @@ class SemanticAnalysis:
             return actual_type
             
         elif type(root) == CallNode:
+
             callee_type = self.search_for_var(root.name)
             if not callee_type:
                 raise SemanticError(self.file, f"function not intialized '{root.name}'", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end,)
