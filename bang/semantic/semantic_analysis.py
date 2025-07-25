@@ -284,6 +284,9 @@ class SemanticAnalysis:
         self.scope_stack[-1][left_hand] = right_hand
     
     def search_for_var(self, name):
+        if type(name) == IdentifierNode:
+            name = name.value
+            
         for scope in reversed(self.scope_stack):
             if name in scope:
                 return scope[name]

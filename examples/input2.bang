@@ -154,6 +154,8 @@ func_dic = dict{[["bar", bar], ["hello", dict]]}
 to_call = func_dic["hello"]
 print{to_call{[[1,2], [4, 5]]}}
 
+print{func_dic["hello"]{1,2}}
+
 
 
 
