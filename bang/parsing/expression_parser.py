@@ -360,13 +360,13 @@ class ExpressionParser:
                 creators.append(tok)
 
             elif tok.type in self.DEPTH_ENDERS:
-                if depth == 0:    
+                if depth == 0:
                     if current:
                         elements.append(self.shunting_yard_algo(current))
                     if type(function_name) == IdentifierNode:
                         return CallNode(name=function_name.value,args=elements,meta_data=function_name.meta_data), tok_idx
                     else:
-                        raise ParserError(self.file, "undefined feature coming soon", function_name.meta_data.line, function_name.meta_data.column_start, function_name.meta_data.column_end)
+                        raise ParserError(self.file, "undefined feature coming soon", function_name.meta_data.line, function_name.meta_data.column_start, function_name.meta_data)
                 if (not creators or tok.type != self.DEPTH_CREATORS[creators[-1].type]):
                     raise ParserError(self.file, "mismatched brackets", tok.line, tok.column_start, tok.column_end)
                 depth -= 1
