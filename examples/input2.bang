@@ -149,10 +149,10 @@ end
 [1,2,3,4,5][1] = [2, 3]
 [hello, dict{5, "place_holder"}[5]] = bar{}
 print{a,b,c}; print{x, y}
-func_dic = dict{"bar", bar}
+func_dic = dict{[["bar", bar], ["hello", dict]]}
 
-to_call = func_dic["bar"]
-print{to_call{}}
+to_call = func_dic["hello"]
+print{to_call{[[1,2], [4, 5]]}}
 
 
 
