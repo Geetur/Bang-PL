@@ -586,7 +586,12 @@ class Evaluator:
             if type(callee) == runtime_function:
                 return self.eval_call(callee, arg_vals, root.meta_data)
             
-            return self.eval_call(callee, arg_vals, root.meta_data)
+            if callable(callee):                    # any other plain callable → built‑in
+                return callee(arg_vals, root.meta_data)
+
+            raise EvaluatorError(self.file, f"'{root.name}' is not callable", root.meta_data.line, root.meta_data.column_start, root.meta_data.column_end)
+        
+            #return self.eval_call(callee, arg_vals, root.meta_data)
         
     #-------------------------------------------
     # BINARY OPERATIONS START
