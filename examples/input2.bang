@@ -156,6 +156,12 @@ print{to_call{[[1,2], [4, 5]]}}
 
 print{bar{}{1,2}}
 
+fn foo args 
+return [[[len]]]
+end
+x = foo{}[0][0][0]{"123456hi"}
+print{x}
+
 
 
 

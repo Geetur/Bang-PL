@@ -176,6 +176,7 @@ def analyze(code: str, tmp_path):
         # Function result used as index
         "fn indexer args\n return 1\nend\narr = [10, 20, 30]\nx = arr[indexer{}]\n",
 
+
         # in operator
         'a=[5] in [5, 4, 3]\n',
         'a=[5] in [1]\n',
