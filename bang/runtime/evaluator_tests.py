@@ -243,6 +243,17 @@ def evaluate(code: str, tmp_path):
         'fn bar args\n return ["5"]\nend\n hello = "5"\n[hello] /= bar{}\n',
         'fn bar args\n return [[4]]\nend\n hello = [5]\n[hello] /= bar{}\n',
 
+        # weird function calls
+        "fn foo args\n return dict\nend\nx = foo{}{1,2}\n",
+        "fn foo args\n return dict\nend\nx = foo{}{[[1,2], [3,4], [5, 6]]}\n",
+
+        "fn foo args\n return set\nend\nx = foo{}{[1,2]}\n",
+
+        'fn foo args\n return len\nend\nx = foo{}{"123456hi"}\n',
+
+        'fn foo args\n return [len]\nend\nx = foo{}[0]{"123456hi"}\n',
+        'fn foo args\n return [[[len]]]\nend\nx = foo{}[0][0][0]{"123456hi"}\n',
+
 
         
     ],
