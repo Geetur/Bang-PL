@@ -4,8 +4,7 @@
 
 This repository is a **from-scratch reference implementation** of **Bang**, a small scripting language you can read, hack, and extend in a single afternoon. The codebase walks a Bang program through every classic compiler/interpreter stage—**lexing → expression parsing → control-flow parsing → static (semantic) analysis → evaluation**—all in ~2.5 kLOC of tidy, commented Python.
 
-![alt text](4c1aa7f9-d5c8-45a1-9ad4-fb28a966bff1.png)
-
+![alt text](d4cd8a81-6edd-4acb-b44f-e455119d0ee3.png)
 ---
 
 ## Table of Contents
