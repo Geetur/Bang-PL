@@ -28,10 +28,10 @@ Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized
 
 ## Key Language Features
 * **Array-first syntax** with intuitive overloading:  
-  `[1,2,3] + [4]`, `[1,2,3] / [5]`, `[1,2,3] / [4,5,6]`, and `[1,2,3] * 2`, to append, element-wise divise, and duplicate, respectivley.
+  `[1,2,3] + [4]`, `[1,2,3] / [5]`, `[1,2,3] / [4,5,6]`, `[1,2,3] * 2`, and `[a,b,c] = [1, 2, 3]`  to append, element-wise divise, duplicate, and multi-initialize respectivley.
 * Familiar operators `+ - * / // **`, Boolean logic `&&`, `||`, unary `!`, and compound assignments `+=`, `-=`, …
 * Tiny but expressive **control flow** (`if / elif / else`, `for`, `while`, `break`, `continue`).
-* **First-class functions** with variadic argument lists passed as a single `args` array.
+* **First-class functions** with variadic argument lists passed as a single named array (ex. args).
 * **Built-ins**: `print`, `len`, `sum`, `min`, `max` — super easy to extend, essentially just have to write a function defining the behaviour.
 * **Strong static guarantees** before runtime: undefined variables, invalid operators, out-of-scope `break`, etc. are caught by the semantic pass.
 
@@ -56,15 +56,29 @@ Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized
 ## Getting Started
 ```bash
 # 1. Clone
-git clone https://github.com/your-handle/bang.git
-cd bang
+git clone https://github.com/Geetur/Bang-PL.git
+cd Bang-PL
 
 # 2. (Optional) Create a virtualenv
+
+# Unix/macOS
 python -m venv .venv
 source .venv/bin/activate
 
+# Windows (PowerShell)
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+
 # 3. Install dev dependencies
+pip install -e .      # installs `bang` CLI
+
+# Optional – tools for hacking on the language/compiler
+
+# COMING SOONG: pip install -r requirements-dev.txt
+
 pip install pytest
+
+# After this step you should have a bang console‑script on your PATH. If not, fall back to python ‑m bang.
 ```
 Python 3.10+ is recommended (pattern-matching FTW).
 
@@ -239,7 +253,7 @@ Tip: Each phase is cleanly decoupled; you can unit-test a new feature in isolati
 
 ## Contributing
 
-PRs and issue reports are welcome! Please run pytest and ruff (or your formatter of choice) before opening a pull-request.
+PRs and issue reports are welcome! Please run pytest and ruff (optional for now since ruff isn't a dependency) (or your formatter of choice) before opening a pull-request.
 
 * Fork the repo
 

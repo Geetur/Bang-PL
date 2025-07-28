@@ -1,3 +1,4 @@
+README.md
 pyproject.toml
 bang/__init__.py
 bang/__main__.py
