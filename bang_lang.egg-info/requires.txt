@@ -1,5 +1,0 @@
-
-[dev]
-ruff==0.12.5
-pre-commit==3.7.*
-pytest<9,>=8
