@@ -160,7 +160,7 @@ fn foo args
 return [[[len]]]
 end
 x = foo{}[0][0][0]{"123456hi"}
-print{x}
+print{[1,2,3]}
 
 
 
