@@ -23,4 +23,5 @@ bang_lang.egg-info/PKG-INFO
 bang_lang.egg-info/SOURCES.txt
 bang_lang.egg-info/dependency_links.txt
 bang_lang.egg-info/entry_points.txt
+bang_lang.egg-info/requires.txt
 bang_lang.egg-info/top_level.txt

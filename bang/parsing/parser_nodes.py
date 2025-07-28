@@ -1,13 +1,14 @@
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
+from typing import Any
 
-from bang.lexing.lexer import TokenType, Lexeme, Lexer
-from typing import Any, List, Optional
+from bang.lexing.lexer import Lexeme, TokenType
 
 # data types
 
+
 # it is probably worth switching around the
 # type declarations for these data classes to reduce
-# ambiguity but its intutive enough and python 
+# ambiguity but its intutive enough and python
 # really dosent enforce it so i will ignore for now
 @dataclass
 class IntegerLiteralNode:
@@ -17,6 +18,7 @@ class IntegerLiteralNode:
     def __repr__(self) -> str:
         return f"IntegerLiteral({self.value})"
 
+
 @dataclass
 class FloatLiteralNode:
     value: Any
@@ -24,6 +26,7 @@ class FloatLiteralNode:
 
     def __repr__(self) -> str:
         return f"FloatLiteral({self.value})"
+
 
 @dataclass
 class StringLiteralNode:
@@ -36,12 +39,15 @@ class StringLiteralNode:
     def __repr__(self) -> str:
         return f"StringLiteral({self.value!r})"
 
+
 @dataclass
 class IdentifierNode:
     value: Any
     meta_data: Lexeme
+
     def __repr__(self) -> str:
         return f"IdentifierNode({self.value!r})"
+
 
 @dataclass
 class BooleanLiteralNode:
@@ -51,21 +57,23 @@ class BooleanLiteralNode:
     def __repr__(self) -> str:
         return f"BooleanLiteral({self.value})"
 
+
 @dataclass
 class NoneLiteralNode:
     value: Any
     meta_data: Lexeme
+
     def __repr__(self):
         return f"{self.value}"
 
 
 @dataclass
 class ExpressionNode:
-
     root_expr: Any
 
     def __repr__(self):
         return f"root_expr: {self.root_expr}"
+
 
 @dataclass
 class BinOpNode:
@@ -81,27 +89,30 @@ class BinOpNode:
             right: {self.right}\n
         ) """
 
+
 @dataclass
 class UnaryOPNode:
     op: TokenType
     meta_data: Lexeme
     operand: Any
+
     def __repr__(self):
         return f"UnaryOp({self.op}, {self.operand})"
 
+
 @dataclass
 class ArrayLiteralNode:
-    
-    elements: List[ExpressionNode]
+    elements: list[ExpressionNode]
     meta_data: Lexeme
 
     def __repr__(self):
         return f"ArrayLiteral({self.elements!r})"
 
+
 @dataclass
 class IndexNode:
-    base: Any      # the expression evaluating to an array
-    index: List[ExpressionNode]      # the expression for the index
+    base: Any  # the expression evaluating to an array
+    index: list[ExpressionNode]  # the expression for the index
     meta_data: Lexeme
 
     def __repr__(self):
@@ -110,13 +121,13 @@ class IndexNode:
                  index: {self.index!r})\n
                  )"""
 
+
 @dataclass
 class AssignmentNode:
-
     left_hand: IdentifierNode
     op: TokenType
     meta_data: Lexeme
-    right_hand:  ExpressionNode
+    right_hand: ExpressionNode
 
     def __repr__(self):
         return f"""AssignmentNode(\n 
@@ -129,16 +140,15 @@ class AssignmentNode:
 # collection of anything (expressions, loops, ifs)
 @dataclass
 class BlockNode:
-
-    block: List[Any] = field(default_factory=list)
+    block: list[Any] = field(default_factory=list)
 
     def __repr__(self):
         return f"Block: {[i for i in self.block]}"
 
-#ifs
+
+# ifs
 @dataclass
 class IFNode:
-
     condition: ExpressionNode
     meta_data: Lexeme
     body: BlockNode = field(default_factory=BlockNode)
@@ -146,92 +156,101 @@ class IFNode:
     else_branch: BlockNode = field(default_factory=BlockNode)
 
     def __repr__(self) -> str:
-        return (f"""
+        return f"""
             IfNode(\n"
               condition={self.condition!r},\n
               then_branch={self.body!r},\n
               elif_branch={self.elif_branch}
               else_branch={self.else_branch!r}\n
            )"""
-        )
+
+
 @dataclass
 class ElifNode:
     condition: ExpressionNode
     meta_data: Lexeme
     body: BlockNode = field(default_factory=BlockNode)
+
     def __repr__(self) -> str:
-        return (f"""
+        return f"""
             ElifNode(\n
             condition={self.condition!r},\n
             then_branch={self.body!r},\n
             )"""
-                
-        )
-#loops
+
+
+# loops
 @dataclass
 class ForNode:
-
     variable: IdentifierNode
     bound: ExpressionNode
     meta_data: Lexeme
     body: BlockNode = field(default_factory=BlockNode)
+
     def __repr__(self) -> str:
-        return (f"""
+        return f"""
             ForNode(\n
             variable={self.variable!r},\n
             bound={self.bound!r},\n
              body={self.body!r}\n
             """
-        )
+
+
 @dataclass
 class WhileNode:
-
     condition: ExpressionNode
     meta_data: Lexeme
     body: BlockNode = field(default_factory=BlockNode)
+
     def __repr__(self) -> str:
-        return (f"""
+        return f"""
             WhileNode(\n
             condition={self.condition!r},\n
             body={self.body!r}\n
             """
-        )
 
 
-        
 # single token control flow constructs
+
 
 @dataclass
 class ElseNode:
     meta_data: Lexeme
     body: BlockNode = field(default_factory=BlockNode)
+
     def __repr__(self):
         return f"""ElseNode(\n
                   body= {self.body}\n
                  )
         """
-    
+
+
 @dataclass
 class BreakNode:
     meta_data: Lexeme
+
     def __repr__(self):
         return "break"
-    
+
+
 @dataclass
 class EndNode:
     meta_data: Lexeme
+
     def __repr__(self):
         return "end"
-    
-@dataclass    
+
+
+@dataclass
 class ContinueNode:
     meta_data: Lexeme
+
     def __repr__(self):
         return "continue"
-    
+
+
 @dataclass
 class ReturnNode:
-
     meta_data: Lexeme
 
     expression: ExpressionNode
@@ -239,33 +258,34 @@ class ReturnNode:
     def __repr__(self):
         return f"return {self.expression}"
 
+
 @dataclass
 class FunctionNode:
     name: IdentifierNode
     meta_data: Lexeme
     arg_list_name: IdentifierNode
-    return_expr: Optional[ReturnNode] = None
+    return_expr: ReturnNode | None = None
     body: BlockNode = field(default_factory=BlockNode)
+
     def __repr__(self) -> str:
-        return (f"""
+        return f"""
             FunctionNode(\n
             name={self.name!r},\n
             arg_list={self.arg_list_name!r}\n
             body={self.body!r}\n
             return={self.return_expr!r},\n
             """
-        )
+
 
 @dataclass
 class CallNode:
     name: IdentifierNode
-    args: List[Any]
+    args: list[Any]
     meta_data: Lexeme
+
     def __repr__(self) -> str:
-        return (f"""
+        return f"""
             CallNode(\n
             name={self.name!r},\n
             arg_list={self.args!r}\n
             """
-        )
-
