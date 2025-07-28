@@ -55,6 +55,7 @@ Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized
 
 ## Getting Started
 ```bash
+
 # 1. Clone
 git clone https://github.com/Geetur/Bang-PL.git
 cd Bang-PL
@@ -69,18 +70,17 @@ source .venv/bin/activate
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 
-# 3. Install dev dependencies
-pip install -e .      # installs `bang` CLI
+# 3. Install Bang and dev dependencies (as defined in pyproject.toml)
+#    This installs the `bang` console script plus ruff, pre-commit, and pytest
+pip install -e .[dev]
 
-# Optional – tools for hacking on the language/compiler
-
-# COMING SOONG: pip install -r requirements-dev.txt
-
-pip install pytest
+# 4. Set up Git hooks (configured in .pre-commit-config.yaml)
+#    Installs pre-commit hooks for linting via ruff
+pre-commit install
 
 # After this step you should have a bang console‑script on your PATH. If not, fall back to python ‑m bang.
 ```
-Python 3.10+ is recommended (pattern-matching FTW).
+Python 3.10+ is required (pattern-matching FTW).
 
 ## Running Bang Code
 Although somewhat bush-league, just change the file path in bang\__main__.py; after that, you can either
