@@ -266,4 +266,4 @@ PRs and issue reports are welcome! Please run pytest and ruff (optional for now 
 
 ## License
 MIT © 2025 Jeter Pontes
-See (#LICENSE) for full text.
+See [License](#license) for full text.
