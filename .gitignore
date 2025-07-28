@@ -1,5 +1,12 @@
-# .gitignore  (already added?)
+
+# Generated / build artefacts
 __pycache__/
+*.py[cod]
+bang_lang.egg-info/
+.dist-info/
 build/
 dist/
-*.egg-info/
+.pytest_cache/
+# IDE folders
+.vscode/
+.idea/
