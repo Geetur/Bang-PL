@@ -1,13 +1,59 @@
+# ─────────────────────────────────────────────────────────────
+# Build metadata (PEP 517/518)
+# ─────────────────────────────────────────────────────────────
+[build-system]
+requires      = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# ─────────────────────────────────────────────────────────────
+# Project metadata (PEP 621)
+# ─────────────────────────────────────────────────────────────
 [project]
-name            = "bang-lang"          # whatever you want to publish under
+name            = "bang-lang"
 version         = "0.1.0"
-description     = "Bang – a minimalistic array-centric scripting language."
-authors         = [{ name = "Jeter Pontes", email = "jeter.pontes@outlook.com" }]
+description     = "Bang – a minimalistic array‑centric scripting language."
 readme          = "README.md"
 requires-python = ">=3.10"
+authors         = [
+  { name = "Jeter Pontes", email = "jeter.pontes@outlook.com" }
+]
+license         = { text = "MIT" }
 
-# ─────────────────────────────────────────────────────────
-# Everything below builds the CLI entry-point named  “bang”
-# ─────────────────────────────────────────────────────────
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Interpreters",
+  "Typing :: Typed"
+]
+
+[project.urls]
+Homepage        = "https://github.com/Geetur/Bang-PL"
+Source          = "https://github.com/Geetur/Bang-PL"
+"Issue Tracker" = "https://github.com/Geetur/Bang-PL/issues"
+
 [project.scripts]
 bang = "bang.__main__:main"
+
+[project.optional-dependencies]
+dev = [
+  "ruff==0.12.5",
+  "pre-commit==3.7.*",
+  "pytest>=8,<9"
+]
+
+# ─────────────────────────────────────────────────────────────
+# Ruff – linter + formatter
+# ─────────────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py311"
+line-length    = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "UP", "SIM", "I"]
+ignore = ["SIM102", "SIM210"]
+
+
+[tool.ruff.format]
+exclude = ["examples/**"]

@@ -1,20 +1,18 @@
-
 # after this pass we are guaranteed to have a list
 # of valid bang tokens
 
 from bang.lexing.lexer_tokens import (
+    COMMENT,
+    DECIMAL,
+    KEYWORDS,
+    NEWLINE,
+    SENTINEL,
+    STRING,
+    SYMBOLS,
+    UNDERSCORE,
     Lexeme,
     TokenType,
-    NEWLINE,
-    DECIMAL,
-    SENTINEL,
-    UNDERSCORE,
-    STRING,
-    COMMENT,
-    SYMBOLS,
-    KEYWORDS,
 )
-
 
 
 class LexerError(Exception):
@@ -26,7 +24,7 @@ class LexerError(Exception):
         self.end = end
 
         super().__init__(self._format())
-    
+
     def _format(self):
         error_line = self.file[self.row]
         print(error_line)
@@ -44,8 +42,8 @@ class LexerError(Exception):
 
     __repr__ = __str__
 
-class Lexer:
 
+class Lexer:
     # so, we want to make these things attributes of the lexer class
     # because they are important constants that our parser and other phases
     # would like to use without having to redefine, but  it is more modular, readable,
@@ -59,15 +57,14 @@ class Lexer:
     KEYWORDS = KEYWORDS
 
     def __init__(self, input_file):
-
         # could add an error here if file isn't guaranteed to exist
-        with open(input_file, 'r') as f:
+        with open(input_file) as f:
             self.file = f.readlines()
 
         self.start = 0
         self.row = 0
         self.col = 0
-        self.prev_start= -1
+        self.prev_start = -1
         self.prev_row = -1
         self.prev_col = -1
 
@@ -76,22 +73,23 @@ class Lexer:
         self.token = ""
         self.tokens = []
         self.error_msg = ""
-        
+
     def advance(self):
-        
-        self.prev_col = self.col; self.col += 1
+        self.prev_col = self.col
+        self.col += 1
         # if at a new row, reset col to zero and iterate row
         if self.row < len(self.file) and self.col >= len(self.file[self.row]):
-            self.prev_row = self.row; self.row += 1
+            self.prev_row = self.row
+            self.row += 1
             self.col = 0
             self.start = 0
         # if at EOF mark char with sentinel
         if self.row >= len(self.file):
             self.char = SENTINEL
-        # otherwise mark char with next arbitrary next character             
+        # otherwise mark char with next arbitrary next character
         else:
             self.char = self.file[self.row][self.col]
-    
+
     def error_handler(self):
         # this function is half the reason for prev_start, prev_col, etc
         # because we need to advance at some points, but if the while loops
@@ -100,8 +98,10 @@ class Lexer:
         if self.col:
             raise LexerError(self.file, self.error_msg, self.row, self.start, self.col)
         else:
-            raise LexerError(self.file, self.error_msg, self.prev_row, self.prev_start, self.prev_col)
-    
+            raise LexerError(
+                self.file, self.error_msg, self.prev_row, self.prev_start, self.prev_col
+            )
+
     def flush_token(self, ttype, value):
         # same as above if we advance to a new row and reset to zero, we use prev
         end = None
@@ -111,16 +111,14 @@ class Lexer:
         else:
             end = self.prev_col - 1 if self.prev_col - 1 >= self.prev_start else self.prev_col
             self.tokens.append(Lexeme(ttype, value, self.prev_row, self.prev_start, end))
-        
+
         # after flushing we want to forget the token and start a new one
         self.token = ""
         self.start = self.col
 
     def tokenizer(self):
-
         while self.char != SENTINEL:
-            
-            #comments are usually handled in the lexer
+            # comments are usually handled in the lexer
             # so, the idea is that anything after the comment until the newline
             # is just not tokenized; you could however store them in a seperate structure
             # so that if you transpile to another lang, the file still maintains comments
@@ -128,11 +126,13 @@ class Lexer:
                 while self.char not in (NEWLINE, SENTINEL):
                     self.advance()
                 continue
-            
-            # strings are a sort of exception to lexing because it is so much simpler to create an entire
+
+            # strings are a sort of exception to lexing because it is so much simpler to create
+            # an entire
             # string literal via lexing than to parse one out, suprisingly.
             if self.char == STRING:
-                self.prev_start = self.start; self.start = self.col
+                self.prev_start = self.start
+                self.start = self.col
                 value = ""
                 self.advance()
                 while self.char not in (NEWLINE, SENTINEL, STRING):
@@ -151,11 +151,13 @@ class Lexer:
                 # we catch an error after 5 spaces, we want start to represent
                 # the start of the error, not the end of the last token because
                 # we error print from original text file
-                self.prev_start = self.start; self.start = self.col
+                self.prev_start = self.start
+                self.start = self.col
                 continue
-            
+
             elif self.char.isdigit() or self.char == DECIMAL:
-                self.prev_start = self.start; self.start = self.col
+                self.prev_start = self.start
+                self.start = self.col
                 decimal_count = 0
                 while self.char.isdigit() or self.char == DECIMAL:
                     if self.char == DECIMAL and decimal_count >= 1:
@@ -171,11 +173,12 @@ class Lexer:
                 ttype = TokenType.T_FLOAT if decimal_count else TokenType.T_INT
                 self.flush_token(ttype, self.token)
                 continue
-            
+
             # our identifies can start with underscore or letter only
             # but can continue indefinitely with alnum and underscore
             elif self.char.isalpha() or self.char == UNDERSCORE:
-                self.prev_start = self.start; self.start = self.col
+                self.prev_start = self.start
+                self.start = self.col
                 while self.char.isalnum() or self.char == UNDERSCORE:
                     self.token += self.char
                     self.advance()
@@ -193,9 +196,10 @@ class Lexer:
                     ttype = TokenType.T_IDENT
                 self.flush_token(ttype, self.token)
                 continue
-            
+
             if self.char in SYMBOLS or self.char not in SYMBOLS:
-                self.prev_start = self.start; self.start = self.col
+                self.prev_start = self.start
+                self.start = self.col
                 operator = self.char
                 self.advance()
                 two = operator + self.char
@@ -207,10 +211,9 @@ class Lexer:
                 if len(operator) == 1 and operator not in SYMBOLS:
                     self.error_msg = "token not recognized"
                     self.error_handler()
-                
+
                 self.flush_token(SYMBOLS[operator], operator)
                 continue
             # this only pops if the characters isn't in symbols, isn't a digit, and isn't
             # a letter; it must be a unrecognized symbol such as ^
         return self.tokens
-    

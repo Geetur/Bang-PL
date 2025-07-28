@@ -1,0 +1,10 @@
+repos:
+  # Ruff hooks (lint + formatter) – lightning quick
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.5           # must match your installed Ruff
+    hooks:
+      - id: ruff           # lint
+        args: [--fix]      # auto‑fix trivial issues
+      - id: ruff-format    # Black‑style formatter
+
+ 

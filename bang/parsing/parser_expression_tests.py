@@ -1,16 +1,27 @@
 import pytest
-from pathlib import Path
 
 from bang.lexing.lexer import Lexer
 from bang.parsing.expression_parser import ExpressionParser, ParserError
 from bang.parsing.parser_nodes import (
-    IntegerLiteralNode, FloatLiteralNode, BooleanLiteralNode,
-    IdentifierNode, BinOpNode, UnaryOPNode, ArrayLiteralNode,
-    StringLiteralNode, IndexNode, AssignmentNode,
-    IFNode, ForNode, WhileNode, ElseNode,
-    BreakNode, ContinueNode, ReturnNode, ExpressionNode, EndNode
+    ArrayLiteralNode,
+    AssignmentNode,
+    BinOpNode,
+    BooleanLiteralNode,
+    BreakNode,
+    ContinueNode,
+    ElseNode,
+    EndNode,
+    ExpressionNode,
+    FloatLiteralNode,
+    ForNode,
+    IFNode,
+    IndexNode,
+    ReturnNode,
+    StringLiteralNode,
+    UnaryOPNode,
+    WhileNode,
 )
-from typing import List
+
 
 def parse_lines(code, tmp_path):
     # write code to temporary file
@@ -63,6 +74,7 @@ def test_unary_and_binary_operations(tmp_path):
     assert isinstance(left, UnaryOPNode)
     # Operator should be multiplication
     from bang.lexing.lexer import TokenType as TT
+
     assert op == TT.T_ASTERISK
     # Right should be an ExpressionNode nested
     assert isinstance(right, BinOpNode)
@@ -111,7 +123,7 @@ def test_control_structures(tmp_path):
     # Expect nodes in sequence
     types = [IFNode, ElseNode, ForNode, WhileNode, BreakNode, ContinueNode, EndNode, ReturnNode]
     assert len(nodes) == len(types)
-    for node, expected in zip(nodes, types):
+    for node, expected in zip(nodes, types, strict=False):
         assert isinstance(node, expected)
 
 
@@ -126,6 +138,7 @@ def test_parser_error_invalid_assignment(tmp_path):
     with pytest.raises(ParserError):
         parse_lines(code, tmp_path)
 
+
 def test_float_operations(tmp_path):
     code = "result = 3.5 * 2.0 + 1.25"
     nodes = parse_lines(code + "\n", tmp_path)
@@ -139,6 +152,7 @@ def test_float_operations(tmp_path):
     assert isinstance(left, BinOpNode)
     # Right side is nested BinOpNode
     assert isinstance(expr.right, FloatLiteralNode)
+
 
 def test_boolean_literal(tmp_path):
     code = "flag = true && false || true"
@@ -156,6 +170,7 @@ def test_boolean_literal(tmp_path):
     # Right operand of OR
     assert isinstance(expr.right, BooleanLiteralNode)
 
+
 def test_exponent_precedence(tmp_path):
     code = "val = 2 ** 3 ** 2"
     nodes = parse_lines(code + "\n", tmp_path)
@@ -163,13 +178,16 @@ def test_exponent_precedence(tmp_path):
     expr = assign.right_hand.root_expr
     # Exponent is right-associative: 3 ** 2 evaluated first
     assert isinstance(expr, BinOpNode)
-    assert expr.op.name == 'T_EXPO'
+    assert expr.op.name == "T_EXPO"
     # Right operand of outer ** is a BinOpNode
     assert isinstance(expr.right, BinOpNode)
 
+
 # its really important to remember here that an array isn't an expression
-# in our langauge, its a container of expressions. this might be somewhat confusing
-# because if you pass an array into the SYA it will be wrapped in a expression node, but that is only
+# in our langauge, its a container of expressions.
+# this might be somewhat confusing
+# because if you pass an array into the SYA
+# it will be wrapped in a expression node, but that is only
 # because its the root expression. all an expression node is in this lanaguge
 def test_array_nesting(tmp_path):
     code = "arr = [[1,2], [3, [4,5]]]"
@@ -182,7 +200,7 @@ def test_array_nesting(tmp_path):
     # First element is an ArrayLiteralNode wrapped in ExpressionNode
 
     first = array_node.elements[0]
-    
+
     assert isinstance(first, ArrayLiteralNode)
     # Nested deeper
     second = array_node.elements[1]
@@ -190,10 +208,12 @@ def test_array_nesting(tmp_path):
     inner = second.elements[1]
     assert isinstance(inner, ArrayLiteralNode)
 
+
 def test_invalid_indexing_error(tmp_path):
     code = "5[0]"
     with pytest.raises(ParserError):
         parse_lines(code + "\n", tmp_path)
+
 
 def test_compound_assignment(tmp_path):
     code = "count = 1\ncount += 2"
@@ -201,12 +221,14 @@ def test_compound_assignment(tmp_path):
     assert len(nodes) == 2
     _, plus_assign = nodes
     assert isinstance(plus_assign, AssignmentNode)
-    assert plus_assign.op.name == 'T_PLUS_ASSIGN'
+    assert plus_assign.op.name == "T_PLUS_ASSIGN"
+
 
 def test_parser_error_mismatched_brackets(tmp_path):
     code = "arr = [1, 2, 3"  # missing closing bracket
     with pytest.raises(ParserError):
         parse_lines(code + "\n", tmp_path)
+
 
 def test_nested_parentheses(tmp_path):
     code = "x = ((1 + 2) * 3) - 4"
@@ -215,11 +237,13 @@ def test_nested_parentheses(tmp_path):
     assign = nodes[0]
     # should parse without error and produce an AssignmentNode
     from bang.parsing.parser_nodes import AssignmentNode, BinOpNode
+
     assert isinstance(assign, AssignmentNode)
     # check that inside the ExpressionNode there's a BinOpNode
     expr = assign.right_hand
     assert hasattr(expr, "root_expr")
     assert isinstance(expr.root_expr, BinOpNode)
+
 
 def test_empty_parentheses_error(tmp_path):
     with pytest.raises(ParserError):
@@ -228,12 +252,15 @@ def test_empty_parentheses_error(tmp_path):
 
 # 2. Unary-operator edge-cases
 
+
 def test_multiple_unary_operators(tmp_path):
     code = "x = + - + - 5"
     nodes = parse_lines(code + "\n", tmp_path)
     assert len(nodes) == 1
     from bang.parsing.parser_nodes import AssignmentNode
+
     assert isinstance(nodes[0], AssignmentNode)
+
 
 def test_unary_missing_operand_error(tmp_path):
     with pytest.raises(ParserError):
@@ -247,10 +274,12 @@ def test_chained_indexing(tmp_path):
     nodes = parse_lines(code + "\n", tmp_path)
     assert len(nodes) == 1
     from bang.parsing.parser_nodes import AssignmentNode
+
     assert isinstance(nodes[0], AssignmentNode)
 
 
 # 4. Logical vs. relational mixing
+
 
 def test_logical_and_relational(tmp_path):
     code = "flag = a < b && c > d || !e"
@@ -260,28 +289,31 @@ def test_logical_and_relational(tmp_path):
 
 # 5. Literal edge-cases
 
+
 def test_float_without_leading_zero(tmp_path):
     code = "x = .5 * 2"
     nodes = parse_lines(code + "\n", tmp_path)
     assert len(nodes) == 1
     from bang.parsing.parser_nodes import AssignmentNode
-    assert isinstance(nodes[0], AssignmentNode)
 
+    assert isinstance(nodes[0], AssignmentNode)
 
 
 def test_consecutive_operators_error(tmp_path):
     with pytest.raises(ParserError):
         parse_lines("x = 1 +* 2\n", tmp_path)
 
+
 def test_array_missing_comma_error(tmp_path):
     with pytest.raises(ParserError):
         parse_lines("x = [1 2, 3]\n", tmp_path)
+
 
 def test_mismatched_index_brackets_error(tmp_path):
     with pytest.raises(ParserError):
         parse_lines("x = arr[1,2]\n", tmp_path)
 
+
 def test_indexing_after_expression(tmp_path):
     with pytest.raises(ParserError):
         parse_lines("val = (a + b)[2]\n", tmp_path)
-
