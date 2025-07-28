@@ -1,13 +1,32 @@
-
-# Generated / build artefacts
+# ---- Python ---------------------------------------------------
 __pycache__/
 *.py[cod]
-bang_lang.egg-info/
-.dist-info/
-build/
+*$py.class
+*.so
+
+# Packaging
+*.egg-info/
 dist/
+build/
+wheels/
+
+# Virtual‑envs
+.venv/
+env/
+venv/
+
+# Tool caches
 .pytest_cache/
-# IDE folders
+.ruff_cache/
+.mypy_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Editors / OS
 .vscode/
-.idea/ 
-#
+.idea/
+.DS_Store
+Thumbs.db
+*.log
