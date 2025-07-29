@@ -1,12 +1,12 @@
-(* ------------------------------------------------------------ *)
-(*  Bang Programming Language — Comprehensive Grammar (EBNF)   *)
-(*  Author: Jeter Pontes                                 *)
-(*  Last‑updated: 8 Jun 2025                                      *)
-(* ------------------------------------------------------------ *)
+(* ------------------------------------------------------------ )
+(  Bang Programming Language — Comprehensive Grammar (EBNF)   )
+(  Author: Jeter Pontes                                        )
+(  Last‑updated: 29 Jul 2025                                   )
+( ------------------------------------------------------------ *)
 
-(* ------------------------------------------------------------------ *)
-(* 1.  LEXICAL GRAMMAR                                               *)
-(* ------------------------------------------------------------------ *)
+(* ------------------------------------------------------------------ )
+( 1.  LEXICAL GRAMMAR                                               )
+( ------------------------------------------------------------------ *)
 
 (* 1.1  Characters & basic classes *)
 letter         = "A".."Z" | "a".."z" ;
@@ -21,21 +21,21 @@ Identifier     = (letter | underscore) { letter | digit | underscore } ;
 IntegerLiteral = digit { digit } ;
 FloatLiteral   = digit { digit } "." { digit } ;
 BooleanLiteral = "true" | "false" ;
-NoneLiteral    = "none" ; 
+NoneLiteral    = "none" ;
 StringLiteral  = quote { ANY  − quote − newline } quote ;
 
-(* 1.3  Operators & punctuation  (all are single tokens) *)
+(* 1.3  Operators & punctuation  (all are single tokens unless noted) )
 PLUS           = "+" ;                MINUS        = "-" ;
-ASTERISK       = "*" ;                SLASH        = "/" ;
+ASTERISK       = "" ;                SLASH        = "/" ;
 DSLASH         = "//" ;               EXPO         = "**" ;
 ASSIGN         = "=" ;                PLUS_ASSIGN  = "+=" ;
-MINUS_ASSIGN   = "-=" ;               ASTERISK_ASSIGN = "*=" ;
+MINUS_ASSIGN   = "-=" ;               ASTERISK_ASSIGN = "=" ;
 SLASH_ASSIGN   = "/=" ;
 LT             = "<" ;                LEQ          = "<=" ;
 GT             = ">" ;                GTEQ         = ">=" ;
 EQ             = "==" ;               NEQ          = "!=" ;
 AND            = "&&" ;               OR           = "||" ;
-NEGATE         = "!" ;
+NEGATE         = "!" ;                IN           = "in" ;   ( membership *)
 LPAREN         = "(" ;                RPAREN       = ")" ;
 LBRACKET       = "[" ;                RBRACKET     = "]" ;
 LBRACE         = "{" ;                RBRACE       = "}" ;
@@ -50,34 +50,33 @@ KW_CONTINUE    = "continue" ;   KW_END     = "end" ;
 
 (* A line‑end (newline or EOF) terminates a statement in Bang.        *)
 
-(* ------------------------------------------------------------------ *)
-(* 2.  ABSTRACT SYNTAX / PARSE‑LEVEL GRAMMAR                          *)
-(* ------------------------------------------------------------------ *)
+(* ------------------------------------------------------------------ )
+( 2.  ABSTRACT SYNTAX / PARSE‑LEVEL GRAMMAR                          )
+( ------------------------------------------------------------------ *)
 
 Program        = { Statement } EOF ;
 
 Statement      = AssignmentStmt
-               | ExpressionStmt
-               | IfHeader
-               | ElifHeader
-               | ElseHeader
-               | ForHeader
-               | WhileHeader
-               | FunctionHeader
-               | Callstmnt
-               | ReturnStmt
-               | BreakStmt
-               | ContinueStmt
-               | EndStmt
-               ;
+| ExpressionStmt
+| IfHeader
+| ElifHeader
+| ElseHeader
+| ForHeader
+| WhileHeader
+| FunctionHeader
+| ReturnStmt
+| BreakStmt
+| ContinueStmt
+| EndStmt
+;
 
-(* 2.1  Control‑flow headers                                          *)
+(* 2.1  Control‑flow headers                                          )
 IfHeader       = KW_IF     Expression ;
-ElifHeader     = KW_ELIF   Expression ;     (* must directly follow an if/elif *)
-ElseHeader     = KW_ELSE ;                  (* must directly follow if/elif  *)
-ForHeader      = KW_FOR    Identifier Expression ;  (* e.g. `for i 10` goes 0-10 *)
+ElifHeader     = KW_ELIF   Expression ;     ( must directly follow an if/elif )
+ElseHeader     = KW_ELSE ;                  ( must directly follow if/elif  )
+ForHeader      = KW_FOR    Identifier Expression ;  ( e.g. for i 10 goes 0‑10 )
 WhileHeader    = KW_WHILE  Expression ;
-FunctionHeader = KW_FN     Identifier Identifier ;   (* fn <name> <argListName> *)
+FunctionHeader = KW_FN     Identifier Identifier ;   ( fn   *)
 EndStmt        = KW_END ;
 
 (* 2.2  Loop/flow single‑token bodies *)
@@ -93,34 +92,34 @@ AssignOp       = ASSIGN | PLUS_ASSIGN | MINUS_ASSIGN | SLASH_ASSIGN | ASTERISK_A
 Indexable      = Identifier IndexSuffix { IndexSuffix } ;
 IndexSuffix    = LBRACKET Expression RBRACKET ;
 
-(* 2.5  Expression‑as‑statement *)
-ExpressionStmt = Expression ;                 (* useful for function calls, etc. *)
+(* 2.5  Expression‑as‑statement )
+ExpressionStmt = Expression ;                 ( useful for function calls, etc. *)
 
-(* ------------------------------------------------------------------ *)
-(* 3.  EXPRESSION GRAMMAR                                             *)
-(*    The following precedence levels (high → low) match the Bang     *)
-(*    parser implementation. Unary ops are right‑associative except   *)
-(*    where noted.                                                    *)
-(* ------------------------------------------------------------------ *)
+(* ------------------------------------------------------------------ )
+( 3.  EXPRESSION GRAMMAR                                             )
+(    The following precedence levels (high → low) match the Bang     )
+(    parser implementation. Unary ops are right‑associative except   )
+(    where noted.                                                    )
+( ------------------------------------------------------------------ *)
 
 Expression     = OrExpr ;
 
 OrExpr         = AndExpr       { OR   AndExpr } ;
 AndExpr        = EqualityExpr  { AND  EqualityExpr } ;
-EqualityExpr   = RelExpr       { (EQ | NEQ)   RelExpr } ;
+EqualityExpr   = RelExpr       { (EQ | NEQ | IN)   RelExpr } ;
 RelExpr        = AddExpr       { (LT | LEQ | GT | GTEQ) AddExpr } ;
 AddExpr        = MulExpr       { (PLUS | MINUS)        MulExpr } ;
 MulExpr        = ExpoExpr      { (ASTERISK | SLASH | DSLASH) ExpoExpr } ;
 ExpoExpr       = UnaryExpr     { EXPO                UnaryExpr } ;       (* right‑assoc *)
 UnaryExpr      = ( PLUS | MINUS | NEGATE ) UnaryExpr
-               | Primary ;
+| Primary ;
 
 Primary        = Literal
-               | Identifier
-               | ArrayLiteral
-               | FunctionCall
-               | IndexExpr
-               | LPAREN Expression RPAREN ;
+| Identifier
+| ArrayLiteral
+| FunctionCall
+| IndexExpr
+| LPAREN Expression RPAREN ;
 
 Literal        = IntegerLiteral | FloatLiteral | BooleanLiteral | StringLiteral | NoneLiteral ;
 
@@ -132,32 +131,32 @@ IndexExpr      = Primary IndexSuffix { IndexSuffix } ;
 FunctionCall   = Identifier LBRACE [ ArgList ] RBRACE ;
 ArgList        = Expression { COMMA Expression } ;
 
-(* ------------------------------------------------------------------ *)
-(* 4.  SEMANTIC & STRUCTURAL NOTES (informative, not enforced here)   *)
-(* ------------------------------------------------------------------ *)
-(* • Statements are separated by line‑breaks in the source text.        *)
-(* • Blocks are implicit: after an IfHeader / ForHeader / WhileHeader   *)
-(*   or FunctionHeader, all subsequent statements belong to that block  *)
-(*   until a matching KW_END (or KW_RETURN for functions).              *)
-(* • ElifHeader and ElseHeader are only legal immediately inside the    *)
-(*   current open If‑block.                                             *)
-(* • Break/Continue are only legal when loop_depth > 0 (see semantics). *)
-(* • FunctionHeader opens a new scope; the body ends just *before* the  *)
-(*   KW_RETURN line (ReturnStmt) and the final KW_END.                  *)
-(* • Assignment left‑hand side may be an Identifier or any IndexExpr.   *)
+(* ------------------------------------------------------------------ )
+( 4.  SEMANTIC & STRUCTURAL NOTES (informative, not enforced here)   )
+( ------------------------------------------------------------------ )
+( • Statements are separated by line‑breaks in the source text.        )
+( • Blocks are implicit: after an IfHeader / ForHeader / WhileHeader   )
+(   or FunctionHeader, all subsequent statements belong to that block  )
+(   until a matching KW_END.              )
+( • ElifHeader and ElseHeader are only legal immediately inside the    )
+(   current open If‑block.                                             )
+( • Break/Continue are only legal when loop_depth > 0 (see semantics). )
+( • FunctionHeader opens a new scope; the body ends just before the    )
+(   KW_END line; a function will stop being evaluated when a ReturnStmt)
+(   is evaluated                                                       )
+( • Assignment left‑hand side may be an Identifier or any IndexExpr.   *)
 
-(* ------------------------------------------------------------------ *)
-(* 5.  EXAMPLE (illustrative only)                                     *)
-(* ------------------------------------------------------------------ *)
-(*
-    fn sum_n_args args
-        sum = 0
-        for i args
-            sum += i
-            end
-        return sum
-
-
+(* ------------------------------------------------------------------ )
+( 5.  EXAMPLE (illustrative only)                                     )
+( ------------------------------------------------------------------ )
+(
+fn sum_n_args args
+sum = 0
+for i args
+sum += i
+end
+return sum
+end
 *)
 
 (* ----------------------------  End  -------------------------------- *)
