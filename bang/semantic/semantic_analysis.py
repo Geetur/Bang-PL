@@ -1,9 +1,9 @@
 # ONLY APPLIES TO STATICALLY KNOWABLE THINGS
 # after this pass we are every variable is guaranteed to be defined before use;
 # every break, continue, return, is guaranteed to bee associated with a loop/function;
-# all indexes are guaranteed to be numbers;
-# all bin ops and unary ops are guaranteed to be valid if performed on literals
-# every error that can be statically determined is determined.
+# all statically known indexes are guaranteed to be numbers;
+# all bin ops and unary ops are guaranteed to be valid if statically known
+# the majority of errors that can be statically determined are determined.
 from bang.lexing.lexer import TokenType
 from bang.parsing.parser_nodes import (
     ArrayLiteralNode,
@@ -307,7 +307,10 @@ class SemanticAnalysis:
     def walk_assignments(self, root):
         def walk_assignment_typical(left_hand, op_type, right_hand):
             left_hand_name = left_hand.value
-            if op_type in self.ARITH_ASSIGNMENTS and type(right_hand) is not DynamicType:
+            if (
+                op_type in self.ARITH_ASSIGNMENTS
+                and type(right_hand) is not DynamicType
+            ):
                 op_type = self.assignment_to_normal[op_type]
                 left_hand_type = self.search_for_var(left_hand_name)
                 if not left_hand_type:
@@ -440,7 +443,10 @@ class SemanticAnalysis:
 
             if (
                 not (
-                    (type(right) in [NumberType, BoolType] and type(left) in [NumberType, BoolType])
+                    (
+                        type(right) in [NumberType, BoolType]
+                        and type(left) in [NumberType, BoolType]
+                    )
                     or type(left) is type(right)
                 )
             ) and op in self.ARITH_OPS:
@@ -453,7 +459,9 @@ class SemanticAnalysis:
                         root.meta_data.column_end,
                     )
                 else:
-                    return self.BIN_OP_DIFFERENT_RULES[(type(left), type(right), op)](value=None)
+                    return self.BIN_OP_DIFFERENT_RULES[(type(left), type(right), op)](
+                        value=None
+                    )
 
             # the value is none because we aren't evaluating
             # anything just determining its type
@@ -491,7 +499,11 @@ class SemanticAnalysis:
             # anything just determining its type
             # anythingt that requires binop to be evaluated to
             # throw an error will be a runtime error
-            return BoolType(value=None) if root.op == TokenType.T_NEGATE else NumberType(value=None)
+            return (
+                BoolType(value=None)
+                if root.op == TokenType.T_NEGATE
+                else NumberType(value=None)
+            )
 
         elif type(root) is ArrayLiteralNode:
             checking_exprs = []
