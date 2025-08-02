@@ -98,7 +98,9 @@ def evaluate(code: str, tmp_path):
         "min{[1,2,false,true]}\nmin{[[1],[2],[3],[4]]}\n",
         "min{[1,2,3,4]}\n",
         'min{["1","2","3","4"]}\n',
-        'min{["1","2","3","4"]}\n',
+        "min{1,2,3,4}\n",
+        "min{1,2,false,true}\nmin{[1],[2],[3],[4]}\n",
+        'min{"1","2","3","4"}\n',
         # built in max function
         "max{[1,2,3,4]}\n",
         "max{[1,2,false,true]}\nmax{[[1],[2],[3],[4]]}\n",
@@ -276,7 +278,9 @@ def test_evaluator_valid(program, tmp_path):
         "sum{1,2,3,[1]}\n",
         # built in min function
         'min{[1,2,3,"4"]}\n',
-        "min{1,2,3,4}\n",
+        "min{1,2,3,[5]}\n",
+        "min{1,2,3,set{}}\n",
+        "min{1,2,3,dict{}}\n",
         "min{}\n",
         # built in max function
         'max{[1,2,3,"4"]}\n',
