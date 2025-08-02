@@ -253,20 +253,25 @@ class Evaluator:
             return base
 
         def _built_in_sort(args, meta_data):
-            if len(args) != 1:
+            if not args:
                 raise EvaluatorError(
                     self.file,
-                    "sort function expects one arg",
+                    "sort function expects atleast one arg",
                     meta_data.line,
                     meta_data.column_start,
                     meta_data.column_end,
                 )
-            if type(args[0]) in [str, list]:
-                args = args[0]
-            else:
-                return args[0]
+
+            if len(args) == 1:
+                if type(args[0]) is list:
+                    args = args[0]
+                elif type(args[0]) is set:
+                    args = list(args[0])
+                else:
+                    return args[0]
             try:
                 return sorted(args)
+
             except TypeError:
                 raise EvaluatorError(
                     self.file,

@@ -131,11 +131,15 @@ def evaluate(code: str, tmp_path):
         "print{dict{[[1,2], [2,3], [4,5]]}}\n",
         # built in sort function
         "sort{[1,2, 3]}\n",
-        "sort{[1,2, 3]}\n",
         "sort{[[1,2, 3], [1,2,4]]}\n",
         'sort{["1","2", "3"]}\n',
         'sort{["323425232353456"]}\n',
         "sort{[1,true, false]}\n",
+        "sort{1,2, 3}\n",
+        "sort{[1,2, 3], [1,2,4]}\n",
+        'sort{"1","2", "3"}\n',
+        'sort{"323425232353456"}\n',
+        "sort{1,true, false}\n",
         # built in set function
         'set{[1,2, "5"]}\n',
         "set{[1,2, 4]}\n",
@@ -299,7 +303,8 @@ def test_evaluator_valid(program, tmp_path):
         # built in sort function
         'sort{[1,2, "5"]}\n',
         "sort{[1,2, [5]]}\n",
-        "sort{1,2,5}\n",
+        "sort{1,2,set{}}\n",
+        "sort{1,2,dict{}}\n",
         "sort{}\n",
         # built in set function
         "set{[1,2, [5]]}\n",
