@@ -103,10 +103,13 @@ def evaluate(code: str, tmp_path):
         'min{"1","2","3","4"}\n',
         # built in max function
         "max{[1,2,3,4]}\n",
-        "max{[1,2,false,true]}\nmax{[[1],[2],[3],[4]]}\n",
-        "max{[1,2,3,4]}\n",
+        "max{[1,2,false,true]}\n",
+        "max{[[1],[2],[3],[4]]}\n",
         'max{["1","2","3","4"]}\n',
-        'max{["1","2","3","4"]}\n',
+        "max{1,2,3,4}\n",
+        "max{1,2,false,true}\n",
+        "max{[1],[2],[3],[4]}\n",
+        'max{"1","2","3","4"}\n',
         # built in len function
         "len{[1,2,3,4,5]}\n",
         'len{[1,2,3,4,"5"]}\n',
@@ -284,10 +287,14 @@ def test_evaluator_valid(program, tmp_path):
         "min{}\n",
         # built in max function
         'max{[1,2,3,"4"]}\n',
-        "max{1,2,3,4}\n",
+        "max{1,2,3,[5]}\n",
+        "max{1,2,3,set{}}\n",
+        "max{1,2,3,dict{}}\n",
         "max{}\n",
         # built in len function
         "len{1}\n",
+        "len{false}\n",
+        "len{true}\n",
         "len{}\n",
         # built in sort function
         'sort{[1,2, "5"]}\n',
