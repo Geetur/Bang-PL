@@ -165,13 +165,13 @@ fn rob args
     nums = args[0]
 
     if len{nums} <= 2
-        return max{[nums]}
+        return max{nums}
     end
 
-    nums[-2] = max{[nums[-1], nums[-2]]}
+    nums[-2] = max{nums[-1], nums[-2]}
 
     for i range{len{nums} - 3, -1, -1}
-        nums[i] = max{[nums[i] + nums[i + 2], nums[i + 1]]}
+        nums[i] = max{nums[i] + nums[i + 2], nums[i + 1]}
     end
 
     return nums[0]
