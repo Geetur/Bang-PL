@@ -89,6 +89,10 @@ def evaluate(code: str, tmp_path):
         'sum{["12","3","4"]}\n',
         "print{sum{[dict{1, 2}, dict{2, 3}, dict{4, 5}]}}\n",
         "print{sum{[set{[1, 2]}, set{[2, 3]}, set{[4, 5]}]}}\n",
+        'sum{"1","2","3","4"}\n',
+        "sum{1,2,3,4}\n",
+        "print{sum{dict{1, 2}, dict{2, 3}, dict{4, 5}}}\n",
+        "print{sum{set{[1, 2]}, set{[2, 3]}, set{[4, 5]}}}\n",
         # built in min function
         "min{[1,2,3,4]}\n",
         "min{[1,2,false,true]}\nmin{[[1],[2],[3],[4]]}\n",
@@ -267,8 +271,9 @@ def test_evaluator_valid(program, tmp_path):
         "fn bar args\n return [1]\nend\nx = dict{1,2} + bar{}\n",
         # built in sum function
         'sum{[1,2,3,"4"]}\n',
-        "sum{1,2,3,4}\n",
-        "sum{}\n",
+        "sum{1,2,3,set{}}\n",
+        "sum{1,2,3,dict{}}\n",
+        "sum{1,2,3,[1]}\n",
         # built in min function
         'min{[1,2,3,"4"]}\n',
         "min{1,2,3,4}\n",

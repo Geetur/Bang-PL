@@ -124,7 +124,7 @@ class Evaluator:
             if not hasattr(args[0], "__len__"):
                 raise EvaluatorError(
                     self.file,
-                    f"len expects list, str, not {type(args[0])}",
+                    f"len expects iterable not {type(args[0])}",
                     meta_data.line,
                     meta_data.column_start,
                     meta_data.column_end,
@@ -132,18 +132,16 @@ class Evaluator:
             return len(args[0])
 
         def _built_in_sum(args, meta_data):
-            if len(args) != 1:
-                raise EvaluatorError(
-                    self.file,
-                    "sum function expects one arg",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                )
-            if type(args[0]) in [str, list]:
-                args = args[0]
-            else:
-                return args[0]
+            if not args:
+                return 0
+
+            if len(args) == 1:
+                if type(args[0]) is list:
+                    args = args[0]
+                elif type(args[0]) is set:
+                    args = list(args[0])
+                else:
+                    return args[0]
 
             expected_type = type(args[0])
             if expected_type is int:
