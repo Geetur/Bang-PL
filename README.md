@@ -204,7 +204,7 @@ output:
 720
 ```
 
-## Running the Test-Suite (example for semantic tests)
+## Running the Test-Suite
 ```
 pytest bang\semantic\semantic_tests.py
 ```
