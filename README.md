@@ -127,7 +127,7 @@ fn two_sum args
         if target - i in seen
             ans += [[target - i, i]] 
             end
-        seen += set{[i]} 
+        seen += set{i} 
         end
     return ans 
     end
