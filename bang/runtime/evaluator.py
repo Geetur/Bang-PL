@@ -132,9 +132,6 @@ class Evaluator:
             return len(args[0])
 
         def _built_in_sum(args, meta_data):
-            if not args:
-                return 0
-
             if len(args) == 1:
                 if type(args[0]) is list:
                     args = args[0]
@@ -142,6 +139,9 @@ class Evaluator:
                     args = list(args[0])
                 else:
                     return args[0]
+
+            if not args:
+                return 0
 
             expected_type = type(args[0])
             if expected_type is int:
@@ -171,6 +171,14 @@ class Evaluator:
             return base
 
         def _built_in_min(args, meta_data):
+            if len(args) == 1:
+                if type(args[0]) is list:
+                    args = args[0]
+                elif type(args[0]) is set:
+                    args = list(args[0])
+                else:
+                    return args[0]
+
             if not args:
                 raise EvaluatorError(
                     self.file,
@@ -179,14 +187,6 @@ class Evaluator:
                     meta_data.column_start,
                     meta_data.column_end,
                 )
-
-            if len(args) == 1:
-                if type(args[0]) is list:
-                    args = args[0]
-                elif type(args[0]) is set:
-                    args = list(args[0])
-                else:
-                    return args[0]
 
             expected_type = type(args[0])
             base = args[0]
@@ -212,6 +212,14 @@ class Evaluator:
             return base
 
         def _built_in_max(args, meta_data):
+            if len(args) == 1:
+                if type(args[0]) is list:
+                    args = args[0]
+                elif type(args[0]) is set:
+                    args = list(args[0])
+                else:
+                    return args[0]
+
             if not args:
                 raise EvaluatorError(
                     self.file,
@@ -220,14 +228,6 @@ class Evaluator:
                     meta_data.column_start,
                     meta_data.column_end,
                 )
-
-            if len(args) == 1:
-                if type(args[0]) is list:
-                    args = args[0]
-                elif type(args[0]) is set:
-                    args = list(args[0])
-                else:
-                    return args[0]
 
             expected_type = type(args[0])
             base = args[0]
@@ -253,6 +253,14 @@ class Evaluator:
             return base
 
         def _built_in_sort(args, meta_data):
+            if len(args) == 1:
+                if type(args[0]) is list:
+                    args = args[0]
+                elif type(args[0]) is set:
+                    args = list(args[0])
+                else:
+                    return args[0]
+
             if not args:
                 raise EvaluatorError(
                     self.file,
@@ -262,13 +270,6 @@ class Evaluator:
                     meta_data.column_end,
                 )
 
-            if len(args) == 1:
-                if type(args[0]) is list:
-                    args = args[0]
-                elif type(args[0]) is set:
-                    args = list(args[0])
-                else:
-                    return args[0]
             try:
                 return sorted(args)
 
@@ -282,14 +283,15 @@ class Evaluator:
                 ) from None
 
         def _built_in_set(args, meta_data):
-            if not args:
-                return set()
-
             if len(args) == 1:
                 if type(args[0]) is list:
                     args = args[0]
                 elif type(args[0]) is set:
                     args = list(args[0])
+
+            if not args:
+                return set()
+
             try:
                 return set(args)
             except TypeError:
@@ -304,42 +306,27 @@ class Evaluator:
         def _built_in_dict(args, meta_data):
             expected_return = {}
             # if empty initialization
+
+            if len(args) == 1:
+                if type(args[0]) is list:
+                    args = args[0]
+                elif type(args[0]) is set:
+                    args = list(args[0])
+
             if not args:
                 return {}
 
-            # if dict{1,2}
-            if len(args) == 2:
-                try:
-                    return {args[0]: args[1]}
-                except TypeError:
+            for i in range(0, len(args), 2):
+                if i + 1 >= len(args):
                     raise EvaluatorError(
                         self.file,
-                        "dict initalization expects key to be hashable",
-                        meta_data.line,
-                        meta_data.column_start,
-                        meta_data.column_end,
-                    ) from None
-
-            # if dict{[[1,2], [3,4], [5,6]]}
-            if len(args) != 1 or type(args[0]) is not list:
-                raise EvaluatorError(
-                    self.file,
-                    "multi-key dict initalization expects list of lists of length two",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                )
-            for key_val_list in args[0]:
-                if (type(key_val_list) is not list) or len(key_val_list) != 2:
-                    raise EvaluatorError(
-                        self.file,
-                        "multi-key dict initalization expects list of lists of length two",
+                        "every key must be paired with a value",
                         meta_data.line,
                         meta_data.column_start,
                         meta_data.column_end,
                     )
                 try:
-                    expected_return[key_val_list[0]] = key_val_list[1]
+                    expected_return[args[i]] = args[i + 1]
                 except TypeError:
                     raise EvaluatorError(
                         self.file,
@@ -352,11 +339,11 @@ class Evaluator:
             return expected_return
 
         def _built_in_range(args, meta_data):
-            if not args:
-                return []
-
             if len(args) == 1 and type(args[0]) is list:
                 args = args[0]
+
+            if not args:
+                return []
 
             if len(args) > 3:
                 raise EvaluatorError(
