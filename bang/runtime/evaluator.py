@@ -352,7 +352,52 @@ class Evaluator:
             return expected_return
 
         def _built_in_range(args, meta_data):
-            pass
+            if not args:
+                return []
+
+            if len(args) == 1 and type(args[0]) is list:
+                args = args[0]
+
+            if len(args) > 3:
+                raise EvaluatorError(
+                    self.file,
+                    "range function expects three args only",
+                    meta_data.line,
+                    meta_data.column_start,
+                    meta_data.column_end,
+                )
+
+            if len(args) == 1:
+                start = 0
+                end = args[0]
+                jmp = 1
+            elif len(args) == 2:
+                start = args[0]
+                end = args[1]
+                jmp = 1
+            elif len(args) == 3:
+                start = args[0]
+                end = args[1]
+                jmp = args[2]
+
+            if jmp == 0:
+                raise EvaluatorError(
+                    self.file,
+                    "jump arg (arg 3) can't be zero due to infinite evaluation",
+                    meta_data.line,
+                    meta_data.column_start,
+                    meta_data.column_end,
+                )
+            if any(not isinstance(x, (int)) for x in (start, end, jmp)):
+                raise EvaluatorError(
+                    self.file,
+                    "start, jump, and end arguments must be int type",
+                    meta_data.line,
+                    meta_data.column_start,
+                    meta_data.column_end,
+                )
+
+            return [i for i in range(start, end, jmp)]
 
         # by name
         self.built_in_functions = {
@@ -411,8 +456,6 @@ class Evaluator:
         self.construct_to_eval = {
             AssignmentNode: self.eval_assignments,
             IFNode: self.eval_if,
-            # ElifNode:       self.eval_elif,
-            # ElseNode:       self.eval_else,
             ForNode: self.eval_for,
             WhileNode: self.eval_while,
             BlockNode: self.eval_block,
@@ -480,46 +523,9 @@ class Evaluator:
         self.loop_depth += 1
         self.scope_stack.append({})
         left_hand_name = root.variable.value
-
         right_hand_val = self.eval_expression(root.bound.root_expr)
-        if len(left_hand_name) >= 5 and left_hand_name.lower()[:5] == "range":
-            if type(right_hand_val) is not list:
-                raise EvaluatorError(
-                    self.file,
-                    "range loop can only be accessed with bound of type list",
-                    root.meta_data.line,
-                    root.meta_data.column_start,
-                    root.meta_data.column_end,
-                )
-            if len(right_hand_val) == 1:
-                start = 0
-                end = right_hand_val[0]
-                jump = 1
-            elif len(right_hand_val) == 2:
-                start = right_hand_val[0]
-                end = right_hand_val[1]
-                jump = 1
-            else:
-                start = right_hand_val[0]
-                end = right_hand_val[1]
-                jump = right_hand_val[2]
-            if not all(isinstance(i, (int)) for i in (start, end, jump)):
-                raise EvaluatorError(
-                    self.file,
-                    "start, end, and jump of range list (first three elements) must be integers",
-                    root.meta_data.line,
-                    root.meta_data.column_start,
-                    root.meta_data.column_end,
-                )
-            for i in range(start, end, jump):
-                self.initalize_var(left_hand_name, i)
-                try:
-                    self.eval_block(root.body)
-                except _ContinueSignal:
-                    continue
-                except _BreakSignal:
-                    break
-        elif type(right_hand_val) is int:
+
+        if type(right_hand_val) is int:
             for i in range(0, right_hand_val, -1 if right_hand_val < 0 else 1):
                 self.initalize_var(left_hand_name, i)
                 try:
@@ -546,6 +552,7 @@ class Evaluator:
                     root.meta_data.column_start,
                     root.meta_data.column_end,
                 ) from None
+
         self.scope_stack.pop()
         self.loop_depth -= 1
 

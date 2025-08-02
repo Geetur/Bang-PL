@@ -94,6 +94,7 @@ class SemanticAnalysis:
             "sort": FunctionType,
             "set": FunctionType,
             "dict": FunctionType,
+            "range": FunctionType,
         }
 
         self.scope_stack[0].update(
@@ -307,12 +308,13 @@ class SemanticAnalysis:
     def walk_assignments(self, root):
         def walk_assignment_typical(left_hand, op_type, right_hand):
             left_hand_name = left_hand.value
+            left_hand_type = self.search_for_var(left_hand_name)
             if (
-                op_type in self.ARITH_ASSIGNMENTS
+                type(left_hand_type) is not DynamicType
+                and op_type in self.ARITH_ASSIGNMENTS
                 and type(right_hand) is not DynamicType
             ):
                 op_type = self.assignment_to_normal[op_type]
-                left_hand_type = self.search_for_var(left_hand_name)
                 if not left_hand_type:
                     raise SemanticError(
                         self.file,

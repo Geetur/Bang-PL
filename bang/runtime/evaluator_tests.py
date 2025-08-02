@@ -164,6 +164,36 @@ def evaluate(code: str, tmp_path):
         "dict{1,2} != dict{1,2}\n",
         "dict{1,2} && dict{}\n",
         "dict{1,2} || dict{3,2}\n",
+        # built in range function
+        "range{9}\n",
+        "range{1, 9}\n",
+        "range{1, 9, 2}\n",
+        "range{[1, 9, 2]}\n",
+        "range{9, 9, 2}\n",
+        "range{9, 1, -1}\n",
+        "x = [1,2,3]; range{len{x}, -1, -1}\n",
+        "x = [1,2,3]; range{len{x}}\n",
+        "print{range{9}}\n",
+        "range{1, 9, true}\n",
+        "range{9} + range{7}\n",
+        "range{9} * 4\n",
+        "range{9} / [2]\n",
+        "range{9} * [4]\n",
+        "range{9} - [1,2]\n",
+        # for loops
+        "for i range{9}; end\n",
+        "for i range{1, 10}; end\n",
+        "for i range{1, 10, 2}; end\n",
+        "x = [1,2,3]; for i range{len{x}}; end\n",
+        "x = [1,2,3]; for i range{1, len{x}}; end\n",
+        "x = [1,2,3]; for i range{len{x}, -1, -1}; end\n",
+        "x = [1,2,3]; for i range{len{x}, -1, -1}; print{i}; end\n",
+        "x = [1,2,3]; for i range{len{x}, -1, -1}; i += 1; end\n",
+        "for i 9; i += 1; end;\n",
+        "for i -9; i += 1; end\n",
+        "x = [1,2,3]; for i x; i += 1; end\n"
+        "x = set{[1,2,3,4,5]}; for i x; i += 1; end\n"
+        "x = dict{1,2}; for i x; end\n"
         # in operator
         "fn bar args\n return 5\nend\nbar{} in [1]\n",
         'fn bar args\n return "5"\nend\nbar{} in "5"\n',
@@ -284,6 +314,15 @@ def test_evaluator_valid(program, tmp_path):
         "dict{1,2} < dict{1,2}\n",
         "dict{1,2} <= dict{1,2}\n",
         "dict{1,2} in dict{1,2}\n",
+        # built in range function
+        "range{9.9}\n",
+        "range{1.1, 9}\n",
+        "range{1, 9, 2.2}\n",
+        "range{[1.1, 9, 2]}\n",
+        "range{9, 9, false}\n",
+        "range{dict{1,2}}\n",
+        "range{set{[1]}}\n",
+        "range{[[1]]}\n",
         # illegal in operator
         "fn bar args\n return 5\nend\nbar{} in 1\n",
         "fn bar args\n return 5\nend\nbar{} in true\n",
