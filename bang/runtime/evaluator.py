@@ -284,25 +284,12 @@ class Evaluator:
         def _built_in_set(args, meta_data):
             if not args:
                 return set()
-            if len(args) != 1:
-                raise EvaluatorError(
-                    self.file,
-                    "set function expects one argument",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                ) from None
-            if type(args[0]) is not list:
-                raise EvaluatorError(
-                    self.file,
-                    "set function expects iterable type as argument",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                ) from None
 
-            args = args[0]
-
+            if len(args) == 1:
+                if type(args[0]) is list:
+                    args = args[0]
+                elif type(args[0]) is set:
+                    args = list(args[0])
             try:
                 return set(args)
             except TypeError:
