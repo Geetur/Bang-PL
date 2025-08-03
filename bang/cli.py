@@ -5,7 +5,7 @@ import argparse
 import inspect
 import sys
 
-from .lexing.lexer import Lexer
+from .lexing.lexer import Lexer, LexerError
 from .parsing.control_flow_parser import ControlFlowParser
 from .parsing.expression_parser import ExpressionParser, ParserError
 from .runtime.evaluator import Evaluator, EvaluatorError
@@ -40,7 +40,9 @@ def run_file(path: str, *, show_tokens=False, show_ast=False, trace=False) -> in
 
         Evaluator(lex.file, roots, **kwargs).eval_program()
         return 0
-
+    except LexerError as e:
+        print(e, file=sys.stderr)
+        return 1
     except ParserError as e:
         print(e, file=sys.stderr)
         return 2

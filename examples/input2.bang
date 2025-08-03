@@ -177,7 +177,7 @@ print{sum{[set{1,2}, set{3, 4}]}}
 [a, b] = range{2}
 print{a, b}
 
-
+print{"ivy is pretty"}
 
 
 
