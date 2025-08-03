@@ -82,25 +82,20 @@ pre-commit install
 Python 3.10+ is required (pattern-matching FTW).
 
 ## Running Bang Code
-Although somewhat bush-league, just change the file path in bang\__main__.py; after that, you can either
-do "python -m bang" if you didnt create a venv and install -e . or if you did, just type "bang".
+If you followed the getting started (installed -e) you can write:
+```
+# this is an example! use whatever file path you want!
+bang examples\input2.bang
+```
+in your terminal to run whatever bang program you want.
+
+if not, write:
 
 ```
-
-from bang.lexing.lexer import Lexer
-from bang.parsing.expression_parser import ExpressionParser, ParserError
-from bang.parsing.control_flow_parser import ControlFlowParser
-from bang.semantic.semantic_analysis import SemanticAnalysis, SemanticError
-from bang.runtime.evaluator import Evaluator, EvaluatorError
-
-src = "examples/hello.bang"
-lex = Lexer(src); tokens = lex.tokenizer()
-ex  = ExpressionParser(tokens, lex.file); ex.split(); ex.loading_into_algos()
-cf  = ControlFlowParser(lex.file, ex.post_SYA); roots = cf.blockenize()
-SemanticAnalysis(lex.file, roots).walk_program()  # static checks
-Evaluator(lex.file, roots).eval_program()         # run it!
-
+python -m bang examples\input2.bang
 ```
+which will work regardless if you installed .e or not!
+
 
 ## Examples! 
 

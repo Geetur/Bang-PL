@@ -14,10 +14,7 @@ fn two_sum args
     return ans 
     end
 
-
-
-
-# printing n fibonacii numbers
+# printing n fibonacci numbers
 fn fib awesome
     ret = []
     [n, a, b] = [awesome[0], 0, 1]
@@ -142,6 +139,7 @@ c = max{1, 2}
 fn bar args 
 return dict
 end
+
 [1,2,3,4,5][1] = [2, 3]
 
 print{a,b,c}; print{x, y}
@@ -176,6 +174,8 @@ print{rob{[2,7,9,3,1]}} #expecting 12
 print{sum{[set{1,2}, set{3, 4}]}}
 
 
+[a, b] = range{2}
+print{a, b}
 
 
 
