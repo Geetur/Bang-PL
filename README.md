@@ -82,7 +82,7 @@ pre-commit install
 Python 3.10+ is required (pattern-matching FTW).
 
 ## Running Bang Code
-If you followed the getting started (installed -e) you can write:
+If you followed the getting started (installed -e .) you can write:
 ```
 # this is an example! use whatever file path you want!
 bang examples\input2.bang
@@ -94,7 +94,7 @@ if not, write:
 ```
 python -m bang examples\input2.bang
 ```
-which will work regardless if you installed .e or not!
+which will work regardless if you installed -e . or not!
 
 
 ## Examples! 
