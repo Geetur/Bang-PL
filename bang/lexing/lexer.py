@@ -27,7 +27,6 @@ class LexerError(Exception):
 
     def _format(self):
         error_line = self.file[self.row]
-        print(error_line)
         crt_length = self.end - self.start if self.end - self.start != 0 else 1
         pointers = " " * self.start + "^" * crt_length
         return (
