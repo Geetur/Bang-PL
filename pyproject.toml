@@ -19,6 +19,8 @@ authors         = [
 ]
 license         = { text = "MIT" }
 
+
+
 classifiers = [
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3 :: Only",
@@ -34,7 +36,7 @@ Source          = "https://github.com/Geetur/Bang-PL"
 "Issue Tracker" = "https://github.com/Geetur/Bang-PL/issues"
 
 [project.scripts]
-bang = "bang.__main__:main"
+bang = "bang.cli:main"
 
 [project.optional-dependencies]
 dev = [
