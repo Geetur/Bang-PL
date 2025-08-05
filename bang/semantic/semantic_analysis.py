@@ -33,10 +33,12 @@ from bang.parsing.parser_nodes import (
 from bang.semantic.semantic_nodes import (
     ArrayType,
     BoolType,
+    DictType,
     DynamicType,
     FunctionType,
     NoneType,
     NumberType,
+    SetType,
     StringType,
 )
 
@@ -92,13 +94,13 @@ class SemanticAnalysis:
             "min": FunctionType,
             "max": FunctionType,
             "sort": FunctionType,
-            "set": FunctionType,
-            "dict": FunctionType,
+            "set": SetType,
+            "dict": DictType,
             "range": FunctionType,
         }
 
         self.scope_stack[0].update(
-            {name: FunctionType(value=None) for name in self.built_in_functions}
+            {name: typ(value=None) for name, typ in self.built_in_functions.items()}
         )
 
         # we need to know the loop depth for the break/continue etc constructs
@@ -141,14 +143,10 @@ class SemanticAnalysis:
             NumberType,
         }
 
-        # boolean operations with specific constraints such as in operator
-        # must have an iterable right hand
-        self.BOOL_OP_RULES = {
-            (NumberType, ArrayType, TokenType.T_IN),
-            (BoolType, ArrayType, TokenType.T_IN),
-            (StringType, ArrayType, TokenType.T_IN),
-            (ArrayType, ArrayType, TokenType.T_IN),
-            (StringType, StringType, TokenType.T_IN),
+        self.unhashable_types = {
+            ArrayType,
+            DictType,
+            SetType,
         }
 
         self.BIN_OP_DIFFERENT_RULES = {
@@ -428,6 +426,9 @@ class SemanticAnalysis:
         )
 
     def walk_expression(self, root):
+        if type(root) is ExpressionNode:
+            return self.walk_expression(root.root_expr)
+
         if type(root) in self.literals:
             actual_type = self.literals[type(root)]
             return actual_type(root.value)
@@ -443,12 +444,21 @@ class SemanticAnalysis:
             if type(left) is DynamicType or type(right) is DynamicType:
                 return DynamicType()
 
+            if op == TokenType.T_IN:
+                if type(right) in (ArrayType, StringType, SetType, DictType):
+                    if not (type(left) is not StringType and type(right) is StringType):
+                        return BoolType(value=None)
+                raise SemanticError(
+                    self.file,
+                    f"in operator not supported between {type(left)} and {type(right)}",
+                    root.meta_data.line,
+                    root.meta_data.column_start,
+                    root.meta_data.column_end,
+                )
+
             if (
                 not (
-                    (
-                        type(right) in [NumberType, BoolType]
-                        and type(left) in [NumberType, BoolType]
-                    )
+                    (type(right) in [NumberType, BoolType] and type(left) in [NumberType, BoolType])
                     or type(left) is type(right)
                 )
             ) and op in self.ARITH_OPS:
@@ -461,23 +471,12 @@ class SemanticAnalysis:
                         root.meta_data.column_end,
                     )
                 else:
-                    return self.BIN_OP_DIFFERENT_RULES[(type(left), type(right), op)](
-                        value=None
-                    )
+                    return self.BIN_OP_DIFFERENT_RULES[(type(left), type(right), op)](value=None)
 
             # the value is none because we aren't evaluating
             # anything just determining its type
             # anythingt that requires binop to be evaluated to
             # throw an error will be a runtime error
-            if (type(left), type(right), op) not in self.BOOL_OP_RULES:
-                if op == TokenType.T_IN:
-                    raise SemanticError(
-                        self.file,
-                        f"in operator not supported between {type(left)} and {type(right)}",
-                        root.meta_data.line,
-                        root.meta_data.column_start,
-                        root.meta_data.column_end,
-                    )
 
             cls = type(left) if op in self.ARITH_OPS else BoolType
             return cls(value=None)
@@ -501,11 +500,7 @@ class SemanticAnalysis:
             # anything just determining its type
             # anythingt that requires binop to be evaluated to
             # throw an error will be a runtime error
-            return (
-                BoolType(value=None)
-                if root.op == TokenType.T_NEGATE
-                else NumberType(value=None)
-            )
+            return BoolType(value=None) if root.op == TokenType.T_NEGATE else NumberType(value=None)
 
         elif type(root) is ArrayLiteralNode:
             checking_exprs = []
@@ -531,7 +526,7 @@ class SemanticAnalysis:
             # pretty sure from here down there is some
             # redundant code but it is only redundant, and working
             if base.value:
-                if type(base) not in [ArrayType, StringType]:
+                if type(base) not in [ArrayType, StringType, DictType]:
                     raise SemanticError(
                         self.file,
                         f"object of {type(base)} not indexable",
@@ -544,20 +539,21 @@ class SemanticAnalysis:
 
             for idx in root.index:
                 idx_type = self.walk_expression(idx.root_expr)
-                if type(idx_type) not in [NumberType, BoolType, DynamicType]:
-                    raise SemanticError(
-                        self.file,
-                        "Index must be number",
-                        root.meta_data.line,
-                        root.meta_data.column_start,
-                        root.meta_data.column_end,
-                    )
+                if type(base) in [ArrayType, StringType]:
+                    if type(idx_type) not in [NumberType, BoolType, DynamicType]:
+                        raise SemanticError(
+                            self.file,
+                            f"Index must be number when base is type {type(base)}",
+                            root.meta_data.line,
+                            root.meta_data.column_start,
+                            root.meta_data.column_end,
+                        )
                 indexes.append(idx_type)
 
             # if the base is unknowable statically than their is no point
             # to run over static indexes because we dont know the bounds of the base
-            if not base.value:
-                return base
+            if not base.value or type(base) is DictType:
+                return DynamicType()
 
             for _pos, idx in enumerate(indexes):
                 if type(base) not in [ArrayType, StringType]:
@@ -585,7 +581,7 @@ class SemanticAnalysis:
                         ) from None
 
                 else:
-                    break
+                    return DynamicType()
 
             return base
 
@@ -603,9 +599,81 @@ class SemanticAnalysis:
             return actual_type
 
         elif type(root) is CallNode:
+            # call functions that can be statically determined
+
+            def walk_built_in_set(root):
+                expected_return = []
+                typed_args = [self.walk_expression(arg.root_expr) for arg in root.args]
+
+                if not len(typed_args):
+                    return SetType(value=expected_return)
+
+                if len(typed_args) == 1:
+                    if type(typed_args[0]) is DynamicType:
+                        return SetType(value=expected_return)
+                    elif type(typed_args[0]) in [SetType, ArrayType]:
+                        typed_args = typed_args[0].value
+
+                for arg in typed_args:
+                    if type(arg) in self.unhashable_types:
+                        raise SemanticError(
+                            self.file,
+                            f"set expects hashable types only, not {type(arg)}",
+                            root.meta_data.line,
+                            root.meta_data.column_start,
+                            root.meta_data.column_end,
+                        )
+                    expected_return.append(arg)
+                return SetType(value=expected_return)
+
+            def walk_built_in_dict(root):
+                expected_return = []
+                is_key = True
+                typed_args = [self.walk_expression(arg.root_expr) for arg in root.args]
+
+                if not len(typed_args):
+                    return DictType(value=expected_return)
+
+                if len(typed_args) == 1:
+                    if type(typed_args[0]) is DynamicType:
+                        return DictType(value=expected_return)
+                    elif type(typed_args[0]) in [SetType, ArrayType]:
+                        typed_args = typed_args[0].value
+
+                if len(typed_args) % 2 != 0:
+                    raise SemanticError(
+                        self.file,
+                        f"'{root.name}' dict must be even, because every key must have a value",
+                        root.meta_data.line,
+                        root.meta_data.column_start,
+                        root.meta_data.column_end,
+                    )
+                for arg in typed_args:
+                    if type(arg) in self.unhashable_types and is_key:
+                        raise SemanticError(
+                            self.file,
+                            f"'{root.name}' dict key expects hashable types only, not {type(arg)}",
+                            root.meta_data.line,
+                            root.meta_data.column_start,
+                            root.meta_data.column_end,
+                        )
+                    is_key = not is_key
+                    expected_return.append(arg)
+                return DictType(value=expected_return)
+
+            built_in_to_walk = {
+                "set": walk_built_in_set,
+                "dict": walk_built_in_dict,
+            }
+
             if type(root.name) is not IdentifierNode:
                 return DynamicType()
+
             callee_type = self.search_for_var(root.name)
+
+            if type(callee_type) is DynamicType:
+                return DynamicType()
+
             if not callee_type:
                 raise SemanticError(
                     self.file,
@@ -614,7 +682,8 @@ class SemanticAnalysis:
                     root.meta_data.column_start,
                     root.meta_data.column_end,
                 )
-            if type(callee_type) is not FunctionType:
+
+            if type(callee_type) not in [FunctionType, SetType, DictType]:
                 raise SemanticError(
                     self.file,
                     f"attempt to call non-function '{root.name}'",
@@ -622,6 +691,9 @@ class SemanticAnalysis:
                     root.meta_data.column_start,
                     root.meta_data.column_end,
                 )
+
+            if root.name.value in built_in_to_walk:
+                return built_in_to_walk[root.name.value](root)
 
             # Analyse each argument expression normally.
             for arg in root.args:
