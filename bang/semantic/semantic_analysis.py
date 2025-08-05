@@ -691,8 +691,11 @@ class SemanticAnalysis:
                     root.meta_data.column_start,
                     root.meta_data.column_end,
                 )
-
-            if root.name.value in built_in_to_walk:
+            # the and allows user shadowing without interfering
+            # if a decision is made to really add to the semantic analysis
+            # with type checking for every built in function, this will change
+            # from hardcode to like self.builtintypes or something
+            if root.name.value in built_in_to_walk and type(callee_type) in (SetType, DictType):
                 return built_in_to_walk[root.name.value](root)
 
             # Analyse each argument expression normally.
