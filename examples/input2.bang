@@ -28,6 +28,7 @@ end
 
 
 
+
 x = [[0] * 5] * 5
 fn fibb args
     n = args[0]
@@ -171,18 +172,11 @@ print{rob{[2,7,9,3,1]}} #expecting 12
 
 #end function testting
 
-print{sum{[set{1,2}, set{3, 4}]}}
 
 
 [a, b] = range{2}
-print{a, b}
 
-print{"ivy is pretty"}
-
-
-
-
-
+a = set{}
 
 
 

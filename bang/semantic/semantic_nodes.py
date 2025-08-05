@@ -47,3 +47,13 @@ class IdentifierType:
 @dataclass
 class FunctionType:
     value: BlockNode
+
+
+@dataclass
+class SetType:
+    value: Any
+
+
+@dataclass
+class DictType:
+    value: Any
