@@ -109,7 +109,8 @@ class Evaluator:
         # remember args is potentially a list of lists
 
         def _built_in_print(args, meta_data):
-            print(*args)
+            gen = (x if type(x) is not runtime_function else id(x) for x in args)
+            print(*gen)
 
         def _built_in_len(args, meta_data):
             # changet this len args != 1 to accomodate any number of expected arguments
@@ -399,9 +400,7 @@ class Evaluator:
             "range": _built_in_range,
         }
 
-        self.built_in_function_objects = set(
-            [obj for obj in self.built_in_functions.values()]
-        )
+        self.built_in_function_objects = set([obj for obj in self.built_in_functions.values()])
 
         self.scope_stack[0].update(self.built_in_functions)
 
@@ -633,9 +632,7 @@ class Evaluator:
 
         def eval_assignment_index(left_hand, right_hand_value):
             if type(left_hand.base) is IdentifierNode:
-                base_location = self.search_for_var(
-                    left_hand.base.value, root.meta_data
-                )
+                base_location = self.search_for_var(left_hand.base.value, root.meta_data)
                 base_frame = self.scope_stack[base_location]
                 target = base_frame[left_hand.base.value]
             else:
@@ -690,10 +687,7 @@ class Evaluator:
             for i, n in enumerate(left_hand.elements):
                 left_hand_side = n.root_expr
                 assignee = right_hand_value[i]
-                if (
-                    op_type != TokenType.T_ASSIGN
-                    and type(left_hand_side) is not ArrayLiteralNode
-                ):
+                if op_type != TokenType.T_ASSIGN and type(left_hand_side) is not ArrayLiteralNode:
                     assignee = self.eval_bin_ops(
                         BinOpNode(
                             left=left_hand_side,
@@ -702,17 +696,12 @@ class Evaluator:
                             meta_data=root.meta_data,
                         )
                     )
-                dispatch[type(left_hand_side)](
-                    left_hand=left_hand_side, right_hand_value=assignee
-                )
+                dispatch[type(left_hand_side)](left_hand=left_hand_side, right_hand_value=assignee)
 
         right_hand_value = self.eval_expression(root.right_hand.root_expr)
         op_type = root.op
 
-        if (
-            op_type != TokenType.T_ASSIGN
-            and type(root.left_hand) is not ArrayLiteralNode
-        ):
+        if op_type != TokenType.T_ASSIGN and type(root.left_hand) is not ArrayLiteralNode:
             right_hand_value = self.eval_expression(
                 BinOpNode(
                     left=root.left_hand,
@@ -778,18 +767,14 @@ class Evaluator:
 
         elif type(root) is IdentifierNode:
             # converting every bang identifier into a python literal
-            return self.scope_stack[self.search_for_var(root.value, root.meta_data)][
-                root.value
-            ]
+            return self.scope_stack[self.search_for_var(root.value, root.meta_data)][root.value]
 
         elif type(root) is CallNode:
             # executing a bang block
 
             if type(root.name) is IdentifierNode:
                 func_name = root.name.value
-                callee = self.scope_stack[
-                    self.search_for_var(func_name, root.meta_data)
-                ][func_name]
+                callee = self.scope_stack[self.search_for_var(func_name, root.meta_data)][func_name]
             else:
                 func_name = None
                 callee = self.eval_expression(root.name)
@@ -975,10 +960,7 @@ class Evaluator:
                         base = a if len(a) != 1 else b
                         return [list_div_helper(x, divisor, "true") for x in base]
                     else:
-                        return [
-                            list_div_helper(i, j, "true")
-                            for i, j in zip(a, b, strict=False)
-                        ]
+                        return [list_div_helper(i, j, "true") for i, j in zip(a, b, strict=False)]
 
             def list_floor_div(a, b):
                 if type(a) is list and type(b) is list:
@@ -997,10 +979,7 @@ class Evaluator:
                         base = a if len(a) != 1 else b
                         return [list_div_helper(x, divisor, "floor") for x in base]
                     else:
-                        return [
-                            list_div_helper(i, j, "floor")
-                            for i, j in zip(a, b, strict=False)
-                        ]
+                        return [list_div_helper(i, j, "floor") for i, j in zip(a, b, strict=False)]
 
             supported_types = {
                 TokenType.T_PLUS: operator.add,
@@ -1115,10 +1094,7 @@ class Evaluator:
                 TokenType.T_IN: eval_different_in,
             }
 
-            if (
-                op not in supported_types
-                and (type(left), type(right), op) not in supported_types
-            ):
+            if op not in supported_types and (type(left), type(right), op) not in supported_types:
                 raise EvaluatorError(
                     self.file,
                     f"operation '{op}' not supported between {type(left)} and {type(right)}",
@@ -1144,9 +1120,7 @@ class Evaluator:
         }
         same_type = [int, float, bool]
         dispatcher = eval_different_bin_op
-        if type(left) is type(right) or (
-            type(left) in same_type and type(right) in same_type
-        ):
+        if type(left) is type(right) or (type(left) in same_type and type(right) in same_type):
             dispatcher = type_dispatch.get(type(left))
 
         return dispatcher(left, op, right)

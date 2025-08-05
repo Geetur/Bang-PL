@@ -199,6 +199,35 @@ output:
 720
 ```
 
+## 6. storing functions in things, and calling them
+```
+
+
+fn bar args 
+return dict
+end
+
+# bar{} = dict; so you are calling dict{1,2}
+print{bar{}{1,2}}
+
+func_dic = dict{"hello", dict}
+to_call = func_dic["hello"]
+print{to_call{1,2, 4, 5}}
+
+fn foo args 
+return [[[len]]]
+end
+
+x = foo{}[0][0][0]{"123456hi"}
+print{x}
+```
+output:
+```
+{1: 2}
+{1:2, 4:5}
+8
+```
+
 ## Running the Test-Suite
 ```
 pytest bang\semantic\semantic_tests.py
