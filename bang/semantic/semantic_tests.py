@@ -215,6 +215,14 @@ def analyze(code: str, tmp_path):
         "dict{set{1, 2, 3, 4}}\n",
         "dict{set{true, false, false, true}}\n",
         'dict{set{"true", "false", "false", "true"}}\n',
+        # shadowing built in set
+        "fn set args; return [1,2,3]; end; a = set{}[1]\n",
+        "fn set args; return [1,2,3]; end; a = set{dict{1, 2}}\n",
+        "fn set args; return [1,2,3]; end; a = set{[[1, 2]]}\n",
+        # shadowing built in dict
+        "fn dict args; return [1,2,3]; end; a = dict{}[0]\n",
+        "fn dict args; return [1,2,3]; end; a = dict{dict{1, 2}}\n",
+        "fn dict args; return [1,2,3]; end; a = dict{1}\n",
         # there are many examples that pass the semantic analyzer but
         # would throw a runetime error because in this semantic analyzer we are simply
         # performing static analysis; anything that would require evaluation

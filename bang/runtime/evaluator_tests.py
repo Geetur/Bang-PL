@@ -252,6 +252,14 @@ def evaluate(code: str, tmp_path):
         'fn foo args\n return len\nend\nx = foo{}{"123456hi"}\n',
         'fn foo args\n return [len]\nend\nx = foo{}[0]{"123456hi"}\n',
         'fn foo args\n return [[[len]]]\nend\nx = foo{}[0][0][0]{"123456hi"}\n',
+        # shadowing built in set
+        "fn set args; return [1,2,3]; end; a = set{}[1]\n",
+        "fn set args; return [1,2,3]; end; a = set{dict{1, 2}}\n",
+        "fn set args; return [1,2,3]; end; a = set{[[1, 2]]}\n",
+        # shadowing built in dict
+        "fn dict args; return [1,2,3]; end; a = dict{}[0]\n",
+        "fn dict args; return [1,2,3]; end; a = dict{dict{1, 2}}\n",
+        "fn dict args; return [1,2,3]; end; a = dict{1}\n",
     ],
 )
 def test_evaluator_valid(program, tmp_path):
