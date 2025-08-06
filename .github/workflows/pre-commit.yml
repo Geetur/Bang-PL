@@ -1,0 +1,8 @@
+name: pre-commit
+on: [push, pull_request]
+jobs:
+  hooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pre-commit/action@v3.0.1   # mirrors your local pre-commit
