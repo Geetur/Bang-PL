@@ -20,7 +20,9 @@ from bang.parsing.parser_nodes import (
     BreakNode,
     CallNode,
     ContinueNode,
+    DataClassNode,
     ExpressionNode,
+    FieldAccessNode,
     FloatLiteralNode,
     ForNode,
     FunctionNode,
@@ -35,7 +37,9 @@ from bang.parsing.parser_nodes import (
     WhileNode,
 )
 from bang.runtime.evaluator_nodes import (
+    runtime_dataclass,
     runtime_function,
+    runtime_instance,
 )
 
 
@@ -451,6 +455,7 @@ class Evaluator:
             ExpressionNode: self.eval_expression,
             FunctionNode: self.eval_function,
             CallNode: self.eval_expression,
+            DataClassNode: self.eval_dataclass,
         }
 
     def eval_program(self):
@@ -463,6 +468,12 @@ class Evaluator:
     def eval_construct(self, root):
         handler = self.construct_to_eval.get(type(root))
         return handler(root)
+
+    def eval_dataclass(self, root):
+        dataclass_name = root.name
+        seen = set()
+        dataclass_fields = [f for f in root.fields if not (f in seen or seen.add(f))]
+        self.initalize_var(dataclass_name, runtime_dataclass(fields=dataclass_fields))
 
     def eval_function(self, root):
         function_name = root.name
@@ -660,6 +671,53 @@ class Evaluator:
                     root.meta_data.column_end,
                 ) from None
 
+        def eval_assignment_field(left_hand, right_hand_value):
+            base = self.eval_expression(left_hand.base)
+
+            chain = left_hand.field
+
+            for name in chain[:-1]:
+                if type(base) is not runtime_instance:
+                    raise EvaluatorError(
+                        self.file,
+                        "field access is only performable on instances of classes",
+                        left_hand.meta_data.line,
+                        left_hand.meta_data.column_start,
+                        left_hand.meta_data.column_end,
+                    )
+                if name not in base.fields:
+                    raise EvaluatorError(
+                        self.file,
+                        "field name wasn't included in the "
+                        "definition of the instance's corresponding class",
+                        left_hand.meta_data.line,
+                        left_hand.meta_data.column_start,
+                        left_hand.meta_data.column_end,
+                    )
+                base = base.fields[name]
+
+            final_name = chain[-1]
+
+            if type(base) is not runtime_instance:
+                raise EvaluatorError(
+                    self.file,
+                    "field access is only performable on instances of classes",
+                    left_hand.meta_data.line,
+                    left_hand.meta_data.column_start,
+                    left_hand.meta_data.column_end,
+                )
+            if final_name not in base.fields:
+                raise EvaluatorError(
+                    self.file,
+                    "field name wasn't included in the definition "
+                    "of the instance's corresponding class",
+                    left_hand.meta_data.line,
+                    left_hand.meta_data.column_start,
+                    left_hand.meta_data.column_end,
+                )
+
+            base.fields[final_name] = right_hand_value
+
         def eval_assignment_multi(left_hand, right_hand_value):
             if type(right_hand_value) not in [list, ArrayLiteralNode]:
                 raise EvaluatorError(
@@ -682,6 +740,7 @@ class Evaluator:
                 IdentifierNode: eval_assignment_typical,
                 IndexNode: eval_assignment_index,
                 ArrayLiteralNode: eval_assignment_multi,  # nested
+                FieldAccessNode: eval_assignment_field,
             }
 
             for i, n in enumerate(left_hand.elements):
@@ -715,6 +774,7 @@ class Evaluator:
             IdentifierNode: eval_assignment_typical,
             IndexNode: eval_assignment_index,
             ArrayLiteralNode: eval_assignment_multi,
+            FieldAccessNode: eval_assignment_field,
         }
 
         find_assignment_type[type(root.left_hand)](
@@ -772,6 +832,8 @@ class Evaluator:
         elif type(root) is CallNode:
             # executing a bang block
 
+            # calling dynamic value?
+
             if type(root.name) is IdentifierNode:
                 func_name = root.name.value
                 callee = self.scope_stack[self.search_for_var(func_name, root.meta_data)][func_name]
@@ -781,9 +843,31 @@ class Evaluator:
 
             arg_vals = [self.eval_expression(i.root_expr) for i in root.args]
 
+            # calling dataclass
+
+            if type(callee) is runtime_dataclass:
+                fields = {}
+                for idx, field in enumerate(callee.fields):
+                    fields[field] = None
+                    if len(root.args) > idx:
+                        fields[field] = arg_vals[idx]
+
+                return runtime_instance(of=root.name.value, fields=fields)
+
+            # calling function value?
             if type(callee) is runtime_function:
                 return self.eval_call(callee, arg_vals, root.meta_data)
 
+            if not callable(callee):
+                raise EvaluatorError(
+                    self.file,
+                    f"attempt to call non-function (type {type(callee)})",
+                    root.meta_data.line,
+                    root.meta_data.column_start,
+                    root.meta_data.column_end,
+                )
+
+            # has to be last due to dict access throwing error on non-func-name
             if func_name in self.built_in_functions:
                 return self.built_in_functions[func_name](arg_vals, root.meta_data)
 
@@ -799,6 +883,29 @@ class Evaluator:
                 root.meta_data.column_start,
                 root.meta_data.column_end,
             )
+
+        elif type(root) is FieldAccessNode:
+            base = self.eval_expression(root.base)
+            for name in root.field:
+                if type(base) is not runtime_instance:
+                    raise EvaluatorError(
+                        self.file,
+                        "field access is only performable on instances of classes",
+                        root.meta_data.line,
+                        root.meta_data.column_start,
+                        root.meta_data.column_end,
+                    )
+                if name not in base.fields:
+                    raise EvaluatorError(
+                        self.file,
+                        "field name wasn't included in the definition of "
+                        "the instance's corresponding class",
+                        root.meta_data.line,
+                        root.meta_data.column_start,
+                        root.meta_data.column_end,
+                    )
+                base = base.fields[name]
+            return base
 
     # -------------------------------------------
     # BINARY OPERATIONS START

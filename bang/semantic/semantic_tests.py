@@ -185,6 +185,11 @@ def analyze(code: str, tmp_path):
         '[hello, world] = ["5", 2]\n [hello, world] /= ["1", 2]\n',
         "[hello, world] = [[5], 2]\n [hello, world] /= [[1], 2]\n",
         "fn bar args\n return 5\nend\n[x, y] = [bar{}, bar{}+1]\n",
+        "data Car [model_type, engine_type, color_type];  car = Car{}; [car.model_type, car.engine_type] = [1, 2]\n",
+        "data Car [model_type, engine_type, color_type];  car = Car{}; [car.model_type, car.engine_type] += [1, 2]\n",
+        "data Car [model_type, engine_type, color_type];  car = Car{}; [car.model_type, car.engine_type] -= [1, 2]\n",
+        "data Car [model_type, engine_type, color_type];  car = Car{}; [car.model_type, car.engine_type] /= [1, 2]\n",
+        "data Car [model_type, engine_type, color_type];  car = Car{}; [car.model_type, car.engine_type] *= [1, 2]\n",
         # built in set
         "set{}\n",
         "set{1, 2, 3}\n",
@@ -223,6 +228,33 @@ def analyze(code: str, tmp_path):
         "fn dict args; return [1,2,3]; end; a = dict{}[0]\n",
         "fn dict args; return [1,2,3]; end; a = dict{dict{1, 2}}\n",
         "fn dict args; return [1,2,3]; end; a = dict{1}\n",
+        # dataclass operations
+        "data Car [model_type, engine_type, color_type];  car = Car{1,};\n",
+        "data Car [model_type, engine_type, color_type];  car = Car{1,2};\n",
+        "data Car [model_type, engine_type, color_type];  car = Car{1,2, 3};\n",
+        "data Car [model_type, engine_type, color_type];  car = Car{[1]}; car.model_type[0] = 3\n",
+        "data Car [model_type, engine_type, color_type];  car = Car{dict}; dic = car.model_type{1,2}\n",
+        'data Car [model_type, engine_type, color_type]; data ColorType [seen, hex]; color_type = ColorType{}; car = Car{}; \
+        car.color_type = color_type; car.color_type.seen = "blue"\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = "ford"; car.model_type += "hi"\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = "ford"; car.model_type *= 3\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = "ford"; car.model_type -= "o"\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = "ford"; car.model_type /= "o"\n',
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = 1; car.model_type += 1\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = true; car.model_type *= 1\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = false; car.model_type -= 3\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = 1; car.model_type /= 1\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = [1]; car.model_type += [1]\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = [1,1,1]; car.model_type *= 2\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = [1,1,1]; car.model_type *= [2]\n"
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = [1,1,1]; car.model_type *= [2, 5 ,6]\n"
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = [1,1,11,,,,,]; car.model_type -= [1]\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = [1,1,1,1,1,1]; car.model_type /= [1]\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = [1,1,1,1,1,1]; car.model_type /= [1,2,3,4,5,6]\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = set{1}; car.model_type += set{1}\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = set{1}; car.model_type += set{[1]}\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = set{1}; car.model_type += set{1,2,3,4}\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = dict{1, 2}; car.model_type += dict{1,2,3,4}\n",
         # there are many examples that pass the semantic analyzer but
         # would throw a runetime error because in this semantic analyzer we are simply
         # performing static analysis; anything that would require evaluation
@@ -287,7 +319,7 @@ def test_semantic_valid(program, tmp_path):
         'a = [5, [2]]\n b = a[[1] + "a"][3]',
         'a = [5, [2]]\n b = a[1 + "a"][3]',
         "a = [5, [2]]\n b = a[1 + [1]][3]",
-        # in operator
+        # invalid in operator
         "a = [5] in 5\n",
         "a = 5 in 5\n",
         "a=true in 5\na=false in 5\n",
@@ -301,7 +333,7 @@ def test_semantic_valid(program, tmp_path):
         'a=5 in "hello"\n',
         'a=[1] in "hello"\n',
         'a=true in "hello"\n',
-        # multi-variable assignments
+        # invalid multi-variable assignments
         "[hello, world] = [5]\n",
         '[hello, world] = ["5", 2]\n [hello, world] += [1, 2]\n',
         '[hello, world] = ["5", 2]\n [hello, world] += [true, false]\n',
@@ -315,7 +347,7 @@ def test_semantic_valid(program, tmp_path):
         '[hello, world] = ["5", 2]\n [hello, world] /= [1, 2]\n',
         '[hello, world] = ["5", 2]\n [hello, world] /= [[1], false]\n',
         '[hello, world] = ["5", 2]\n [hello, world] /= [true, 2]\n',
-        # built in set
+        # invalid built in set
         "a = set{[1], [1]}\n",
         "a = set{set{}, set{}}\n",
         "a = set{dict{}}\n",
@@ -328,7 +360,7 @@ def test_semantic_valid(program, tmp_path):
         "set{set{[1], [1]}}\n",
         "set{set{set{}, set{}}}\n",
         "set{set{dict{}}}\n",
-        # built in  dict
+        # invalid built in  dict
         "a = dict{1,2,3}\n",
         "a = dict{[1,2,3]}\n",
         'a = dict{"hi","no","ho"}\n',
@@ -351,6 +383,36 @@ def test_semantic_valid(program, tmp_path):
         'dict{set{"hi","no","ho"}}\n',
         "dict{set{set{1},1}}\n",
         "dict{set{dict{1, 2}, 1}}\n",
+        # invalid dataclass operations
+        "data Car [model_type, engine_type, color_type];  car = Car{1,2,3,4};\n",
+        "data Car [model_type, engine_type, color_type]; car = 1; car.model_type\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.unknown_type\n",
+        'data Car [model_type, engine_type, color_type]; random_type = "hello"; car = Car{1}; car.model_type.random_type\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = "ford"; car.model_type += 1\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = "ford"; car.model_type *= [3]\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = "ford"; car.model_type -= 1\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = "ford"; car.model_type /= 1\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = "ford"; car.model_type += [1]\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = "ford"; car.model_type *= [3]\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = "ford"; car.model_type -= [1]\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = "ford"; car.model_type /= [1]\n',
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = 1; car.model_type += [1]\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = 1; car.model_type -= [1]\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = 1; car.model_type /= [1]\n",
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = 1; car.model_type += "1"\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = false; car.model_type -= "1"\n',
+        'data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = 1; car.model_type /= "1"\n',
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = 1; car.model_type += set{1,2}\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = true; car.model_type *= set{1,2}\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = false; car.model_type -= set{1,2}\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = 1; car.model_type /= set{1,2}\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = 1; car.model_type += dict{1,2}\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = true; car.model_type *= dict{1,2}\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = false; car.model_type -= dict{1,2}\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = 1; car.model_type /= dict{1,2}\n",
+        "data Car [model_type, engine_type, color_type]; car = Car{}; car.model_type = [1]; car.model_type[1] = 1\n",
+        "data B [z]; b = B{[0]}; print{b.z[1]}\n",
+        "data P [x]; p = P{1}; p{}\n",
     ],
 )
 def test_semantic_invalid(program, tmp_path):

@@ -27,7 +27,8 @@ class TokenType(Enum):
     T_LBRACKET = auto()  # [
     T_RBRACKET = auto()  # ]
     T_COMMA = auto()  # ,
-    T_SEMICOLON = auto()
+    T_SEMICOLON = auto()  # ;
+    T_DOT = auto()  # .
 
     # Double-character tokens
     T_PLUS_ASSIGN = auto()  # +=
@@ -43,11 +44,11 @@ class TokenType(Enum):
     T_GTEQ = auto()  # >=
     T_DSLASH = auto()  # //
     T_EXPO = auto()  # **
-    T_AND = auto()
-    T_OR = auto()
+    T_AND = auto()  # &&
+    T_OR = auto()  # ||
 
     # Literals
-    T_NONE = auto()
+    T_NONE = auto()  # none
     T_INT = auto()
     T_FLOAT = auto()
     T_BOOL = auto()
@@ -55,17 +56,18 @@ class TokenType(Enum):
     T_IDENT = auto()
 
     # Keywords
-    T_IF = auto()
-    T_ELIF = auto()
-    T_ELSE = auto()
-    T_FOR = auto()
-    T_WHILE = auto()
-    T_BREAK = auto()
-    T_CONTINUE = auto()
-    T_RETURN = auto()
-    T_END = auto()
-    T_FN = auto()
-    T_IN = auto()
+    T_IF = auto()  # if
+    T_ELIF = auto()  # elif
+    T_ELSE = auto()  # else
+    T_FOR = auto()  # for
+    T_WHILE = auto()  # while
+    T_BREAK = auto()  # break
+    T_CONTINUE = auto()  # continue
+    T_RETURN = auto()  # return
+    T_END = auto()  # end
+    T_FN = auto()  # fn
+    T_IN = auto()  # in
+    T_DATA = auto()  # data
 
 
 @dataclass
@@ -141,4 +143,5 @@ KEYWORDS = {
     "return": TokenType.T_RETURN,
     "end": TokenType.T_END,
     "fn": TokenType.T_FN,
+    "data": TokenType.T_DATA,
 }

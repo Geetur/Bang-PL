@@ -169,7 +169,12 @@ class Lexer:
                     self.advance()
                 if self.error_msg:
                     self.error_handler()
-                ttype = TokenType.T_FLOAT if decimal_count else TokenType.T_INT
+                if decimal_count:
+                    ttype = TokenType.T_FLOAT
+                    if self.token == ".":
+                        ttype = TokenType.T_DOT
+                else:
+                    ttype = TokenType.T_INT
                 self.flush_token(ttype, self.token)
                 continue
 

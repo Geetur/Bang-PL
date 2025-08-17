@@ -14,9 +14,11 @@ from bang.parsing.parser_nodes import (
     BreakNode,
     CallNode,
     ContinueNode,
+    DataClassNode,
     ElifNode,
     ElseNode,
     ExpressionNode,
+    FieldAccessNode,
     FloatLiteralNode,
     ForNode,
     FunctionNode,
@@ -33,9 +35,11 @@ from bang.parsing.parser_nodes import (
 from bang.semantic.semantic_nodes import (
     ArrayType,
     BoolType,
+    DataClassType,
     DictType,
     DynamicType,
     FunctionType,
+    InstanceType,
     NoneType,
     NumberType,
     SetType,
@@ -176,6 +180,7 @@ class SemanticAnalysis:
             ExpressionNode: self.walk_expression,
             FunctionNode: self.walk_function,
             CallNode: self.walk_expression,
+            DataClassNode: self.walk_dataclass,
         }
 
     def walk_program(self):
@@ -203,6 +208,13 @@ class SemanticAnalysis:
         self.walk_block(root.body)
         self.scope_stack.pop()
         self.func_depth -= 1
+
+    def walk_dataclass(self, root):
+        dataclass_name = root.name
+        # removing duplicate names
+        seen = set()
+        dataclass_fields = [f for f in root.fields if not (f in seen or seen.add(f))]
+        self.initalize_var(dataclass_name, DataClassType(fields=dataclass_fields))
 
     def walk_block(self, root):
         # A block just walks its children in the current scope
@@ -346,7 +358,7 @@ class SemanticAnalysis:
 
         def walk_assignment_index(left_hand, op_type, right_hand):
             left_hand_type = self.walk_expression(left_hand)
-            if left_hand_type != DynamicType and right_hand != DynamicType:
+            if type(left_hand_type) is not DynamicType and type(right_hand) is not DynamicType:
                 if not left_hand_type:
                     raise SemanticError(
                         self.file,
@@ -377,13 +389,105 @@ class SemanticAnalysis:
                                 root.meta_data.column_end,
                             )
 
+        def walk_assignment_field_access(left_hand, op_type, right_hand):
+            base_type = self.walk_expression(left_hand.base)
+
+            fields_chain = left_hand.field
+            for name in fields_chain[:-1]:
+                if type(base_type) is DynamicType:
+                    return
+                if type(base_type) is not InstanceType:
+                    raise SemanticError(
+                        self.file,
+                        "field access only performable on instances of classes",
+                        left_hand.meta_data.line,
+                        left_hand.meta_data.column_start,
+                        left_hand.meta_data.column_end,
+                    )
+                derived_class = self.search_for_var(base_type.of)
+                if type(derived_class) is DynamicType:
+                    return
+                if type(derived_class) is not DataClassType:
+                    raise SemanticError(
+                        self.file,
+                        "field access is only performable on instances of classes",
+                        left_hand.meta_data.line,
+                        left_hand.meta_data.column_start,
+                        left_hand.meta_data.column_end,
+                    )
+                if name not in derived_class.fields:
+                    raise SemanticError(
+                        self.file,
+                        "field name wasn't included in the definition of "
+                        "the instance's corresponding class",
+                        left_hand.meta_data.line,
+                        left_hand.meta_data.column_start,
+                        left_hand.meta_data.column_end,
+                    )
+                base_type = base_type.fields[name]
+
+            if type(base_type) is DynamicType:
+                return
+            if type(base_type) is not InstanceType:
+                raise SemanticError(
+                    self.file,
+                    "field access is only performable on instances of classes",
+                    left_hand.meta_data.line,
+                    left_hand.meta_data.column_start,
+                    left_hand.meta_data.column_end,
+                )
+
+            parent_instance_type = base_type
+            final_field = fields_chain[-1]
+            derived_class = self.search_for_var(parent_instance_type.of)
+
+            if type(derived_class) is DynamicType:
+                return
+            if type(derived_class) is not DataClassType or final_field not in derived_class.fields:
+                raise SemanticError(
+                    self.file,
+                    "field name wasn't included in the definition "
+                    "of the instance's corresponding class",
+                    left_hand.meta_data.line,
+                    left_hand.meta_data.column_start,
+                    left_hand.meta_data.column_end,
+                )
+
+            current_field_type = parent_instance_type.fields[final_field]
+            if (
+                type(current_field_type) is not DynamicType
+                and type(right_hand) is not DynamicType
+                and op_type in self.ARITH_ASSIGNMENTS
+            ):
+                op_norm = self.assignment_to_normal[op_type]
+                same_num_bool = type(right_hand) in [NumberType, BoolType] and type(
+                    current_field_type
+                ) in [
+                    NumberType,
+                    BoolType,
+                ]
+                if not (same_num_bool or type(current_field_type) is type(right_hand)):
+                    if (
+                        type(current_field_type),
+                        type(right_hand),
+                        op_norm,
+                    ) not in self.BIN_OP_DIFFERENT_RULES:
+                        raise SemanticError(
+                            self.file,
+                            "Invalid operation",
+                            left_hand.meta_data.line,
+                            left_hand.meta_data.column_start,
+                            left_hand.meta_data.column_end,
+                        )
+            parent_instance_type.fields[final_field] = right_hand
+
         def walk_assignment_multi(left_hand, op_type, right_hand):
             if type(right_hand) is not DynamicType:
                 if type(right_hand) is not ArrayType:
                     raise SemanticError(
                         self.file,
-                        "multi-initialization requires right hand to be "
-                        "dynamic type or static array type",
+                        "multi-initialization requires right hand"
+                        " to be dynamic type or static array type",
                         root.meta_data.line,
                         root.meta_data.column_start,
                         root.meta_data.column_end,
@@ -408,6 +512,7 @@ class SemanticAnalysis:
                     IdentifierNode: walk_assignment_typical,
                     IndexNode: walk_assignment_index,
                     ArrayLiteralNode: walk_assignment_multi,  # nested destructuring
+                    FieldAccessNode: walk_assignment_field_access,
                 }
 
                 for i, n in enumerate(left_hand.elements):
@@ -419,6 +524,7 @@ class SemanticAnalysis:
             IdentifierNode: walk_assignment_typical,
             IndexNode: walk_assignment_index,
             ArrayLiteralNode: walk_assignment_multi,
+            FieldAccessNode: walk_assignment_field_access,
         }
 
         find_assignment_type[type(root.left_hand)](
@@ -613,6 +719,10 @@ class SemanticAnalysis:
                         return SetType(value=expected_return)
                     elif type(typed_args[0]) in [SetType, ArrayType]:
                         typed_args = typed_args[0].value
+                        # need this is none check due to bin op/un op
+                        # returning base_type(value=None)
+                        if typed_args is None:
+                            return SetType(value=expected_return)
 
                 for arg in typed_args:
                     if type(arg) in self.unhashable_types:
@@ -643,7 +753,7 @@ class SemanticAnalysis:
                 if len(typed_args) % 2 != 0:
                     raise SemanticError(
                         self.file,
-                        f"'{root.name}' dict must be even, because every key must have a value",
+                        f"'{root.name.value}' dict must be even; every key must have a value",
                         root.meta_data.line,
                         root.meta_data.column_start,
                         root.meta_data.column_end,
@@ -652,7 +762,8 @@ class SemanticAnalysis:
                     if type(arg) in self.unhashable_types and is_key:
                         raise SemanticError(
                             self.file,
-                            f"'{root.name}' dict key expects hashable types only, not {type(arg)}",
+                            f"'{root.name.value}' dict key expects hashable types only,"
+                            f"not {type(arg)}",
                             root.meta_data.line,
                             root.meta_data.column_start,
                             root.meta_data.column_end,
@@ -674,10 +785,27 @@ class SemanticAnalysis:
             if type(callee_type) is DynamicType:
                 return DynamicType()
 
+            if type(callee_type) is DataClassType:
+                if len(root.args) > len(callee_type.fields):
+                    raise SemanticError(
+                        self.file,
+                        "more arguments than dataclass paramaters",
+                        root.meta_data.line,
+                        root.meta_data.column_start,
+                        root.meta_data.column_end,
+                    )
+                fields = {}
+                for idx, field in enumerate(callee_type.fields):
+                    fields[field] = DynamicType()
+                    if len(root.args) > idx:
+                        fields[field] = self.walk_expression(root.args[idx].root_expr)
+
+                return InstanceType(of=root.name.value, fields=fields)
+
             if not callee_type:
                 raise SemanticError(
                     self.file,
-                    f"function not intialized '{root.name}'",
+                    f"function not intialized '{root.name.value}'",
                     root.meta_data.line,
                     root.meta_data.column_start,
                     root.meta_data.column_end,
@@ -686,7 +814,7 @@ class SemanticAnalysis:
             if type(callee_type) not in [FunctionType, SetType, DictType]:
                 raise SemanticError(
                     self.file,
-                    f"attempt to call non-function '{root.name}'",
+                    f"attempt to call non-function '{root.name.value}'",
                     root.meta_data.line,
                     root.meta_data.column_start,
                     root.meta_data.column_end,
@@ -703,3 +831,43 @@ class SemanticAnalysis:
                 self.walk_expression(arg.root_expr)
 
             return DynamicType()
+
+        elif type(root) is FieldAccessNode:
+            # to do
+            base = self.walk_expression(root.base)
+            fields = root.field
+
+            for field_name in fields:
+                if type(base) is DynamicType:
+                    return DynamicType()
+                if type(base) is not InstanceType:
+                    raise SemanticError(
+                        self.file,
+                        "field access is only performable on instances of classes",
+                        root.meta_data.line,
+                        root.meta_data.column_start,
+                        root.meta_data.column_end,
+                    )
+                derived_class = self.search_for_var(base.of)
+                if type(derived_class) is DynamicType:
+                    return DynamicType()
+                if type(derived_class) is not DataClassType:
+                    raise SemanticError(
+                        self.file,
+                        "field access is only performable on instances of classes",
+                        root.meta_data.line,
+                        root.meta_data.column_start,
+                        root.meta_data.column_end,
+                    )
+                if field_name not in derived_class.fields:
+                    raise SemanticError(
+                        self.file,
+                        "field name wasn't included in the definition of "
+                        "the instance's corresponding class",
+                        root.meta_data.line,
+                        root.meta_data.column_start,
+                        root.meta_data.column_end,
+                    )
+                field_type = base.fields[field_name]
+                base = field_type
+            return base

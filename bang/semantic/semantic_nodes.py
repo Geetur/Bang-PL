@@ -57,3 +57,14 @@ class SetType:
 @dataclass
 class DictType:
     value: Any
+
+
+@dataclass
+class DataClassType:
+    fields: list[str]
+
+
+@dataclass
+class InstanceType:
+    of: str  # dataclass name
+    fields: dict[str, Any]
