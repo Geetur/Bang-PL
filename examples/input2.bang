@@ -178,3 +178,13 @@ print{two_sum, 1}
 
 
 #hi
+
+a = 5 + 4.35556
+
+data Car [model_type, engine_type, color_type]
+
+car = Car{}
+
+car.model_type = a
+
+print{b}

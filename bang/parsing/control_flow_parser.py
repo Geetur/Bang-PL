@@ -57,6 +57,14 @@ class ControlFlowParser:
             if type(node) in control_flow_nodes:
                 stack.append(node)
             elif type(node) is EndNode:
+                if not stack:
+                    raise ParserError(
+                        self.file,
+                        "end statement missing matching construct (no construct exists)",
+                        node.meta_data.line,
+                        node.meta_data.column_start,
+                        node.meta_data.column_end,
+                    )
                 construct = stack.pop()
                 if type(construct) in dependant_nodes:
                     if not stack or (type(stack[-1]) is not IFNode):

@@ -13,10 +13,12 @@ from bang.parsing.parser_nodes import (
     BreakNode,
     CallNode,
     ContinueNode,
+    DataClassNode,
     ElifNode,
     ElseNode,
     EndNode,
     ExpressionNode,
+    FieldAccessNode,
     FloatLiteralNode,
     ForNode,
     FunctionNode,
@@ -88,6 +90,7 @@ class ExpressionParser:
         TokenType.T_NEGATE: 9,  # !
         TokenType.T_UPLUS: 9,
         TokenType.T_UMINUS: 9,
+        TokenType.T_DOT: 10,
     }
 
     # you can technically handle assignments within the SYA
@@ -122,6 +125,7 @@ class ExpressionParser:
                 TokenType.T_SLASH,
                 TokenType.T_DSLASH,
                 TokenType.T_IN,
+                TokenType.T_DOT,
             )
         },
     }
@@ -249,6 +253,9 @@ class ExpressionParser:
                     elif tok.type == TokenType.T_FN:
                         self.handle_function_def(line_idx)
                         break
+                    elif tok.type == TokenType.T_DATA:
+                        self.handle_dataclass_def(line_idx)
+                        break
                     elif tok.type == TokenType.T_RETURN:
                         self.handle_return(line_idx)
                         break
@@ -347,6 +354,15 @@ class ExpressionParser:
         line = self.post_split[line_idx]
         single_token = line[0]
 
+        if len(line) != 1:
+            raise ParserError(
+                self.file,
+                f"{single_token.value} token must exist solely \
+                (no other tokens allowed to exist on same line)",
+                single_token.line,
+                single_token.column_start,
+                single_token.column_end,
+            )
         single_token_to_class = {
             TokenType.T_END: EndNode,
             TokenType.T_BREAK: BreakNode,
@@ -392,6 +408,58 @@ class ExpressionParser:
             meta_data=single_token,
         )
         self.post_SYA.append(function_node)
+
+    def handle_dataclass_def(self, line_idx):
+        line = self.post_split[line_idx]
+
+        data_keyword_token = line[0]
+        if len(line) <= 2:
+            raise ParserError(
+                self.file,
+                "dataclass definition syntax is \
+                [data keyword][dataclass name][list of field names]",
+                data_keyword_token.line,
+                data_keyword_token.column_start,
+                data_keyword_token.column_end,
+            )
+
+        dataclass_name = line[1]
+        if dataclass_name.type != TokenType.T_IDENT:
+            raise ParserError(
+                self.file,
+                "dataclass name must be an identifier",
+                data_keyword_token.line,
+                data_keyword_token.column_start,
+                data_keyword_token.column_end,
+            )
+
+        list_of_field_names = self.shunting_yard_algo(line[2:])
+        # obviously instead of doing two o(n) passes over the
+        # elements list we could just do one
+        # more complex for loop, but in the vast,
+        # vast majority of cases, the dataclass
+        # field name list will be less than 20 tokens long, o(20)
+        # list comprehensions are pretty fast
+        if type(list_of_field_names.root_expr) is not ArrayLiteralNode or (
+            any(
+                type(i.root_expr) is not IdentifierNode
+                for i in list_of_field_names.root_expr.elements
+            )
+        ):
+            raise ParserError(
+                self.file,
+                "list of field names must be a list of identifiers",
+                data_keyword_token.line,
+                data_keyword_token.column_start,
+                data_keyword_token.column_end,
+            )
+        list_of_field_names_raw_values = [
+            i.root_expr.value for i in list_of_field_names.root_expr.elements
+        ]
+        dataclass_node = DataClassNode(
+            dataclass_name.value, list_of_field_names_raw_values, data_keyword_token
+        )
+        self.post_SYA.append(dataclass_node)
 
     def handle_function_call(self, line, function_name):
         elements = []
@@ -474,7 +542,7 @@ class ExpressionParser:
         self.post_SYA.append(return_node)
 
     def handle_assignments(self, line, assignment_idx):
-        valid_left_hands = {IndexNode, IdentifierNode, ArrayLiteralNode}
+        valid_left_hands = {IndexNode, IdentifierNode, ArrayLiteralNode, FieldAccessNode}
 
         assignment_op_token = line[assignment_idx]
         left_hand = line[:assignment_idx]
@@ -495,7 +563,7 @@ class ExpressionParser:
                 if type(i.root_expr) not in valid_left_hands:
                     raise ParserError(
                         self.file,
-                        "multi-initalization syntax is"
+                        f"{type(i.root_expr)} multi-initalization syntax is"
                         "[list of identifiers][=][list of expressions]",
                         assignment_op_token.line,
                         assignment_op_token.column_start,
@@ -519,7 +587,7 @@ class ExpressionParser:
         self.illegal_assignment = 2
 
     def handle_index(self, base, line):
-        # this must be updated any time a new index option is added to the lang
+        # this must be updated any time a new non-indexable literal option is added to the lang
         NOT_INDEXABLE = {IntegerLiteralNode, FloatLiteralNode, NoneLiteralNode, BooleanLiteralNode}
 
         if type(base) in NOT_INDEXABLE:
@@ -663,14 +731,42 @@ class ExpressionParser:
             TokenType.T_LBRACKET,
             TokenType.T_LBRACE,
             TokenType.T_RBRACE,
+            TokenType.T_DOT,
         }
+
+        # since we want to treat any field access in the same vein
+        # as a literal, it must take priority over every single other
+        # non-literal, so we create this collapser function and inject it
+        # into the caller for indexing and function literals to ensure this
+        def _collapse_field_ops():
+            while op_stack and op_stack[-1].type == TokenType.T_DOT:
+                apply_operator()
 
         def apply_operator():
             op_tok = op_stack.pop()
+
             # unary
+            # we probably want to make this and most other things in this
+            # parser called from a first-class dict
             if op_tok.type in unary_ops:
                 operand = output.pop()
                 output.append(UnaryOPNode(op=op_tok.type, meta_data=op_tok, operand=operand))
+            elif op_tok.type == TokenType.T_DOT:
+                right = output.pop()
+                left = output.pop()
+                if type(right) is not IdentifierNode:
+                    raise ParserError(
+                        self.file,
+                        "member access must be an identifier",
+                        op_tok.line,
+                        op_tok.column_start,
+                        op_tok.column_end,
+                    )
+                if type(left) is FieldAccessNode:
+                    left.field.append(right.value)
+                    output.append(left)
+                else:
+                    output.append(FieldAccessNode(base=left, field=[right.value], meta_data=op_tok))
             else:
                 # binary
                 right = output.pop()
@@ -769,12 +865,15 @@ class ExpressionParser:
                 # be indexed we'll throw an error, but the general rule still stands: if
                 # its an array following an operand, it has to be an index
                 else:
+                    _collapse_field_ops()
                     base = output.pop()
                     idx_node, consumed = self.handle_index(base, line[tok_idx:])
                     output.append(idx_node)
                     tok_idx += consumed
                 expect_operand = False
+
             elif tok.type == TokenType.T_LBRACE:
+                _collapse_field_ops()
                 function_name = output.pop()
                 call_node, consumed = self.handle_function_call(line[tok_idx:], function_name)
                 output.append(call_node)

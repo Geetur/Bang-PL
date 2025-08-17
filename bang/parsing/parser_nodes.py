@@ -289,3 +289,17 @@ class CallNode:
             name={self.name!r},\n
             arg_list={self.args!r}\n
             """
+
+
+@dataclass
+class DataClassNode:
+    name: str
+    fields: list[str]
+    meta_data: Lexeme
+
+
+@dataclass
+class FieldAccessNode:
+    base: Any
+    field: list[str]
+    meta_data: Lexeme
