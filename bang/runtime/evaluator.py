@@ -113,8 +113,7 @@ class Evaluator:
         # remember args is potentially a list of lists
 
         def _built_in_print(args, meta_data):
-            gen = (x if type(x) is not runtime_function else id(x) for x in args)
-            print(*gen)
+            print(*args
 
         def _built_in_len(args, meta_data):
             # changet this len args != 1 to accomodate any number of expected arguments
