@@ -3,14 +3,13 @@ from dataclasses import dataclass
 from bang.parsing.parser_nodes import BlockNode
 
 
-# add repr instead of changing print
 @dataclass
 class runtime_function:
     body: BlockNode
     params_name: str
     closure: list
 
-    def __repr__(self) -> str:
+    def repr(self) -> str:
         return f"<fn {id(self)}>"
 
 
@@ -18,7 +17,7 @@ class runtime_function:
 class runtime_dataclass:
     fields: list[str]
 
-    def __repr__(self) -> str:
+    def repr(self) -> str:
         return f"<data {id(self)}>"
 
 
