@@ -9,7 +9,7 @@ class runtime_function:
     params_name: str
     closure: list
 
-    def repr(self) -> str:
+    def __repr__(self) -> str:
         return f"<fn {id(self)}>"
 
 
@@ -17,7 +17,7 @@ class runtime_function:
 class runtime_dataclass:
     fields: list[str]
 
-    def repr(self) -> str:
+    def __repr__(self) -> str:
         return f"<data {id(self)}>"
 
 
