@@ -31,4 +31,9 @@ fn inc args; return args[0] + 1; end; data C [f]; c = C{inc}; print{c.f{41}}
 
 #fn bar args; return 5; end; data Class [rand]; fn foo args; return Class{bar}; end; x = foo{}.rand + [2,3,4]; print{x}
 
-#data P [x]; fn foo args; return P{1}; end; foo{}{}
+data P [x]; fn foo args; return P{1}; end; print{foo{}.x}
+p = P{}
+print{inc}
+print{P}
+print{p}
+

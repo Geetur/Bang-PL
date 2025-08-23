@@ -10,17 +10,22 @@ class runtime_function:
     params_name: str
     closure: list
 
+    def __repr__(self) -> str:
+        return f"<fn {id(self)}>"
+
 
 @dataclass
 class runtime_dataclass:
     fields: list[str]
 
+    def __repr__(self) -> str:
+        return f"<data {id(self)}>"
+
 
 @dataclass
 class runtime_instance:
-    of: runtime_dataclass
+    of: str
     fields: dict  # field_name -> value
 
-    def __repr__(self):
-        inner = ", ".join(f"{k}={repr(v)}" for k, v in self.fields.items())
-        return f"{self.of.name}{{{inner}}}"
+    def __repr__(self) -> str:
+        return f"<instance {id(self)}>"
