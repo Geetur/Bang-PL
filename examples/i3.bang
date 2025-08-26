@@ -37,3 +37,41 @@ print{inc}
 print{P}
 print{p}
 
+
+data Node [val, next];
+
+# Build from array -> head
+fn from_array args
+    arr = args[0]
+    [head, tail, i] = [none, none, 0]
+    while i < len{arr}
+        n = Node{arr[i]}
+        if head == none 
+            [head, tail] = [n, n]
+        else 
+            tail.next = n; tail = n
+            end
+        end
+        i += 1
+    end
+    return head
+end
+
+arr = [1,2,3,4,5,6,7]
+linked_list_head = from_array{arr}
+print{linked_list_head.val}
+# Reverse list (returns new head)
+fn reverse args 
+    prev = none; cur = args[0];
+    while cur != none 
+        nxt = cur.next
+        cur.next = prev
+        prev = cur
+        cur = nxt
+    end
+    return prev
+end
+
+rev_linked_list = reverse{linked_list_head}
+print{rev_linked_list.val}
+
