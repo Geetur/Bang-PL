@@ -154,7 +154,7 @@ output:
 ```
 [0,1,1,2,3,5,8,13,21]
 ```
-## 4. linked list initalization
+# 4. linked list initalization
 ```
 data Node [val, next];
 
@@ -184,7 +184,7 @@ output:
 ```
 1
 ```
-## 5. recursive factorial
+# 5. recursive factorial
 ```
 fn fact args
     n = args[0]
@@ -204,7 +204,7 @@ output:
 720
 ```
 
-## 6. storing functions in things, and calling them
+# 6. storing functions in things, and calling them
 ```
 
 
@@ -232,8 +232,6 @@ output:
 {1:2, 4:5}
 8
 ```
-
-## linked list ops with dataclasses
 
 ## Running the Test-Suite
 ```
