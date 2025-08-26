@@ -605,6 +605,12 @@ class Evaluator:
     # to let expressions which use the var in the future know that exists in the current scope
     # with each initalized var being associated with its respective type
     def initalize_var(self, left_hand, right_hand):
+        for depth in range(len(self.scope_stack) - 1, -1, -1):
+            scope = self.scope_stack[depth]
+            if left_hand in scope:
+                scope[left_hand] = right_hand
+                return
+        # Otherwise define it in the current scope
         self.scope_stack[-1][left_hand] = right_hand
 
     def search_for_var(self, name, potential_error):
@@ -847,7 +853,7 @@ class Evaluator:
             if type(callee) is runtime_dataclass:
                 fields = {}
                 for idx, field in enumerate(callee.fields):
-                    fields[field] = None
+                    fields[field] = 0
                     if len(root.args) > idx:
                         fields[field] = arg_vals[idx]
 

@@ -154,30 +154,35 @@ output:
 ```
 [0,1,1,2,3,5,8,13,21]
 ```
-## 4. house robber (for the dp gods)
+## 4. linked list initalization
 ```
-fn rob args
-    nums = args[0]
+data Node [val, next];
 
-    if len{nums} <= 2
-        return max{nums}
+# Build from array -> head
+fn from_array args
+    arr = args[0]
+    [head, tail, i] = [none, none, 0]
+    while i < len{arr}
+        n = Node{arr[i]}
+        if head == none 
+            [head, tail] = [n, n]
+        else 
+            tail.next = n; tail = n
+            end
+        end
+        i += 1
     end
-
-    nums[-2] = max{nums[-1], nums[-2]}
-
-    for i range{len{nums} - 3, -1, -1}
-        nums[i] = max{nums[i] + nums[i + 2], nums[i + 1]}
-    end
-
-    return nums[0]
+    return head
 end
 
-print{rob{[2,7,9,3,1]}}
+arr = [1,2,3,4,5,6,7]
+linked_list_head = from_array{arr}
+print{linked_list_head.val}
 
 ```
 output:
 ```
-12
+1
 ```
 ## 5. recursive factorial
 ```
@@ -228,6 +233,8 @@ output:
 8
 ```
 
+## linked list ops with dataclasses
+
 ## Running the Test-Suite
 ```
 pytest bang\semantic\semantic_tests.py
@@ -259,8 +266,6 @@ Tip: Each phase is cleanly decoupled; you can unit-test a new feature in isolati
 ## Project Roadmap
 
 * Add way more built-in functions (this is really easy you should try it)
-
-* Classes and dataclasses
 
 * Interpret in c++ or similar for faster runtimes
 
