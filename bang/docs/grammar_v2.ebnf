@@ -1,0 +1,210 @@
+# Bang Grammar v2.1 — Aug 29, 2025
+# This EBNF matches the current lexer, expression parser (shunting-yard), control-flow parser,
+# semantic analysis, and evaluator.
+
+# ---------------------------------------------------------------------
+# 0) Lexical Tokens (from the lexer)
+# ---------------------------------------------------------------------
+
+# Single-character operators
+PLUS            = "+"
+MINUS           = "-"
+ASTERISK        = "*"
+SLASH           = "/"
+ASSIGN          = "="
+NEGATE          = "!"
+
+# Grouping & punctuation
+LPAREN          = "("
+RPAREN          = ")"
+LBRACE          = "{"
+RBRACE          = "}"
+LBRACKET        = "["
+RBRACKET        = "]"
+COMMA           = ","
+SEMICOLON       = ";"
+DOT             = "."   # member access
+
+# Double-character operators
+PLUS_ASSIGN     = "+="
+MINUS_ASSIGN    = "-="
+ASTERISK_ASSIGN = "*="
+SLASH_ASSIGN    = "/="
+EQ              = "=="
+NEQ             = "!="
+LT              = "<"
+LEQ             = "<="
+GT              = ">"
+GTEQ            = ">="
+DSLASH          = "//"  # floor division
+EXPO            = "**"  # exponent
+AND             = "&&"
+OR              = "||"
+
+# Keywords and special tokens
+KW_IF       = "if"
+KW_ELIF     = "elif"
+KW_ELSE     = "else"
+KW_FOR      = "for"
+KW_WHILE    = "while"
+KW_BREAK    = "break"
+KW_CONTINUE = "continue"
+KW_RETURN   = "return"
+KW_END      = "end"
+KW_FN       = "fn"
+KW_DATA     = "data"
+IN          = "in"      # treated as an operator token by the lexer
+
+# Literals & identifiers
+NONE_LIT    = "none"
+BOOL_LIT    = "true" | "false"
+# Floats allowed as:  D* "." D+   |  D+ "." D*  (but not bare ".")
+# e.g. ".5", "5.", "5.0" are valid; "." alone is the DOT token.
+FLOAT_LIT   = DIGITS? DOT DIGITS | DIGITS DOT DIGITS?
+INT_LIT     = DIGITS
+STRING_LIT  = '"' { any-char-except-quote-or-newline } '"'
+IDENT       = ( "_" | LETTER ) { "_" | LETTER | DIGIT }
+
+# ---------------------------------------------------------------------
+# 1) Program structure
+# ---------------------------------------------------------------------
+
+Program        ::= { Line } ;
+Line           ::= Statement [ SEMICOLON ] NEWLINE
+                 | NEWLINE ;
+
+# A block begins after any header line (if/elif/else/for/while/fn) and
+# continues until a matching KW_END line. "return" is only valid inside
+# a function; "break"/"continue" only inside loops.
+
+Statement      ::= DataClassStmt
+                 | FunctionHeader
+                 | IfHeader
+                 | ElifHeader
+                 | ElseHeader
+                 | ForHeader
+                 | WhileHeader
+                 | BreakStmt
+                 | ContinueStmt
+                 | ReturnStmt
+                 | ExpressionStmt
+                 | EndStmt ;
+
+EndStmt        ::= KW_END ;
+
+# ---------------------------------------------------------------------
+# 2) Headers (open blocks)
+# ---------------------------------------------------------------------
+
+# Function header: "fn <name> <arglist_name>"
+FunctionHeader ::= KW_FN IDENT IDENT ;
+
+IfHeader       ::= KW_IF Expression ;
+ElifHeader     ::= KW_ELIF Expression ;
+ElseHeader     ::= KW_ELSE ;
+WhileHeader    ::= KW_WHILE Expression ;
+
+# For header: "for <var> <iterable-expr>"
+# Examples:
+#   for i 10           # iterate 0..10 (via range)
+#   for x arr          # iterate elements of arr
+ForHeader      ::= KW_FOR IDENT Expression ;
+
+# ---------------------------------------------------------------------
+# 3) Single-token statements
+# ---------------------------------------------------------------------
+
+BreakStmt      ::= KW_BREAK ;
+ContinueStmt   ::= KW_CONTINUE ;
+
+ReturnStmt     ::= KW_RETURN Expression ;
+
+# Dataclass declaration:  data Point [x, y, z]
+DataClassStmt  ::= KW_DATA IDENT LBRACKET [ IdentList ] RBRACKET ;
+
+ExpressionStmt ::= Expression ;
+
+IdentList      ::= IDENT { COMMA IDENT } ;
+
+# ---------------------------------------------------------------------
+# 4) Expressions
+# ---------------------------------------------------------------------
+
+# Assignment is parsed specially by the expression parser.
+# Left-hand side may be:
+#   - IDENT
+#   - IndexExpr
+#   - FieldExpr
+#   - Destructure (flat list of IDENTs)
+# Compound assignments (+=, -=, *=, /=) are also supported.
+Expression     ::= Assignment ;
+
+Assignment     ::= Assignable AssignOp Expression
+                 | OrExpr ;
+
+Assignable     ::= IDENT
+                 | IndexExpr
+                 | FieldExpr
+                 | Destructure ;
+
+Destructure    ::= LBRACKET IdentList RBRACKET ;
+
+AssignOp       ::= ASSIGN | PLUS_ASSIGN | MINUS_ASSIGN | ASTERISK_ASSIGN | SLASH_ASSIGN ;
+
+# Short-circuit logic
+OrExpr         ::= AndExpr { OR AndExpr } ;
+AndExpr        ::= EqualityExpr { AND EqualityExpr } ;
+
+# Equality / membership
+EqualityExpr   ::= RelExpr { ( EQ | NEQ | IN ) RelExpr } ;
+
+# Relational
+RelExpr        ::= AddExpr { ( LT | LEQ | GT | GTEQ ) AddExpr } ;
+
+# Additive
+AddExpr        ::= MulExpr { ( PLUS | MINUS ) MulExpr } ;
+
+# Multiplicative (including floor division)
+MulExpr        ::= ExponentExpr { ( ASTERISK | SLASH | DSLASH ) ExponentExpr } ;
+
+# Exponentiation (right-associative)
+ExponentExpr   ::= UnaryExpr { EXPO ExponentExpr } ;
+
+# Unary
+UnaryExpr      ::= ( NEGATE | PLUS | MINUS ) UnaryExpr
+                 | PostfixExpr ;
+
+# Postfix chaining with highest binding power:
+#   - member access:   a.b.c
+#   - indexing:        a[expr][expr] (one expression per [ ])
+#   - calls (curly):   f{args}
+PostfixExpr    ::= Primary { FieldSuffix | IndexSuffix | CallSuffix } ;
+
+FieldSuffix    ::= DOT IDENT ;
+IndexSuffix    ::= LBRACKET [ ArgList ] RBRACKET ;   # one top-level expr; use multiple [] for multi-index
+CallSuffix     ::= LBRACE [ ArgList ] RBRACE ;
+
+ArgList        ::= Expression { COMMA Expression } ;
+
+# Primary atoms
+Primary        ::= Literals
+                 | IDENT
+                 | LBRACKET [ ArgList ] RBRACKET     # Array literal
+                 | LPAREN Expression RPAREN ;
+
+Literals       ::= INT_LIT | FLOAT_LIT | BOOL_LIT | NONE_LIT | STRING_LIT ;
+
+# ---------------------------------------------------------------------
+# 5) Precedence & associativity (from the parser)
+# ---------------------------------------------------------------------
+# Highest → Lowest
+#   DOT
+#   **        (right-assoc)
+#   *, /, //  (left-assoc)
+#   +, -      (left-assoc)
+#   <, <=, >, >= (left-assoc)
+#   ==, !=, in    (left-assoc)
+#   &&        (left-assoc)
+#   ||        (left-assoc)
+# Unary +, -, ! bind tighter than all binary ops.
+
