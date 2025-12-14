@@ -16,8 +16,8 @@ class TokenType(Enum):
     # we useful for elegantly remapping
     # expressions into their unambiguous
     # versions, with unary support
-    T_UPLUS = auto()
-    T_UMINUS = auto()
+    T_UPLUS = auto()  # +1, +1.2
+    T_UMINUS = auto()  # -1, -2.2
 
     # Grouping & Punctuation
     T_LPAREN = auto()  # (
@@ -49,11 +49,11 @@ class TokenType(Enum):
 
     # Literals
     T_NONE = auto()  # none
-    T_INT = auto()
-    T_FLOAT = auto()
-    T_BOOL = auto()
-    T_STRING = auto()
-    T_IDENT = auto()
+    T_INT = auto()  # 1, 2, 3, ...
+    T_FLOAT = auto()  # 1.1, 2.2, 3.3, ...
+    T_BOOL = auto()  # true/false
+    T_STRING = auto()  # "hi"
+    T_IDENT = auto()  # my_variable
 
     # Keywords
     T_IF = auto()  # if

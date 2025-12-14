@@ -251,8 +251,6 @@ The suite contains hundreds of assertions split across:
 
 * Add tokens in lexer.py & grammar tweaks in expression_parser.py.
 
-* Teach semantic_analysis.py the new static rules.
-
 * Implement runtime semantics in evaluator.py.
 
 * Add green- & red-path tests—then refactor fearlessly.
