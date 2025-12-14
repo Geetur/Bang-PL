@@ -73,5 +73,76 @@ fn reverse args
 end
 
 rev_linked_list = reverse{linked_list_head}
-print{rev_linked_list.val}
+while rev_linked_list
+    print{rev_linked_list.val}
+    rev_linked_list = rev_linked_list.next
+end
 
+data TreeNode [val, left, right]
+
+# Insert a value into a BST; returns (possibly new) root
+fn insert_bst args
+    root = args[0]; x = args[1]
+    if root == none
+        return TreeNode{x}               # left/right default to none
+    end
+
+    if x < root.val
+        if root.left == none
+            root.left = TreeNode{x}
+        else
+            root.left = insert_bst{root.left, x}
+        end; end
+    else
+        if root.right == none
+            root.right = TreeNode{x}
+        else
+            root.right = insert_bst{root.right, x}
+        end; end
+    end; end
+    return root
+end
+
+# Build a BST from an array of values
+fn build_bst args
+    arr = args[0]
+    i = 0; root = none
+    while i < len{arr}
+        root = insert_bst{root, arr[i]}
+        i += 1
+    end
+    return root
+end
+
+# Inorder traversal (prints values in sorted order for a BST)
+fn inorder_print args
+    node = args[0]
+    if node == none
+        return none
+    end
+    inorder_print{node.left}
+    print{node.val}
+    inorder_print{node.right}
+    return none
+end
+
+# Sum all values in the tree
+fn sum_tree args
+    node = args[0]
+    if node == none
+        return 0
+    end
+    left_sum = sum_tree{node.left}
+    right_sum = sum_tree{node.right}
+    return node.val + left_sum + right_sum
+end
+
+# ----- demo -----
+vals = [5, 3, 7, 2, 4, 6, 8]
+root = build_bst{vals}
+
+print{"Inorder:"}
+inorder_print{root}
+
+print{"Sum:"}
+print{sum_tree{root}}
