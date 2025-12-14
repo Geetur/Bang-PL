@@ -263,7 +263,7 @@ Tip: Each phase is cleanly decoupled; you can unit-test a new feature in isolati
 
 * Add way more built-in functions (this is really easy you should try it)
 
-* Interpret in c++ or similar for faster runtimes
+* Interpret in C++ or similar for faster runtimes
 
 * REPL with auto-completion
 
