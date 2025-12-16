@@ -16,17 +16,17 @@ from bang.lexing.lexer_tokens import (
 
 
 class LexerError(Exception):
-    def __init__(self, file, msg, row, start, end):
-        self.file = file
+    def __init__(self, row_actual, msg, row_idx, start, end):
+        self.row_actual = row_actual
         self.msg = msg
-        self.row = row
+        self.row = row_idx
         self.start = start
         self.end = end
 
         super().__init__(self._format())
 
     def _format(self):
-        error_line = self.file[self.row]
+        error_line = self.row_actual
         crt_length = self.end - self.start if self.end - self.start != 0 else 1
         pointers = " " * self.start + "^" * crt_length
         return (
@@ -55,65 +55,81 @@ class Lexer:
     SYMBOLS = SYMBOLS
     KEYWORDS = KEYWORDS
 
-    def __init__(self, input_file):
-        # could add an error here if file isn't guaranteed to exist
-        with open(input_file) as f:
-            self.file = f.readlines()
+    def __init__(self, file):
+        self.file = file
 
+        def _generate_file_row():
+            with open(self.file) as f:
+                yield from f
+
+        self.file_row_gen = _generate_file_row()
         self.start = 0
-        self.row = 0
-        self.col = 0
+        self.prev_row_actual = ""
+        self.row_actual = next(self.file_row_gen, None)
+        self.row_idx = 0
+        self.col_idx = 0
         self.prev_start = -1
-        self.prev_row = -1
-        self.prev_col = -1
+        self.prev_row_idx = -1
+        self.prev_col_idx = -1
 
-        self.char = self.file[self.row][self.col] if self.file else SENTINEL
+        self.char = self.row_actual[self.col_idx] if self.row_actual is not None else SENTINEL
 
         self.token = ""
         self.tokens = []
         self.error_msg = ""
 
     def advance(self):
-        self.prev_col = self.col
-        self.col += 1
+        self.prev_col_idx = self.col_idx
+        self.col_idx += 1
         # if at a new row, reset col to zero and iterate row
-        if self.row < len(self.file) and self.col >= len(self.file[self.row]):
-            self.prev_row = self.row
-            self.row += 1
-            self.col = 0
+        if self.row_actual is not None and self.col_idx >= len(self.row_actual):
+            self.prev_row_idx = self.row_idx
+            self.row_idx += 1
+            self.col_idx = 0
             self.start = 0
+            self.prev_row_actual, self.row_actual = self.row_actual, next(self.file_row_gen, None)
         # if at EOF mark char with sentinel
-        if self.row >= len(self.file):
+        if self.row_actual is None:
             self.char = SENTINEL
         # otherwise mark char with next arbitrary next character
         else:
-            self.char = self.file[self.row][self.col]
+            self.char = self.row_actual[self.col_idx]
 
     def error_handler(self):
         # this function is half the reason for prev_start, prev_col, etc
         # because we need to advance at some points, but if the while loops
         # break after advancing and we reached end of row/file our self.col-1 logic
         # wouldn't work because col got reset to zero; so if its reset to zero, we use prev
-        if self.col:
-            raise LexerError(self.file, self.error_msg, self.row, self.start, self.col)
+        if self.col_idx:
+            raise LexerError(
+                self.row_actual, self.error_msg, self.row_idx, self.start, self.col_idx
+            )
         else:
             raise LexerError(
-                self.file, self.error_msg, self.prev_row, self.prev_start, self.prev_col
+                self.prev_row_actual,
+                self.error_msg,
+                self.prev_row_idx,
+                self.prev_start,
+                self.prev_col_idx,
             )
 
     def flush_token(self, ttype, value):
         # same as above if we advance to a new row and reset to zero, we use prev
         end = None
-        if self.col:
-            end = self.col - 1 if self.col - 1 >= self.start else self.col
-            self.tokens.append(Lexeme(ttype, value, self.row, self.start, end))
+        if self.col_idx:
+            end = self.col_idx - 1 if self.col_idx - 1 >= self.start else self.col_idx
+            self.tokens.append(Lexeme(ttype, value, self.row_idx, self.start, end))
         else:
-            end = self.prev_col - 1 if self.prev_col - 1 >= self.prev_start else self.prev_col
-            self.tokens.append(Lexeme(ttype, value, self.prev_row, self.prev_start, end))
+            end = (
+                self.prev_col_idx - 1
+                if self.prev_col_idx - 1 >= self.prev_start
+                else self.prev_col_idx
+            )
+            self.tokens.append(Lexeme(ttype, value, self.prev_row_idx, self.prev_start, end))
 
         # after flushing we want to forget the token and start a new one
         self.token = ""
-        self.start = self.col
+        self.start = self.col_idx
 
     def tokenizer(self):
         while self.char != SENTINEL:
@@ -131,7 +147,7 @@ class Lexer:
             # string literal via lexing than to parse one out, suprisingly.
             if self.char == STRING:
                 self.prev_start = self.start
-                self.start = self.col
+                self.start = self.col_idx
                 value = ""
                 self.advance()
                 while self.char not in (NEWLINE, SENTINEL, STRING):
@@ -151,12 +167,12 @@ class Lexer:
                 # the start of the error, not the end of the last token because
                 # we error print from original text file
                 self.prev_start = self.start
-                self.start = self.col
+                self.start = self.col_idx
                 continue
 
             elif self.char.isdigit() or self.char == DECIMAL:
                 self.prev_start = self.start
-                self.start = self.col
+                self.start = self.col_idx
                 decimal_count = 0
                 while self.char.isdigit() or self.char == DECIMAL:
                     if self.char == DECIMAL and decimal_count >= 1:
@@ -182,7 +198,7 @@ class Lexer:
             # but can continue indefinitely with alnum and underscore
             elif self.char.isalpha() or self.char == UNDERSCORE:
                 self.prev_start = self.start
-                self.start = self.col
+                self.start = self.col_idx
                 while self.char.isalnum() or self.char == UNDERSCORE:
                     self.token += self.char
                     self.advance()
@@ -203,7 +219,7 @@ class Lexer:
 
             if self.char in SYMBOLS or self.char not in SYMBOLS:
                 self.prev_start = self.start
-                self.start = self.col
+                self.start = self.col_idx
                 operator = self.char
                 self.advance()
                 two = operator + self.char

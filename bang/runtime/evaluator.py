@@ -53,8 +53,14 @@ class EvaluatorError(Exception):
 
         super().__init__(self._format())
 
+    def _get_real_error_line(self):
+        with open(self.file) as f:
+            for row_idx, row in enumerate(f):
+                if row_idx == self.row:
+                    return row
+
     def _format(self):
-        error_line = self.file[self.row]
+        error_line = self._get_real_error_line()
         crt_length = self.end - self.start if self.end - self.start != 0 else 1
         pointers = " " * self.start + "^" * crt_length
         return (
