@@ -150,24 +150,70 @@ class ExpressionParser:
 
     DEPTH_ENDERS = {TokenType.T_RBRACKET, TokenType.T_RBRACE}
 
+    UNARY_OPS = {
+        TokenType.T_UPLUS,
+        TokenType.T_UMINUS,
+        TokenType.T_NEGATE,
+    }
+
+    BINARY_TO_UNARY_OP = {
+        TokenType.T_PLUS: TokenType.T_UPLUS,
+        TokenType.T_MINUS: TokenType.T_UMINUS,
+        TokenType.T_NEGATE: TokenType.T_NEGATE,
+    }
+
+    CAN_FOLLOW_OPERATOR = {
+        TokenType.T_INT,
+        TokenType.T_FLOAT,
+        TokenType.T_BOOL,
+        TokenType.T_NONE,
+        TokenType.T_IDENT,
+        TokenType.T_LBRACKET,
+        TokenType.T_LPAREN,
+        TokenType.T_UMINUS,
+        TokenType.T_UPLUS,
+        TokenType.T_NEGATE,
+        TokenType.T_STRING,
+    }
+
+    # can_follow is a really elegant way to handle errors in the shunting yard algorithm
+    # we essentially define a two-state transition, and based on our
+    # current state we can either allow the next token, or throw an error
+    # another important aspect to this transition is that not every operand expects an operator
+    # whereas every operator expects an operand and so you can define an additional table
+    # or information that defines each operand with a true or false value to determine whether
+    # it merits a state transition, but there are so few you can typically just if statement
+
+    CAN_FOLLOW_OPERAND = (set(PRECEDENCE) - UNARY_OPS) | {
+        TokenType.T_RPAREN,
+        TokenType.T_RBRACKET,
+        # this can follow an operand because in the case an array
+        # follows an operand it can be an index node
+        # if the operand isn't indexable we throw and error in the index handler
+        TokenType.T_LBRACKET,
+        TokenType.T_LBRACE,
+        TokenType.T_RBRACE,
+        TokenType.T_DOT,
+    }
+
+    # these are literals that can be instantly determined, unlike
+    # arrays which must be determined over n tokens
+    LITERAL_MAP = {
+        TokenType.T_INT: lambda tok: IntegerLiteralNode(int(tok.value), tok),
+        TokenType.T_FLOAT: lambda tok: FloatLiteralNode(float(tok.value), tok),
+        TokenType.T_BOOL: lambda tok: BooleanLiteralNode(
+            (True if tok.value == "true" else False), tok
+        ),
+        TokenType.T_NONE: lambda tok: NoneLiteralNode(tok.value, tok),
+        TokenType.T_STRING: lambda tok: StringLiteralNode(tok.value, tok),
+    }
+
     def __init__(self, tokens, file):
         self.file = file
         self.tokens = tokens
         self.post_split = []
         self.post_SYA = []
         self.illegal_assignment = 0
-
-        # these are literals that can be instantly determined, unlike
-        # arrays which must be determined over n tokens
-        self._literal_map = {
-            TokenType.T_INT: lambda tok: IntegerLiteralNode(int(tok.value), tok),
-            TokenType.T_FLOAT: lambda tok: FloatLiteralNode(float(tok.value), tok),
-            TokenType.T_BOOL: lambda tok: BooleanLiteralNode(
-                (True if tok.value == "true" else False), tok
-            ),
-            TokenType.T_NONE: lambda tok: NoneLiteralNode(tok.value, tok),
-            TokenType.T_STRING: lambda tok: StringLiteralNode(tok.value, tok),
-        }
 
     # we're going to split the tokens into seperate lines,
     # where each line will be transformed into a singular node
@@ -440,7 +486,7 @@ class ExpressionParser:
         tok_idx = 1
         creators = []
 
-        if type(function_name) in self._literal_map or type(function_name) in [ArrayLiteralNode]:
+        if type(function_name) in self.LITERAL_MAP or type(function_name) in [ArrayLiteralNode]:
             raise ParserError(
                 self.file,
                 "function call syntax is [function name][args]",
@@ -660,50 +706,6 @@ class ExpressionParser:
         output = []
         op_stack = []
         expect_operand = True
-        # can_follow is a really elegant way to handle errors in the shunting yard algorithm
-        # we essentially define a two-state transition, and based on our
-        # current state we can either allow the next token, or throw an error
-        # another important aspect to this transition is that not every operand expects an operator
-        # whereas every operator expects an operand and so you can define an additional table
-        # or information that defines each operand with a true or false value to determine whether
-        # it merits a state transition, but there are so few you can typically just if statement
-        can_follow_operator = {
-            TokenType.T_INT,
-            TokenType.T_FLOAT,
-            TokenType.T_BOOL,
-            TokenType.T_NONE,
-            TokenType.T_IDENT,
-            TokenType.T_LBRACKET,
-            TokenType.T_LPAREN,
-            TokenType.T_UMINUS,
-            TokenType.T_UPLUS,
-            TokenType.T_NEGATE,
-            TokenType.T_STRING,
-        }
-
-        unary_ops = {
-            TokenType.T_UPLUS,
-            TokenType.T_UMINUS,
-            TokenType.T_NEGATE,
-        }
-
-        binary_to_unary_op = {
-            TokenType.T_PLUS: TokenType.T_UPLUS,
-            TokenType.T_MINUS: TokenType.T_UMINUS,
-            TokenType.T_NEGATE: TokenType.T_NEGATE,
-        }
-
-        can_follow_operand = (set(self.PRECEDENCE) - unary_ops) | {
-            TokenType.T_RPAREN,
-            TokenType.T_RBRACKET,
-            # this can follow an operand because in the case an array
-            # follows an operand it can be an index node
-            # if the operand isn't indexable we throw and error in the index handler
-            TokenType.T_LBRACKET,
-            TokenType.T_LBRACE,
-            TokenType.T_RBRACE,
-            TokenType.T_DOT,
-        }
 
         # since we want to treat any field access in the same vein
         # as a literal, it must take priority over every single other
@@ -719,7 +721,7 @@ class ExpressionParser:
             # unary
             # we probably want to make this and most other things in this
             # parser called from a first-class dict
-            if op_tok.type in unary_ops:
+            if op_tok.type in self.UNARY_OPS:
                 operand = output.pop()
                 output.append(UnaryOPNode(op=op_tok.type, meta_data=op_tok, operand=operand))
             elif op_tok.type == TokenType.T_DOT:
@@ -762,13 +764,13 @@ class ExpressionParser:
                 continue
 
             # resolving unary ambiguity
-            if expect_operand and tok.type in binary_to_unary_op:
-                tok = replace(tok, type=binary_to_unary_op[tok.type])
+            if expect_operand and tok.type in self.BINARY_TO_UNARY_OP:
+                tok = replace(tok, type=self.BINARY_TO_UNARY_OP[tok.type])
             # ----------------------------------------------------------------ERROR CHECKING START
 
             # define the can_follow groups with all expression-level syntax
             # and so if a token isn't in these two, it isn't a token meant for expressions
-            if tok.type not in can_follow_operand and tok.type not in can_follow_operator:
+            if tok.type not in self.CAN_FOLLOW_OPERAND and tok.type not in self.CAN_FOLLOW_OPERATOR:
                 raise ParserError(
                     self.file,
                     "token not allowed in expressions",
@@ -786,7 +788,7 @@ class ExpressionParser:
                 )
 
             elif expect_operand:
-                if tok.type not in can_follow_operator:
+                if tok.type not in self.CAN_FOLLOW_OPERATOR:
                     raise ParserError(
                         self.file,
                         "Token not allowed to follow to follow operator or start expression",
@@ -798,12 +800,12 @@ class ExpressionParser:
                     # that dont merit a state transition
                 if (
                     tok.type not in [TokenType.T_LBRACKET, TokenType.T_LPAREN]
-                    and tok.type not in unary_ops
+                    and tok.type not in self.UNARY_OPS
                 ):
                     expect_operand = False
 
             else:
-                if tok.type not in can_follow_operand:
+                if tok.type not in self.CAN_FOLLOW_OPERAND:
                     raise ParserError(
                         self.file,
                         "Token not allowed to follow operand",
@@ -817,8 +819,8 @@ class ExpressionParser:
             # ----------------------------------------------------------ERROR CHECKING FINISHED
 
             # A) Literals & identifiers → output
-            if tok.type in self._literal_map:
-                output.append(self._literal_map[tok.type](tok))
+            if tok.type in self.LITERAL_MAP:
+                output.append(self.LITERAL_MAP[tok.type](tok))
 
             elif tok.type == TokenType.T_IDENT:
                 output.append(IdentifierNode(value=tok.value, meta_data=tok))
