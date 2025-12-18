@@ -146,3 +146,33 @@ inorder_print{root}
 
 print{"Sum:"}
 print{sum_tree{root}}
+
+print{"expecting -7: "}
+print{---1 + ++++2 * -(+3)}
+
+print{"expecting 1: "}
+print{-(-(-1)) * +(+2) + -(-3)}
+
+print{"expecting 10: "}
+print{1 - -2 - ---3 + +4}
+
+print{"expecting 3: "}
+print{-(--1 + -(-2)) * -(-3 + +4)}
+
+print{"expecting -4: "}
+print{+(-(+(-1 + --2))) + ---3}
+
+print{"expecting 10: "}
+print{-(-(-1) * --2) + -(---3 * +4)}
+
+print{"expecting -7: "}
+print{---(1 + -(-2 * --3))}
+
+print{"expecting 7: "}
+print{-(-(-(-1))) + --(--2) * -(---3)}
+
+print{"expecting 8: "}
+print{(-(-1) + --2) * (---3 - -4) + +5}
+
+print{"expecting -6: "}
+print{-(+1 * -(-2 + ---3) - --4) + ---5}
