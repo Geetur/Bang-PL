@@ -37,7 +37,7 @@ def main():
 
         lp_wrapper = lp(lambda: run(str(file)))
         lp_wrapper()
-        lp.print_stats(output_unit=1e-6)  # microseconds
+        lp.print_stats(output_unit=1)  # microseconds
 
 
 if __name__ == "__main__":
