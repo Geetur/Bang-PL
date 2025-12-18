@@ -189,40 +189,6 @@ class ExpressionParser:
 
         return self.post_split
 
-    def handle_unary_ambiguity(self, line):
-        expecting_operand = True
-
-        binary_to_unary_op = {
-            TokenType.T_PLUS: TokenType.T_UPLUS,
-            TokenType.T_MINUS: TokenType.T_UMINUS,
-            TokenType.T_NEGATE: TokenType.T_NEGATE,
-        }
-
-        tokens_expecting_operators = {
-            TokenType.T_IDENT,
-            TokenType.T_INT,
-            TokenType.T_FLOAT,
-            TokenType.T_BOOL,
-            TokenType.T_NONE,
-            TokenType.T_STRING,
-            TokenType.T_RPAREN,
-            TokenType.T_RBRACKET,
-        }
-
-        for tok_idx, tok in enumerate(line):
-            if expecting_operand and tok.type in binary_to_unary_op:
-                line[tok_idx] = replace(tok, type=binary_to_unary_op[tok.type])
-                tok = line[tok_idx]
-
-            if tok.type in tokens_expecting_operators:
-                expecting_operand = False
-            else:
-                expecting_operand = tok.type in self.PRECEDENCE or tok.type in {
-                    TokenType.T_LPAREN,
-                    TokenType.T_LBRACKET,
-                }
-        return line
-
     # most constructs in this lang follow wildy different layouts (sometimes very unique)
     # and so to avoid creating a single parsing algo that can handle all of these different
     # constructs, it's easier to handle each singular construct different, and allow
@@ -693,13 +659,6 @@ class ExpressionParser:
     def shunting_yard_algo(self, line):
         output = []
         op_stack = []
-        # whenever we get a potential expression
-        # we need a custom algorithm to get rid of ambiguity in the +-!
-        # operators since SYA can't handle them naturally
-        # this does make our expression-level parser two-pass
-        # but it avoids lexer hacks that would raise modularity and
-        # clarity problems
-        line = self.handle_unary_ambiguity(line)
         expect_operand = True
         # can_follow is a really elegant way to handle errors in the shunting yard algorithm
         # we essentially define a two-state transition, and based on our
@@ -726,6 +685,12 @@ class ExpressionParser:
             TokenType.T_UPLUS,
             TokenType.T_UMINUS,
             TokenType.T_NEGATE,
+        }
+
+        binary_to_unary_op = {
+            TokenType.T_PLUS: TokenType.T_UPLUS,
+            TokenType.T_MINUS: TokenType.T_UMINUS,
+            TokenType.T_NEGATE: TokenType.T_NEGATE,
         }
 
         can_follow_operand = (set(self.PRECEDENCE) - unary_ops) | {
@@ -796,6 +761,9 @@ class ExpressionParser:
                 tok_idx = len(line)
                 continue
 
+            # resolving unary ambiguity
+            if expect_operand and tok.type in binary_to_unary_op:
+                tok = replace(tok, type=binary_to_unary_op[tok.type])
             # ----------------------------------------------------------------ERROR CHECKING START
 
             # define the can_follow groups with all expression-level syntax
