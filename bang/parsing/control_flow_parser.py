@@ -47,7 +47,7 @@ class ControlFlowParser:
             FunctionNode,
         }
 
-        dependant_nodes = {ElifNode, ElseNode}
+        dependant_nodes = (ElifNode, ElseNode)
 
         for node in self.expression_nodes:
             # so if we see a control flow construct,
