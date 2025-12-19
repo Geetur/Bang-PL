@@ -2,7 +2,6 @@
 # and every line construct such as if, elif, fn, converted into its respective
 # node. line-wise, the program is syntactically valid
 
-from dataclasses import replace
 
 from bang.lexing.lexer import Lexer, TokenType
 from bang.parsing.parser_nodes import (
@@ -208,6 +207,8 @@ class ExpressionParser:
         TokenType.T_STRING: lambda tok: StringLiteralNode(tok.value, tok),
     }
 
+    NOT_INDEXABLE = {IntegerLiteralNode, FloatLiteralNode, NoneLiteralNode, BooleanLiteralNode}
+
     def __init__(self, tokens, file):
         self.file = file
         self.tokens = tokens
@@ -220,14 +221,16 @@ class ExpressionParser:
     def split(self):
         past = -1
         for tok in self.tokens:
-            if tok.type == TokenType.T_SEMICOLON:
+            tok_type = tok.type
+            tok_line = tok.line
+            if tok_type == TokenType.T_SEMICOLON:
                 if self.post_split and self.post_split[-1]:  # don’t keep double blanks
                     self.post_split.append([])
                 continue
 
-            if tok.line != past:
+            if tok_line != past:
                 self.post_split.append([])
-                past = tok.line
+                past = tok_line
             self.post_split[-1].append(tok)
         # for cases such as i = 5; \n
         if self.post_split and not self.post_split[-1]:
@@ -243,7 +246,9 @@ class ExpressionParser:
         for line_idx, line in enumerate(self.post_split):
             self.illegal_assignment = 0
             for tok_idx, tok in enumerate(line):
-                if tok.value in Lexer.KEYWORDS:
+                tok_type = tok.type
+                tok_value = tok.value
+                if tok_value in Lexer.KEYWORDS:
                     if tok_idx != 0:
                         raise ParserError(
                             self.file,
@@ -252,29 +257,29 @@ class ExpressionParser:
                             tok.column_start,
                             tok.column_end,
                         )
-                    elif tok.type in {TokenType.T_IF, TokenType.T_ELIF, TokenType.T_ELSE}:
+                    elif tok_type in (TokenType.T_IF, TokenType.T_ELIF, TokenType.T_ELSE):
                         self.handle_if_else_condition(line_idx)
                         break
-                    elif tok.type == TokenType.T_FOR:
+                    elif tok_type == TokenType.T_FOR:
                         self.handle_for_loop(line_idx)
                         break
-                    elif tok.type == TokenType.T_WHILE:
+                    elif tok_type == TokenType.T_WHILE:
                         self.handle_while_loop(line_idx)
                         break
-                    elif tok.type in {
+                    elif tok_type in (
                         TokenType.T_BREAK,
                         TokenType.T_CONTINUE,
                         TokenType.T_END,
-                    }:
+                    ):
                         self.handle_single_tokens(line_idx)
                         break
-                    elif tok.type == TokenType.T_FN:
+                    elif tok_type == TokenType.T_FN:
                         self.handle_function_def(line_idx)
                         break
-                    elif tok.type == TokenType.T_DATA:
+                    elif tok_type == TokenType.T_DATA:
                         self.handle_dataclass_def(line_idx)
                         break
-                    elif tok.type == TokenType.T_RETURN:
+                    elif tok_type == TokenType.T_RETURN:
                         self.handle_return(line_idx)
                         break
 
@@ -486,7 +491,7 @@ class ExpressionParser:
         tok_idx = 1
         creators = []
 
-        if type(function_name) in self.LITERAL_MAP or type(function_name) in [ArrayLiteralNode]:
+        if type(function_name) in self.LITERAL_MAP or type(function_name) in (ArrayLiteralNode,):
             raise ParserError(
                 self.file,
                 "function call syntax is [function name][args]",
@@ -496,14 +501,15 @@ class ExpressionParser:
             )
         while tok_idx < len(line):
             tok = line[tok_idx]
+            tok_type = tok.type
 
-            if tok.type in self.DEPTH_CREATORS:
+            if tok_type in self.DEPTH_CREATORS:
                 # entering one more level of nested braces
                 depth += 1
                 current.append(tok)
                 creators.append(tok)
 
-            elif tok.type in self.DEPTH_ENDERS:
+            elif tok_type in self.DEPTH_ENDERS:
                 if depth == 0:
                     if current:
                         elements.append(self.shunting_yard_algo(current))
@@ -512,7 +518,7 @@ class ExpressionParser:
                         name=function_name, args=elements, meta_data=function_name.meta_data
                     ), tok_idx
 
-                if not creators or tok.type != self.DEPTH_CREATORS[creators[-1].type]:
+                if not creators or tok_type != self.DEPTH_CREATORS[creators[-1].type]:
                     raise ParserError(
                         self.file, "mismatched brackets", tok.line, tok.column_start, tok.column_end
                     )
@@ -520,7 +526,7 @@ class ExpressionParser:
                 current.append(tok)
                 creators.pop()
 
-            elif tok.type == TokenType.T_COMMA and depth == 0:
+            elif tok_type == TokenType.T_COMMA and depth == 0:
                 if current:
                     elements.append(self.shunting_yard_algo(current))
                 current = []
@@ -606,9 +612,8 @@ class ExpressionParser:
 
     def handle_index(self, base, line):
         # this must be updated any time a new non-indexable literal option is added to the lang
-        NOT_INDEXABLE = {IntegerLiteralNode, FloatLiteralNode, NoneLiteralNode, BooleanLiteralNode}
 
-        if type(base) in NOT_INDEXABLE:
+        if type(base) in self.NOT_INDEXABLE:
             raise ParserError(
                 self.file,
                 f"Can't index into {base}",
@@ -621,7 +626,8 @@ class ExpressionParser:
         depth = 0
         # it's very important to make sure that we're matching the correct depth
         for tok_idx, tok in enumerate(line):
-            if tok.type == TokenType.T_RBRACKET:
+            tok_type = tok.type
+            if tok_type == TokenType.T_RBRACKET:
                 depth -= 1
                 if depth == 0:
                     expected_expression = line[1:tok_idx]
@@ -633,7 +639,7 @@ class ExpressionParser:
                     else:
                         base.index.append(evaluated_expression)
                         return base, tok_idx
-            elif tok.type == TokenType.T_LBRACKET:
+            elif tok_type == TokenType.T_LBRACKET:
                 depth += 1
         raise ParserError(
             self.file,
@@ -657,20 +663,21 @@ class ExpressionParser:
 
         while tok_idx < len(line):
             tok = line[tok_idx]
+            tok_type = tok.type
 
             # ── open bracket ────────────────────────────────────────────────
-            if tok.type in self.DEPTH_CREATORS:
+            if tok_type in self.DEPTH_CREATORS:
                 depth += 1
                 current.append(tok)
                 creators.append(tok)
 
             # ── close bracket ───────────────────────────────────────────────
-            elif tok.type in self.DEPTH_ENDERS:
+            elif tok_type in self.DEPTH_ENDERS:
                 if depth == 0:
                     if current:
                         elements.append(self.shunting_yard_algo(current))
                     return ArrayLiteralNode(elements, meta_data=line[0]), tok_idx
-                if not creators or tok.type != self.DEPTH_CREATORS[creators[-1].type]:
+                if not creators or tok_type != self.DEPTH_CREATORS[creators[-1].type]:
                     raise ParserError(
                         self.file, "mismatched brackets", tok.line, tok.column_start, tok.column_end
                     )
@@ -679,7 +686,7 @@ class ExpressionParser:
                 creators.pop()
 
             # ── comma that splits *top-level* elements ──────────────────────
-            elif tok.type == TokenType.T_COMMA and depth == 0:
+            elif tok_type == TokenType.T_COMMA and depth == 0:
                 if current:
                     elements.append(self.shunting_yard_algo(current))
                 current = []
@@ -712,19 +719,20 @@ class ExpressionParser:
         # non-literal, so we create this collapser function and inject it
         # into the caller for indexing and function literals to ensure this
         def _collapse_field_ops():
-            while op_stack and op_stack[-1].type == TokenType.T_DOT:
+            # op_stack item = tuple(token, token_type)
+            while op_stack and op_stack[-1][1] == TokenType.T_DOT:
                 apply_operator()
 
         def apply_operator():
-            op_tok = op_stack.pop()
+            op_tok, op_tok_type = op_stack.pop()
 
             # unary
             # we probably want to make this and most other things in this
             # parser called from a first-class dict
-            if op_tok.type in self.UNARY_OPS:
+            if op_tok_type in self.UNARY_OPS:
                 operand = output.pop()
-                output.append(UnaryOPNode(op=op_tok.type, meta_data=op_tok, operand=operand))
-            elif op_tok.type == TokenType.T_DOT:
+                output.append(UnaryOPNode(op=op_tok_type, meta_data=op_tok, operand=operand))
+            elif op_tok_type == TokenType.T_DOT:
                 right = output.pop()
                 left = output.pop()
                 if type(right) is not IdentifierNode:
@@ -744,7 +752,7 @@ class ExpressionParser:
                 # binary
                 right = output.pop()
                 left = output.pop()
-                output.append(BinOpNode(left=left, op=op_tok.type, meta_data=op_tok, right=right))
+                output.append(BinOpNode(left=left, op=op_tok_type, meta_data=op_tok, right=right))
 
         # the while loop is really important; it can't be replaced
         # with a for loop because we want a simple way to skip entire portions of
@@ -752,8 +760,9 @@ class ExpressionParser:
         tok_idx = 0
         while tok_idx < len(line):
             tok = line[tok_idx]
+            tok_type = tok.type
 
-            if tok.type in self.ASSIGNMENT:
+            if tok_type in self.ASSIGNMENT:
                 if self.illegal_assignment:
                     raise ParserError(
                         self.file, "illegal assignment", tok.line, tok.column_start, tok.column_end
@@ -764,13 +773,13 @@ class ExpressionParser:
                 continue
 
             # resolving unary ambiguity
-            if expect_operand and tok.type in self.BINARY_TO_UNARY_OP:
-                tok = replace(tok, type=self.BINARY_TO_UNARY_OP[tok.type])
+            if expect_operand and tok_type in self.BINARY_TO_UNARY_OP:
+                tok_type = self.BINARY_TO_UNARY_OP[tok_type]
             # ----------------------------------------------------------------ERROR CHECKING START
 
             # define the can_follow groups with all expression-level syntax
             # and so if a token isn't in these two, it isn't a token meant for expressions
-            if tok.type not in self.CAN_FOLLOW_OPERAND and tok.type not in self.CAN_FOLLOW_OPERATOR:
+            if tok_type not in self.CAN_FOLLOW_OPERAND and tok_type not in self.CAN_FOLLOW_OPERATOR:
                 raise ParserError(
                     self.file,
                     "token not allowed in expressions",
@@ -782,13 +791,13 @@ class ExpressionParser:
             # we should naturally never come across an R bracket
             # because that means we didn't come across
             # a LBRACKET first, and that merits an immediate error
-            elif tok.type in [TokenType.T_RBRACKET, TokenType.T_RBRACE]:
+            elif tok_type in (TokenType.T_RBRACKET, TokenType.T_RBRACE):
                 raise ParserError(
                     self.file, "Mismatched grouping", tok.line, tok.column_start, tok.column_end
                 )
 
             elif expect_operand:
-                if tok.type not in self.CAN_FOLLOW_OPERATOR:
+                if tok_type not in self.CAN_FOLLOW_OPERATOR:
                     raise ParserError(
                         self.file,
                         "Token not allowed to follow to follow operator or start expression",
@@ -799,13 +808,13 @@ class ExpressionParser:
                     # these token types are the operands mentioned above
                     # that dont merit a state transition
                 if (
-                    tok.type not in [TokenType.T_LBRACKET, TokenType.T_LPAREN]
-                    and tok.type not in self.UNARY_OPS
+                    tok_type not in (TokenType.T_LBRACKET, TokenType.T_LPAREN)
+                    and tok_type not in self.UNARY_OPS
                 ):
                     expect_operand = False
 
             else:
-                if tok.type not in self.CAN_FOLLOW_OPERAND:
+                if tok_type not in self.CAN_FOLLOW_OPERAND:
                     raise ParserError(
                         self.file,
                         "Token not allowed to follow operand",
@@ -813,20 +822,20 @@ class ExpressionParser:
                         tok.column_start,
                         tok.column_end,
                     )
-                if tok.type not in [TokenType.T_LBRACKET, TokenType.T_RPAREN]:
+                if tok_type not in (TokenType.T_LBRACKET, TokenType.T_RPAREN):
                     expect_operand = True
 
             # ----------------------------------------------------------ERROR CHECKING FINISHED
 
             # A) Literals & identifiers → output
-            if tok.type in self.LITERAL_MAP:
-                output.append(self.LITERAL_MAP[tok.type](tok))
+            if tok_type in self.LITERAL_MAP:
+                output.append(self.LITERAL_MAP[tok_type](tok))
 
-            elif tok.type == TokenType.T_IDENT:
+            elif tok_type == TokenType.T_IDENT:
                 output.append(IdentifierNode(value=tok.value, meta_data=tok))
 
             # handling array literal in seperate function
-            elif tok.type == TokenType.T_LBRACKET:
+            elif tok_type == TokenType.T_LBRACKET:
                 # if the bracket is following an operator and thus
                 # expecting an operand we must treat the brackets as an array literal
                 if expect_operand:
@@ -848,7 +857,7 @@ class ExpressionParser:
                     tok_idx += consumed
                 expect_operand = False
 
-            elif tok.type == TokenType.T_LBRACE:
+            elif tok_type == TokenType.T_LBRACE:
                 _collapse_field_ops()
                 function_name = output.pop()
                 call_node, consumed = self.handle_function_call(line[tok_idx:], function_name)
@@ -857,25 +866,27 @@ class ExpressionParser:
                 expect_operand = False
 
             # C) Any operator
-            elif tok.type in self.PRECEDENCE:
-                p1 = self.PRECEDENCE[tok.type]
-                assoc = self.ASSOCIATIVITY[tok.type]
-                while op_stack and op_stack[-1].type in self.PRECEDENCE:
-                    top = op_stack[-1]
-                    p2 = self.PRECEDENCE[top.type]
+            elif tok_type in self.PRECEDENCE:
+                p1 = self.PRECEDENCE[tok_type]
+                assoc = self.ASSOCIATIVITY[tok_type]
+                # op_stack item = tuple(token, token_type)
+                while op_stack and op_stack[-1][1] in self.PRECEDENCE:
+                    top, top_type = op_stack[-1]
+                    p2 = self.PRECEDENCE[top_type]
                     if (assoc == "left" and p1 <= p2) or (assoc == "right" and p1 < p2):
                         apply_operator()
                     else:
                         break
-                op_stack.append(tok)
+                op_stack.append((tok, tok_type))
 
             # D) Left grouping
-            elif tok.type == TokenType.T_LPAREN:
-                op_stack.append(tok)
+            elif tok_type == TokenType.T_LPAREN:
+                op_stack.append((tok, tok_type))
 
             # F) right paren
-            elif tok.type == TokenType.T_RPAREN:
-                while op_stack and op_stack[-1].type != TokenType.T_LPAREN:
+            elif tok_type == TokenType.T_RPAREN:
+                # op_stack item = tuple(token, token_type)
+                while op_stack and op_stack[-1][1] != TokenType.T_LPAREN:
                     apply_operator()
                 if not op_stack:
                     raise ParserError(
@@ -887,13 +898,12 @@ class ExpressionParser:
 
         if self.illegal_assignment != 2:
             while op_stack:
-                top = op_stack[-1]
-                if top.type in {TokenType.T_LPAREN, TokenType.T_RPAREN}:
+                top, top_type = op_stack[-1]
+                if top_type in (TokenType.T_LPAREN, TokenType.T_RPAREN):
                     raise ParserError(
                         self.file, "Mismatched grouping", top.line, top.column_start, top.column_end
                     )
                 if not output:
-                    # this not outputting correct error msg
                     raise ParserError(
                         self.file,
                         "operator has no operand to bind to",
