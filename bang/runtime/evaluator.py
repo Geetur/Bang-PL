@@ -174,7 +174,7 @@ class Evaluator:
                         meta_data.column_start,
                         meta_data.column_end,
                     )
-                if type(i) in [set, dict]:
+                if type(i) in (set, dict):
                     base |= i
                 else:
                     base += i
@@ -730,7 +730,7 @@ class Evaluator:
             base.fields[final_name] = right_hand_value
 
         def eval_assignment_multi(left_hand, right_hand_value):
-            if type(right_hand_value) not in [list, ArrayLiteralNode]:
+            if type(right_hand_value) not in (list, ArrayLiteralNode):
                 raise EvaluatorError(
                     self.file,
                     "multi-variable assignment right hand must be type list",
@@ -795,7 +795,7 @@ class Evaluator:
     # this function handles all expression level contructs such as literals, binary ops,
     # unary ops, and function calls
     def eval_expression(self, root):
-        if type(root) in [int, bool, str, float, list, set, dict]:
+        if type(root) in (int, bool, str, float, list, set, dict):
             return root
 
         if type(root) is ExpressionNode:
@@ -1041,7 +1041,7 @@ class Evaluator:
             def list_mul(a, b):
                 if type(a) is list and type(b) is list:
                     if len(a) != len(b):
-                        if 1 not in [len(a), len(b)]:
+                        if 1 not in (len(a), len(b)):
                             raise EvaluatorError(
                                 self.file,
                                 "list element-wise multiplication is not "
@@ -1064,7 +1064,7 @@ class Evaluator:
             def list_div(a, b):
                 if type(a) is list and type(b) is list:
                     if len(a) != len(b):
-                        if 1 not in [len(a), len(b)]:
+                        if 1 not in (len(a), len(b)):
                             raise EvaluatorError(
                                 self.file,
                                 "list element-wise divsion is not supported "
@@ -1083,7 +1083,7 @@ class Evaluator:
             def list_floor_div(a, b):
                 if type(a) is list and type(b) is list:
                     if len(a) != len(b):
-                        if 1 not in [len(a), len(b)]:
+                        if 1 not in (len(a), len(b)):
                             raise EvaluatorError(
                                 self.file,
                                 "list element-wise divsion is not supported "
@@ -1259,7 +1259,7 @@ class Evaluator:
             return not operand
 
         def eval_uminus(operand):
-            if type(operand) in [int, float]:
+            if type(operand) in (int, float):
                 return -operand
             raise EvaluatorError(
                 self.file,
@@ -1270,7 +1270,7 @@ class Evaluator:
             )
 
         def eval_uplus(operand):
-            if type(operand) in [int, float]:
+            if type(operand) in (int, float):
                 return +operand
             raise EvaluatorError(
                 self.file,

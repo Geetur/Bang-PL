@@ -255,7 +255,7 @@ class SemanticAnalysis:
         self.scope_stack.append({})
         left_hand_name = root.variable.value
         right_hand_type = DynamicType()
-        if type(right_hand_type) in {NoneType}:
+        if type(right_hand_type) in (NoneType,):
             raise SemanticError(
                 self.file,
                 "For loop bound must be an array, identifier, or number",
@@ -348,8 +348,8 @@ class SemanticAnalysis:
                 # is it the same type?
                 if not (
                     (
-                        type(right_hand) in [NumberType, BoolType]
-                        and type(left_hand_type) in [NumberType, BoolType]
+                        type(right_hand) in (NumberType, BoolType)
+                        and type(left_hand_type) in (NumberType, BoolType)
                     )
                     or type(left_hand_type) is type(right_hand)
                 ):
@@ -383,8 +383,8 @@ class SemanticAnalysis:
                     op_type = self.assignment_to_normal[op_type]
                     if not (
                         (
-                            type(right_hand) in [NumberType, BoolType]
-                            and type(left_hand_type) in [NumberType, BoolType]
+                            type(right_hand) in (NumberType, BoolType)
+                            and type(left_hand_type) in (NumberType, BoolType)
                         )
                         or type(left_hand_type) is type(right_hand)
                     ):
@@ -472,12 +472,12 @@ class SemanticAnalysis:
                 and op_type in self.ARITH_ASSIGNMENTS
             ):
                 op_norm = self.assignment_to_normal[op_type]
-                same_num_bool = type(right_hand) in [NumberType, BoolType] and type(
+                same_num_bool = type(right_hand) in (NumberType, BoolType) and type(
                     current_field_type
-                ) in [
+                ) in (
                     NumberType,
                     BoolType,
-                ]
+                )
                 if not (same_num_bool or type(current_field_type) is type(right_hand)):
                     if (
                         type(current_field_type),
@@ -576,7 +576,7 @@ class SemanticAnalysis:
 
             if (
                 not (
-                    (type(right) in [NumberType, BoolType] and type(left) in [NumberType, BoolType])
+                    (type(right) in (NumberType, BoolType) and type(left) in (NumberType, BoolType))
                     or type(left) is type(right)
                 )
             ) and op in self.ARITH_OPS:
@@ -644,7 +644,7 @@ class SemanticAnalysis:
             # pretty sure from here down there is some
             # redundant code but it is only redundant, and working
             if base.value:
-                if type(base) not in [ArrayType, StringType, DictType]:
+                if type(base) not in (ArrayType, StringType, DictType):
                     raise SemanticError(
                         self.file,
                         f"object of {type(base)} not indexable",
@@ -657,8 +657,8 @@ class SemanticAnalysis:
 
             for idx in root.index:
                 idx_type = self.walk_expression(idx.root_expr)
-                if type(base) in [ArrayType, StringType]:
-                    if type(idx_type) not in [NumberType, BoolType, DynamicType]:
+                if type(base) in (ArrayType, StringType):
+                    if type(idx_type) not in (NumberType, BoolType, DynamicType):
                         raise SemanticError(
                             self.file,
                             f"Index must be number when base is type {type(base)}",
@@ -674,7 +674,7 @@ class SemanticAnalysis:
                 return DynamicType()
 
             for _pos, idx in enumerate(indexes):
-                if type(base) not in [ArrayType, StringType]:
+                if type(base) not in (ArrayType, StringType):
                     raise SemanticError(
                         self.file,
                         "Index out of bounds",
@@ -729,7 +729,7 @@ class SemanticAnalysis:
                 if len(typed_args) == 1:
                     if type(typed_args[0]) is DynamicType:
                         return SetType(value=expected_return)
-                    elif type(typed_args[0]) in [SetType, ArrayType]:
+                    elif type(typed_args[0]) in (SetType, ArrayType):
                         typed_args = typed_args[0].value
                         # need this is none check due to bin op/un op
                         # returning base_type(value=None)
@@ -759,7 +759,7 @@ class SemanticAnalysis:
                 if len(typed_args) == 1:
                     if type(typed_args[0]) is DynamicType:
                         return DictType(value=expected_return)
-                    elif type(typed_args[0]) in [SetType, ArrayType]:
+                    elif type(typed_args[0]) in (SetType, ArrayType):
                         typed_args = typed_args[0].value
 
                 if len(typed_args) % 2 != 0:
@@ -823,7 +823,7 @@ class SemanticAnalysis:
                     root.meta_data.column_end,
                 )
 
-            if type(callee_type) not in [FunctionType, SetType, DictType]:
+            if type(callee_type) not in (FunctionType, SetType, DictType):
                 raise SemanticError(
                     self.file,
                     f"attempt to call non-function '{root.name.value}'",
