@@ -11,7 +11,7 @@ from bang.parsing.expression_parser import ExpressionParser
 CODE = "x = 1 + 2 * (3 + 4)\ny = arr[1][2][i + 1]\nz = foo{1,2,3}.bar[baz]\n"
 
 
-def run(file_path: str, loops: int = 5000):
+def run(file_path: str, loops: int = 1):
     # parser-only: lex once
     tokens = Lexer(file_path).tokenizer()
     for _ in range(loops):
