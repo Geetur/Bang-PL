@@ -11,7 +11,7 @@ from bang.parsing.expression_parser import ExpressionParser
 CODE = "x = 1 + 2 * (3 + 4)\ny = arr[1][2][i + 1]\nz = foo{1,2,3}.bar[baz]\n"
 
 
-def run(file_path: str, loops: int = 1):
+def run(file_path: str, loops: int = 1000):
     # parser-only: lex once
     tokens = Lexer(file_path).tokenizer()
     for _ in range(loops):
@@ -37,7 +37,7 @@ def main():
 
         lp_wrapper = lp(lambda: run(str(file)))
         lp_wrapper()
-        lp.print_stats(output_unit=1)  # microseconds
+        lp.print_stats(output_unit=1e-6)  # microseconds
 
 
 if __name__ == "__main__":

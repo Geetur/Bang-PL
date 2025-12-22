@@ -74,6 +74,7 @@ class TokenType(Enum):
 class Lexeme:
     # dataclass for representing a single token of input after lexical analysis
     type: TokenType
+    type_enum_id: int
     value: str
     line: int
     column_start: int
