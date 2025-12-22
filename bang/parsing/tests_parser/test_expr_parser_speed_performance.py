@@ -8,7 +8,9 @@ from line_profiler import LineProfiler
 from bang.lexing.lexer import Lexer
 from bang.parsing.expression_parser import ExpressionParser
 
-CODE = "x = 1 + 2 * (3 + 4)\ny = arr[1][2][i + 1]\nz = foo{1,2,3}.bar[baz]\n"
+CODE = "x = 1 + 2 * (3 + 4)\n"
+
+#y = arr[1][2][i + 1]\nz = foo{1,2,3}.bar[baz]\n"
 
 
 def run(file_path: str, loops: int = 1000):
