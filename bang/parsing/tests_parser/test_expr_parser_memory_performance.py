@@ -18,7 +18,7 @@ def parse_once(tokens, file_path: str):
     parser.loading_into_algos()
 
 
-def run(file_path: str, loops: int = 10, stage_breakdown: bool = True):
+def run(file_path: str, loops: int = 1000, stage_breakdown: bool = True):
     hp = hpy()
 
     # --- Lex once (excluded from relative heap measurements below) ---

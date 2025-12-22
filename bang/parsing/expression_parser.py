@@ -209,6 +209,26 @@ class ExpressionParser:
 
     NOT_INDEXABLE = {IntegerLiteralNode, FloatLiteralNode, NoneLiteralNode, BooleanLiteralNode}
 
+    @classmethod
+    def _init_type_tables(cls):
+        max_id = max(t.value for t in TokenType) + 1
+
+        cls.IS_ASSIGN = [False] * max_id
+        cls.IS_BIN2UN = [False] * max_id
+        cls.CAN_OPND = [False] * max_id
+        cls.CAN_OPR = [False] * max_id
+        cls.IS_UNARY = [False] * max_id
+        cls.IS_LITERAL = [False] * max_id
+
+        for t in TokenType:
+            v = t.value
+            cls.IS_ASSIGN[v] = t in cls.ASSIGNMENT
+            cls.IS_BIN2UN[v] = t in cls.BINARY_TO_UNARY_OP
+            cls.CAN_OPND[v] = t in cls.CAN_FOLLOW_OPERAND
+            cls.CAN_OPR[v] = t in cls.CAN_FOLLOW_OPERATOR
+            cls.IS_UNARY[v] = t in cls.UNARY_OPS
+            cls.IS_LITERAL[v] = t in cls.LITERAL_MAP
+
     def __init__(self, tokens, file):
         self.file = file
         self.tokens = tokens
@@ -219,6 +239,8 @@ class ExpressionParser:
     # we're going to split the tokens into seperate lines,
     # where each line will be transformed into a singular node
     def split(self):
+        if getattr(self.__class__, "IS_ASSIGN", None) is None:
+            self.__class__._init_type_tables()
         past = -1
         for tok in self.tokens:
             tok_type = tok.type
@@ -714,6 +736,16 @@ class ExpressionParser:
         op_stack = []
         expect_operand = True
 
+        cls = self.__class__
+        IS_ASSIGN = cls.IS_ASSIGN
+        IS_BIN2UN = cls.IS_BIN2UN
+        CAN_OPND = cls.CAN_OPND
+        CAN_OPR = cls.CAN_OPR
+        IS_UNARY = cls.IS_UNARY
+        IS_LITERAL = cls.IS_LITERAL
+
+        PRECEDENCE = self.PRECEDENCE
+
         # since we want to treat any field access in the same vein
         # as a literal, it must take priority over every single other
         # non-literal, so we create this collapser function and inject it
@@ -725,11 +757,11 @@ class ExpressionParser:
 
         def apply_operator():
             op_tok, op_tok_type = op_stack.pop()
-
+            is_unary = IS_UNARY[op_tok_type.value]
             # unary
             # we probably want to make this and most other things in this
             # parser called from a first-class dict
-            if op_tok_type in self.UNARY_OPS:
+            if is_unary:
                 operand = output.pop()
                 output.append(UnaryOPNode(op=op_tok_type, meta_data=op_tok, operand=operand))
             elif op_tok_type == TokenType.T_DOT:
@@ -756,13 +788,28 @@ class ExpressionParser:
 
         # the while loop is really important; it can't be replaced
         # with a for loop because we want a simple way to skip entire portions of
-        # code if we encounter a string, array, etc.
+        # code if we encounter a string, array, etc. this is called tight loop optimization
         tok_idx = 0
-        while tok_idx < len(line):
+        line_len = len(line)
+        while tok_idx < line_len:
             tok = line[tok_idx]
             tok_type = tok.type
+            v = tok.type_enum_id
 
-            if tok_type in self.ASSIGNMENT:
+            if expect_operand and IS_BIN2UN[v]:
+                tok_type = self.BINARY_TO_UNARY_OP[tok_type]
+                v = tok_type.value
+
+            # ------------------------------- BOOL FLAGS
+            tok_type_in_ASSIGNMENT = IS_ASSIGN[v]
+            tok_type_in_CAN_FOLLOW_OPERAND = CAN_OPND[v]
+            tok_type_in_CAN_FOLLOW_OPERATOR = CAN_OPR[v]
+            tok_type_in_UNARY_OPS = IS_UNARY[v]
+            tok_type_in_LITERAL_MAP = IS_LITERAL[v]
+
+            # ------------------------------- BOOL FLAGS
+
+            if tok_type_in_ASSIGNMENT:
                 if self.illegal_assignment:
                     raise ParserError(
                         self.file, "illegal assignment", tok.line, tok.column_start, tok.column_end
@@ -772,14 +819,11 @@ class ExpressionParser:
                 tok_idx = len(line)
                 continue
 
-            # resolving unary ambiguity
-            if expect_operand and tok_type in self.BINARY_TO_UNARY_OP:
-                tok_type = self.BINARY_TO_UNARY_OP[tok_type]
             # ----------------------------------------------------------------ERROR CHECKING START
 
             # define the can_follow groups with all expression-level syntax
             # and so if a token isn't in these two, it isn't a token meant for expressions
-            if tok_type not in self.CAN_FOLLOW_OPERAND and tok_type not in self.CAN_FOLLOW_OPERATOR:
+            if not tok_type_in_CAN_FOLLOW_OPERAND and not tok_type_in_CAN_FOLLOW_OPERATOR:
                 raise ParserError(
                     self.file,
                     "token not allowed in expressions",
@@ -797,7 +841,7 @@ class ExpressionParser:
                 )
 
             elif expect_operand:
-                if tok_type not in self.CAN_FOLLOW_OPERATOR:
+                if not tok_type_in_CAN_FOLLOW_OPERATOR:
                     raise ParserError(
                         self.file,
                         "Token not allowed to follow to follow operator or start expression",
@@ -809,12 +853,12 @@ class ExpressionParser:
                     # that dont merit a state transition
                 if (
                     tok_type not in (TokenType.T_LBRACKET, TokenType.T_LPAREN)
-                    and tok_type not in self.UNARY_OPS
+                    and not tok_type_in_UNARY_OPS
                 ):
                     expect_operand = False
 
             else:
-                if tok_type not in self.CAN_FOLLOW_OPERAND:
+                if not tok_type_in_CAN_FOLLOW_OPERAND:
                     raise ParserError(
                         self.file,
                         "Token not allowed to follow operand",
@@ -828,7 +872,7 @@ class ExpressionParser:
             # ----------------------------------------------------------ERROR CHECKING FINISHED
 
             # A) Literals & identifiers → output
-            if tok_type in self.LITERAL_MAP:
+            if tok_type_in_LITERAL_MAP:
                 output.append(self.LITERAL_MAP[tok_type](tok))
 
             elif tok_type == TokenType.T_IDENT:
@@ -866,13 +910,13 @@ class ExpressionParser:
                 expect_operand = False
 
             # C) Any operator
-            elif tok_type in self.PRECEDENCE:
-                p1 = self.PRECEDENCE[tok_type]
+            elif tok_type in PRECEDENCE:
+                p1 = PRECEDENCE[tok_type]
                 assoc = self.ASSOCIATIVITY[tok_type]
                 # op_stack item = tuple(token, token_type)
-                while op_stack and op_stack[-1][1] in self.PRECEDENCE:
+                while op_stack and op_stack[-1][1] in PRECEDENCE:
                     top, top_type = op_stack[-1]
-                    p2 = self.PRECEDENCE[top_type]
+                    p2 = PRECEDENCE[top_type]
                     if (assoc == "left" and p1 <= p2) or (assoc == "right" and p1 < p2):
                         apply_operator()
                     else:

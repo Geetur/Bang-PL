@@ -118,14 +118,16 @@ class Lexer:
         end = None
         if self.col_idx:
             end = self.col_idx - 1 if self.col_idx - 1 >= self.start else self.col_idx
-            self.tokens.append(Lexeme(ttype, value, self.row_idx, self.start, end))
+            self.tokens.append(Lexeme(ttype, ttype.value, value, self.row_idx, self.start, end))
         else:
             end = (
                 self.prev_col_idx - 1
                 if self.prev_col_idx - 1 >= self.prev_start
                 else self.prev_col_idx
             )
-            self.tokens.append(Lexeme(ttype, value, self.prev_row_idx, self.prev_start, end))
+            self.tokens.append(
+                Lexeme(ttype, ttype.value, value, self.prev_row_idx, self.prev_start, end)
+            )
 
         # after flushing we want to forget the token and start a new one
         self.token = ""
