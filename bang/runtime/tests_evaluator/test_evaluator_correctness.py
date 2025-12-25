@@ -19,19 +19,19 @@ def evaluate(code: str, tmp_path):
     lexer = Lexer(str(src))
     tokens = lexer.tokenizer()
 
-    e_parser = ExpressionParser(tokens, lexer.file)
+    e_parser = ExpressionParser(tokens, lexer.text)
     e_parser.split()
     e_parser.loading_into_algos()
 
-    cf_parser = ControlFlowParser(lexer.file, e_parser.post_SYA)
+    cf_parser = ControlFlowParser(lexer.text, e_parser.post_SYA)
     roots = cf_parser.blockenize()
 
     # ---------- SEMANTIC CHECK ----------
-    sema = SemanticAnalysis(lexer.file, roots)
+    sema = SemanticAnalysis(lexer.text, roots)
     sema.walk_program()  # will raise on failure
 
     # ---------- EVALUATION (unit under test) ----------
-    runner = Evaluator(lexer.file, roots)
+    runner = Evaluator(lexer.text, roots)
     runner.eval_program()  # may raise EvaluatorError
     return runner  # returned so tests can poke at state if they wish
 

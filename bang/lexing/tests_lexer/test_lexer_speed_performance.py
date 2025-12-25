@@ -26,8 +26,6 @@ def main():
         lp = LineProfiler()
 
         # Add the exact hot methods you care about:
-        lp.add_function(Lexer.advance)
-        lp.add_function(Lexer.flush_token)
         lp.add_function(Lexer.tokenizer)
 
         lp_wrapper = lp(lambda: run(str(file)))

@@ -80,7 +80,7 @@ def timed_pipeline_inproc(bang_file: Path) -> Tuple[int, Dict[str, float]]:
 
         # expression parsing: split + loading_into_algos
         b0 = time.perf_counter()
-        ex = ExpressionParser(tokens, lex.file)
+        ex = ExpressionParser(tokens, lex.text)
         ex.split()
         b1 = time.perf_counter()
         t["expr_split"] = b1 - b0
@@ -92,20 +92,20 @@ def timed_pipeline_inproc(bang_file: Path) -> Tuple[int, Dict[str, float]]:
 
         # control flow parser
         d0 = time.perf_counter()
-        cf = ControlFlowParser(lex.file, ex.post_SYA)
+        cf = ControlFlowParser(lex.text, ex.post_SYA)
         roots = cf.blockenize()
         d1 = time.perf_counter()
         t["cf"] = d1 - d0
 
         # semantic analysis
         e0 = time.perf_counter()
-        SemanticAnalysis(lex.file, roots).walk_program()
+        SemanticAnalysis(lex.text, roots).walk_program()
         e1 = time.perf_counter()
         t["sem"] = e1 - e0
 
         # evaluation
         f0 = time.perf_counter()
-        Evaluator(lex.file, roots).eval_program()
+        Evaluator(lex.text, roots).eval_program()
         f1 = time.perf_counter()
         t["eval"] = f1 - f0
 
@@ -288,7 +288,6 @@ def main():
 
     if args.mode == "inproc":
         print_phase_table(rows)
-        print("\nTip: trust 1k–10k lines for steady-state per-line cost.\n")
     else:
         print("\nNote: subprocess mode reports TOTAL only (includes Python startup/import).\n")
 
