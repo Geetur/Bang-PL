@@ -17,18 +17,18 @@ def run_file(path: str, *, show_tokens=False, show_ast=False, trace=False) -> in
         lex = Lexer(path)
         tokens = lex.tokenizer()
 
-        ex = ExpressionParser(tokens, lex.file)
+        ex = ExpressionParser(tokens, lex.text)
         ex.split()
         if show_tokens:
             print(ex.post_split)
         ex.loading_into_algos()
 
-        cf = ControlFlowParser(lex.file, ex.post_SYA)
+        cf = ControlFlowParser(lex.text, ex.post_SYA)
         roots = cf.blockenize()
         if show_ast:
             print(roots)
 
-        SemanticAnalysis(lex.file, roots).walk_program()
+        SemanticAnalysis(lex.text, roots).walk_program()
 
         # --- only pass trace if supported ---
         kwargs = {}
@@ -38,7 +38,7 @@ def run_file(path: str, *, show_tokens=False, show_ast=False, trace=False) -> in
         elif "trace" in params:
             kwargs["trace"] = bool(trace)
 
-        Evaluator(lex.file, roots, **kwargs).eval_program()
+        Evaluator(lex.text, roots, **kwargs).eval_program()
         return 0
     except LexerError as e:
         print(e, file=sys.stderr)

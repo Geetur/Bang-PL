@@ -105,7 +105,7 @@ def test_multiple_decimal_error():
 def test_invalid_character():
     with pytest.raises(LexerError) as exc:
         lex_string("@")
-    assert "token not recognized" in str(exc.value)
+    assert 'Token not recognized' in str(exc.value)
 
 
 # Boolean Literals

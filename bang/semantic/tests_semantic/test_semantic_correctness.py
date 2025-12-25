@@ -18,16 +18,16 @@ def analyze(code: str, tmp_path):
     tokens = lexer.tokenizer()
 
     # Expression‑level parsing → list of nodes
-    e_parser = ExpressionParser(tokens, lexer.file)
+    e_parser = ExpressionParser(tokens, lexer.text)
     e_parser.split()
     e_parser.loading_into_algos()
 
     # Control‑flow grouping → roots
-    cf_parser = ControlFlowParser(lexer.file, e_parser.post_SYA)
+    cf_parser = ControlFlowParser(lexer.text, e_parser.post_SYA)
     roots = cf_parser.blockenize()
 
     # Semantic analysis (the unit under test)
-    sema = SemanticAnalysis(lexer.file, roots)
+    sema = SemanticAnalysis(lexer.text, roots)
     sema.walk_program()
     return sema  # returned so tests can make deeper assertions later if desired
 

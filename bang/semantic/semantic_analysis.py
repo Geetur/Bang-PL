@@ -48,8 +48,8 @@ from bang.semantic.semantic_nodes import (
 
 
 class SemanticError(Exception):
-    def __init__(self, file, msg, row, start, end):
-        self.file = file
+    def __init__(self, text, msg, row, start, end):
+        self.text = text
         self.msg = msg
         self.row = row
         self.start = start
@@ -58,15 +58,16 @@ class SemanticError(Exception):
         super().__init__(self._format())
 
     def _get_real_error_line(self):
-        with open(self.file) as f:
-            for row_idx, row in enumerate(f):
-                if row_idx == self.row:
-                    return row
+        lines = self.text.splitlines()
+        # Row is 1-based in tokens, so -1 for index
+        if 0 <= self.row - 1 < len(lines):
+            return lines[self.row - 1]
+        return ""
 
     def _format(self):
         error_line = self._get_real_error_line()
-        crt_length = self.end - self.start if self.end - self.start != 0 else 1
-        pointers = " " * self.start + "^" * crt_length
+        crt_length = max(1, self.end - self.start)
+        pointers = " " * (self.start - 1) + "^" * crt_length
         return (
             f"[SemanticError] Line {self.row + 1}, Column {self.start}-{self.end}:\n"
             f"{error_line.rstrip()}\n"

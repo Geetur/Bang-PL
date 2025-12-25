@@ -16,22 +16,29 @@ from bang.lexing.lexer_tokens import (
 
 
 class LexerError(Exception):
-    def __init__(self, row_actual, msg, row_idx, start, end):
-        self.row_actual = row_actual
+    def __init__(self, msg, text, pos):
+        # We lazily calculate the line/col only when an error actually happens
         self.msg = msg
-        self.row = row_idx
-        self.start = start
-        self.end = end
+        self.text = text
+        self.pos = pos
+        self.line_num = text.count(NEWLINE, 0, pos) + 1
+        last_newline = text.rfind(NEWLINE, 0, pos)
+        self.col = pos - last_newline
+
+        # Extract the line text for the error message
+        start_line = last_newline + 1
+        end_line = text.find(NEWLINE, pos)
+        if end_line == -1:
+            end_line = len(text)
+        self.line_text = text[start_line:end_line]
 
         super().__init__(self._format())
 
     def _format(self):
-        error_line = self.row_actual
-        crt_length = self.end - self.start if self.end - self.start != 0 else 1
-        pointers = " " * self.start + "^" * crt_length
+        pointers = " " * (self.col - 1) + "^"
         return (
-            f"[LexerError] Line {self.row + 1}, Column {self.start}-{self.end}:\n"
-            f"{error_line.rstrip()}\n"
+            f"[LexerError] Line {self.line_num}, Column {self.col}:\n"
+            f"{self.line_text}\n"
             f"{pointers}\n"
             f"{self.msg}"
         )
@@ -55,187 +62,148 @@ class Lexer:
     SYMBOLS = SYMBOLS
     KEYWORDS = KEYWORDS
 
-    def __init__(self, file):
-        self.file = file
+    def __init__(self, file_path):
+        # reading entire file to memory
+        with open(file_path) as f:
+            self.text = f.read() + SENTINEL
 
-        def _generate_file_row():
-            with open(self.file) as f:
-                yield from f
-
-        self.file_row_gen = _generate_file_row()
-        self.start = 0
-        self.prev_row_actual = ""
-        self.row_actual = next(self.file_row_gen, None)
-        self.row_idx = 0
-        self.col_idx = 0
-        self.prev_start = -1
-        self.prev_row_idx = -1
-        self.prev_col_idx = -1
-
-        self.char = self.row_actual[self.col_idx] if self.row_actual is not None else SENTINEL
-
-        self.token = ""
+        # result of lexing will be list of tokens
         self.tokens = []
-        self.error_msg = ""
-
-    def advance(self):
-        self.prev_col_idx = self.col_idx
-        self.col_idx += 1
-        # if at a new row, reset col to zero and iterate row
-        if self.row_actual is not None and self.col_idx >= len(self.row_actual):
-            self.prev_row_idx = self.row_idx
-            self.row_idx += 1
-            self.col_idx = 0
-            self.start = 0
-            self.prev_row_actual, self.row_actual = self.row_actual, next(self.file_row_gen, None)
-        # if at EOF mark char with sentinel
-        if self.row_actual is None:
-            self.char = SENTINEL
-        # otherwise mark char with next arbitrary next character
-        else:
-            self.char = self.row_actual[self.col_idx]
-
-    def error_handler(self):
-        # this function is half the reason for prev_start, prev_col, etc
-        # because we need to advance at some points, but if the while loops
-        # break after advancing and we reached end of row/file our self.col-1 logic
-        # wouldn't work because col got reset to zero; so if its reset to zero, we use prev
-        if self.col_idx:
-            raise LexerError(
-                self.row_actual, self.error_msg, self.row_idx, self.start, self.col_idx
-            )
-        else:
-            raise LexerError(
-                self.prev_row_actual,
-                self.error_msg,
-                self.prev_row_idx,
-                self.prev_start,
-                self.prev_col_idx,
-            )
-
-    def flush_token(self, ttype, value):
-        # same as above if we advance to a new row and reset to zero, we use prev
-        end = None
-        if self.col_idx:
-            end = self.col_idx - 1 if self.col_idx - 1 >= self.start else self.col_idx
-            self.tokens.append(Lexeme(ttype, ttype.value, value, self.row_idx, self.start, end))
-        else:
-            end = (
-                self.prev_col_idx - 1
-                if self.prev_col_idx - 1 >= self.prev_start
-                else self.prev_col_idx
-            )
-            self.tokens.append(
-                Lexeme(ttype, ttype.value, value, self.prev_row_idx, self.prev_start, end)
-            )
-
-        # after flushing we want to forget the token and start a new one
-        self.token = ""
-        self.start = self.col_idx
 
     def tokenizer(self):
-        while self.char != SENTINEL:
-            # comments are usually handled in the lexer
-            # so, the idea is that anything after the comment until the newline
-            # is just not tokenized; you could however store them in a seperate structure
-            # so that if you transpile to another lang, the file still maintains comments
-            if self.char == COMMENT:
-                while self.char not in (NEWLINE, SENTINEL):
-                    self.advance()
+        tokens = self.tokens
+        text = self.text
+        len_text = len(text)
+        pos = 0
+        line = 1
+        line_start = 0
+
+        # localizing token types to avoid lookups
+        T_INT = TokenType.T_INT
+        T_FLOAT = TokenType.T_FLOAT
+        T_DOT = TokenType.T_DOT
+        T_STRING = TokenType.T_STRING
+        T_IDENT = TokenType.T_IDENT
+        T_BOOL = TokenType.T_BOOL
+        T_NONE = TokenType.T_NONE
+        T_IN = TokenType.T_IN
+
+        # cache dictionaries
+        kw_map = KEYWORDS
+        sym_map = SYMBOLS
+
+        def create_lexeme(ttype, val, start_pos, end_pos):
+            # + 1 because zero index
+            col_start = start_pos - line_start + 1
+            col_end = end_pos - line_start + 1
+            return Lexeme(ttype, ttype.value, val, line, col_start, col_end)
+
+        # conditions most likely to occur, or necessary ones,
+        # are places at the top of while loop to avoid checking
+        # unlikely conditions
+        while pos < len_text:
+            char = text[pos]
+
+            if char == NEWLINE:
+                pos += 1
+                line += 1
+                line_start = pos
                 continue
 
-            # strings are a sort of exception to lexing because it is so much simpler to create
-            # an entire
-            # string literal via lexing than to parse one out, suprisingly.
-            if self.char == STRING:
-                self.prev_start = self.start
-                self.start = self.col_idx
-                value = ""
-                self.advance()
-                while self.char not in (NEWLINE, SENTINEL, STRING):
-                    value += self.char
-                    self.advance()
-                if self.char != STRING:
-                    self.error_msg = "unterminated string literal"
-                    self.error_handler()
-                self.flush_token(ttype=TokenType.T_STRING, value=value)
-                self.advance()
+            if char in " \t\r":
+                pos += 1
                 continue
 
-            if self.char.isspace() or self.char == NEWLINE:
-                self.advance()
-                # have to reset start after every space, because say
-                # we catch an error after 5 spaces, we want start to represent
-                # the start of the error, not the end of the last token because
-                # we error print from original text file
-                self.prev_start = self.start
-                self.start = self.col_idx
-                continue
+            if char == SENTINEL:
+                break
 
-            elif self.char.isdigit() or self.char == DECIMAL:
-                self.prev_start = self.start
-                self.start = self.col_idx
-                decimal_count = 0
-                while self.char.isdigit() or self.char == DECIMAL:
-                    if self.char == DECIMAL and decimal_count >= 1:
-                        # we don't instantly break because we need to finish the token
-                        # so when we error print we cant identify entire erroneous
-                        # chunk of code
-                        self.error_msg = "too many decimals in float (max 1)"
-                    self.token += self.char
-                    decimal_count += 1 if self.char == DECIMAL else 0
-                    self.advance()
-                if self.error_msg:
-                    self.error_handler()
-                if decimal_count:
-                    ttype = TokenType.T_FLOAT
-                    if self.token == ".":
-                        ttype = TokenType.T_DOT
+            if char.isalpha() or char == UNDERSCORE:
+                start = pos
+                while True:
+                    pos += 1
+                    # Accessing text[pos] directly is safe due to SENTINEL
+                    char = text[pos]
+                    if not (char.isalnum() or char == UNDERSCORE):
+                        break
+
+                value = text[start:pos]
+
+                # heuristically speaking most likely to be bool
+                if value == "true" or value == "false":
+                    tokens.append(create_lexeme(T_BOOL, value, start, pos))
+                elif value == "none":
+                    tokens.append(create_lexeme(T_NONE, value, start, pos))
+                elif value == "in":
+                    tokens.append(create_lexeme(T_IN, value, start, pos))
+                elif value in kw_map:
+                    tokens.append(create_lexeme(kw_map[value], value, start, pos))
                 else:
-                    ttype = TokenType.T_INT
-                self.flush_token(ttype, self.token)
+                    tokens.append(create_lexeme(T_IDENT, value, start, pos))
+
                 continue
 
-            # our identifies can start with underscore or letter only
-            # but can continue indefinitely with alnum and underscore
-            elif self.char.isalpha() or self.char == UNDERSCORE:
-                self.prev_start = self.start
-                self.start = self.col_idx
-                while self.char.isalnum() or self.char == UNDERSCORE:
-                    self.token += self.char
-                    self.advance()
-                # these ifs can probably be replaced with a
-                # literal-to-word map is they keep growing
-                if self.token in ("true", "false"):
-                    ttype = TokenType.T_BOOL
-                elif self.token == "none":
-                    ttype = TokenType.T_NONE
-                elif self.token == "in":
-                    ttype = TokenType.T_IN
-                elif self.token in KEYWORDS:
-                    ttype = KEYWORDS[self.token]
+            if char.isdigit() or char == DECIMAL:
+                start = pos
+                dot_seen = False
+
+                # Manual loop is faster than checking isdigit function repeatedly
+                while True:
+                    if char == DECIMAL:
+                        if dot_seen:
+                            raise LexerError("too many decimals in float", text, pos)
+                        dot_seen = True
+
+                    pos += 1
+                    char = text[pos]
+                    if not (char.isdigit() or char == DECIMAL):
+                        break
+
+                value = text[start:pos]
+
+                if dot_seen:
+                    if len(value) == 1 and value == ".":
+                        tokens.append(create_lexeme(T_DOT, value, start, pos))
+                    else:
+                        tokens.append(create_lexeme(T_FLOAT, value, start, pos))
                 else:
-                    ttype = TokenType.T_IDENT
-                self.flush_token(ttype, self.token)
+                    tokens.append(create_lexeme(T_INT, value, start, pos))
                 continue
 
-            if self.char in SYMBOLS or self.char not in SYMBOLS:
-                self.prev_start = self.start
-                self.start = self.col_idx
-                operator = self.char
-                self.advance()
-                two = operator + self.char
-                if two in SYMBOLS:
-                    operator = two
-                    # we're only advancing within the if statement
-                    # so we don't potentially skip a token
-                    self.advance()
-                if len(operator) == 1 and operator not in SYMBOLS:
-                    self.error_msg = "token not recognized"
-                    self.error_handler()
+            if char == STRING:
+                start = pos
+                # Find the closing quote instantly using C-implementation
+                end_quote = text.find(STRING, pos + 1)
 
-                self.flush_token(SYMBOLS[operator], operator)
+                if end_quote == -1:
+                    raise LexerError("unterminated string literal", text, pos)
+
+                value = text[pos + 1 : end_quote]  # Extract content without quotes
+                pos = end_quote + 1
+                tokens.append(create_lexeme(T_STRING, value, start, pos))
                 continue
-            # this only pops if the characters isn't in symbols, isn't a digit, and isn't
-            # a letter; it must be a unrecognized symbol such as ^
+
+            if char == COMMENT:
+                # Find next newline instantly
+                next_nl = text.find(NEWLINE, pos + 1)
+                pos = len_text if next_nl == -1 else next_nl
+                continue
+
+            # operator handling
+            # try two char symbol
+            if pos + 1 < len(text):
+                two_char = text[pos : pos + 2]
+                if two_char in sym_map:
+                    tokens.append(create_lexeme(sym_map[two_char], two_char, pos, pos + 2))
+                    pos += 2
+                    continue
+
+            # Try 1-char symbol
+            if char in sym_map:
+                tokens.append(create_lexeme(sym_map[char], char, pos, pos + 1))
+                pos += 1
+                continue
+
+            # if everything else fails, it must be an unrecognized symbol
+
+            raise LexerError("Token not recognized", text, pos)
         return self.tokens
