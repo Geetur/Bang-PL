@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
-from bang.lexing.lexer import Lexeme, TokenType
+from bang.lexing.lexer import Lexeme
 
 # data types
 
@@ -10,7 +10,7 @@ from bang.lexing.lexer import Lexeme, TokenType
 # type declarations for these data classes to reduce
 # ambiguity but its intutive enough and python
 # really dosent enforce it so i will ignore for now
-@dataclass
+@dataclass(slots=True)
 class IntegerLiteralNode:
     value: Any
     meta_data: Lexeme
@@ -19,7 +19,7 @@ class IntegerLiteralNode:
         return f"IntegerLiteral({self.value})"
 
 
-@dataclass
+@dataclass(slots=True)
 class FloatLiteralNode:
     value: Any
     meta_data: Lexeme
@@ -28,7 +28,7 @@ class FloatLiteralNode:
         return f"FloatLiteral({self.value})"
 
 
-@dataclass
+@dataclass(slots=True)
 class StringLiteralNode:
     value: Any
     # the meta_data here could change but I've opted to just store the meta_data
@@ -40,7 +40,7 @@ class StringLiteralNode:
         return f"StringLiteral({self.value!r})"
 
 
-@dataclass
+@dataclass(slots=True)
 class IdentifierNode:
     value: Any
     meta_data: Lexeme
@@ -49,7 +49,7 @@ class IdentifierNode:
         return f"IdentifierNode({self.value!r})"
 
 
-@dataclass
+@dataclass(slots=True)
 class BooleanLiteralNode:
     value: Any
     meta_data: Lexeme
@@ -58,7 +58,7 @@ class BooleanLiteralNode:
         return f"BooleanLiteral({self.value})"
 
 
-@dataclass
+@dataclass(slots=True)
 class NoneLiteralNode:
     value: Any
     meta_data: Lexeme
@@ -67,7 +67,7 @@ class NoneLiteralNode:
         return f"{self.value}"
 
 
-@dataclass
+@dataclass(slots=True)
 class ExpressionNode:
     root_expr: Any
 
@@ -75,10 +75,10 @@ class ExpressionNode:
         return f"root_expr: {self.root_expr}"
 
 
-@dataclass
+@dataclass(slots=True)
 class BinOpNode:
     left: Any
-    op: TokenType
+    op: int
     meta_data: Lexeme
     right: Any
 
@@ -90,9 +90,9 @@ class BinOpNode:
         ) """
 
 
-@dataclass
+@dataclass(slots=True)
 class UnaryOPNode:
-    op: TokenType
+    op: int
     meta_data: Lexeme
     operand: Any
 
@@ -100,7 +100,7 @@ class UnaryOPNode:
         return f"UnaryOp({self.op}, {self.operand})"
 
 
-@dataclass
+@dataclass(slots=True)
 class ArrayLiteralNode:
     elements: list[ExpressionNode]
     meta_data: Lexeme
@@ -109,7 +109,7 @@ class ArrayLiteralNode:
         return f"ArrayLiteral({self.elements!r})"
 
 
-@dataclass
+@dataclass(slots=True)
 class IndexNode:
     base: Any  # the expression evaluating to an array
     index: list[ExpressionNode]  # the expression for the index
@@ -122,10 +122,10 @@ class IndexNode:
                  )"""
 
 
-@dataclass
+@dataclass(slots=True)
 class AssignmentNode:
     left_hand: IdentifierNode
-    op: TokenType
+    op: int
     meta_data: Lexeme
     right_hand: ExpressionNode
 
@@ -138,7 +138,7 @@ class AssignmentNode:
 
 
 # collection of anything (expressions, loops, ifs)
-@dataclass
+@dataclass(slots=True)
 class BlockNode:
     block: list[Any] = field(default_factory=list)
 
@@ -147,7 +147,7 @@ class BlockNode:
 
 
 # ifs
-@dataclass
+@dataclass(slots=True)
 class IFNode:
     condition: ExpressionNode
     meta_data: Lexeme
@@ -165,7 +165,7 @@ class IFNode:
            )"""
 
 
-@dataclass
+@dataclass(slots=True)
 class ElifNode:
     condition: ExpressionNode
     meta_data: Lexeme
@@ -180,7 +180,7 @@ class ElifNode:
 
 
 # loops
-@dataclass
+@dataclass(slots=True)
 class ForNode:
     variable: IdentifierNode
     bound: ExpressionNode
@@ -196,7 +196,7 @@ class ForNode:
             """
 
 
-@dataclass
+@dataclass(slots=True)
 class WhileNode:
     condition: ExpressionNode
     meta_data: Lexeme
@@ -213,7 +213,7 @@ class WhileNode:
 # single token control flow constructs
 
 
-@dataclass
+@dataclass(slots=True)
 class ElseNode:
     meta_data: Lexeme
     body: BlockNode = field(default_factory=BlockNode)
@@ -225,7 +225,7 @@ class ElseNode:
         """
 
 
-@dataclass
+@dataclass(slots=True)
 class BreakNode:
     meta_data: Lexeme
 
@@ -233,7 +233,7 @@ class BreakNode:
         return "break"
 
 
-@dataclass
+@dataclass(slots=True)
 class EndNode:
     meta_data: Lexeme
 
@@ -241,7 +241,7 @@ class EndNode:
         return "end"
 
 
-@dataclass
+@dataclass(slots=True)
 class ContinueNode:
     meta_data: Lexeme
 
@@ -249,7 +249,7 @@ class ContinueNode:
         return "continue"
 
 
-@dataclass
+@dataclass(slots=True)
 class ReturnNode:
     meta_data: Lexeme
 
@@ -259,7 +259,7 @@ class ReturnNode:
         return f"return {self.expression}"
 
 
-@dataclass
+@dataclass(slots=True)
 class FunctionNode:
     name: IdentifierNode
     meta_data: Lexeme
@@ -277,7 +277,7 @@ class FunctionNode:
             """
 
 
-@dataclass
+@dataclass(slots=True)
 class CallNode:
     name: IdentifierNode
     args: list[Any]
@@ -291,15 +291,43 @@ class CallNode:
             """
 
 
-@dataclass
+@dataclass(slots=True)
 class DataClassNode:
     name: str
     fields: list[str]
     meta_data: Lexeme
 
 
-@dataclass
+@dataclass(slots=True)
 class FieldAccessNode:
     base: Any
     field: list[str]
     meta_data: Lexeme
+
+
+ARRAY_LITERAL_NODE_CLASS = ArrayLiteralNode
+ASSIGNMENT_NODE_CLASS = AssignmentNode
+BIN_OP_NODE_CLASS = BinOpNode
+BOOLEAN_LITERAL_NODE_CLASS = BooleanLiteralNode
+BREAK_NODE_CLASS = BreakNode
+CALL_NODE_CLASS = CallNode
+CONTINUE_NODE_CLASS = ContinueNode
+DATA_CLASS_NODE_CLASS = DataClassNode
+ELIF_NODE_CLASS = ElifNode
+ELSE_NODE_CLASS = ElseNode
+BLOCK_NODE_CLASS = BlockNode
+EXPRESSION_NODE_CLASS = ExpressionNode
+FIELD_ACCESS_NODE_CLASS = FieldAccessNode
+FLOAT_LITERAL_NODE_CLASS = FloatLiteralNode
+FOR_NODE_CLASS = ForNode
+FUNCTION_NODE_CLASS = FunctionNode
+IDENTIFIER_NODE_CLASS = IdentifierNode
+IF_NODE_CLASS = IFNode
+INDEX_NODE_CLASS = IndexNode
+INTEGER_LITERAL_NODE_CLASS = IntegerLiteralNode
+NONE_LITERAL_NODE_CLASS = NoneLiteralNode
+RETURN_NODE_CLASS = ReturnNode
+STRING_LITERAL_NODE_CLASS = StringLiteralNode
+END_NODE_CLASS = EndNode
+UNARY_OP_NODE_CLASS = UnaryOPNode
+WHILE_NODE_CLASS = WhileNode

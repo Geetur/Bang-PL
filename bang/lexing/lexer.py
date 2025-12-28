@@ -9,9 +9,16 @@ from bang.lexing.lexer_tokens import (
     SENTINEL,
     STRING,
     SYMBOLS,
+    T_BOOL_ENUM_VAL,
+    T_DOT_ENUM_VAL,
+    T_FLOAT_ENUM_VAL,
+    T_IDENT_ENUM_VAL,
+    T_IN_ENUM_VAL,
+    T_INT_ENUM_VAL,
+    T_NONE_ENUM_VAL,
+    T_STRING_ENUM_VAL,
     UNDERSCORE,
     Lexeme,
-    TokenType,
 )
 
 
@@ -50,17 +57,25 @@ class LexerError(Exception):
 
 
 class Lexer:
-    # so, we want to make these things attributes of the lexer class
-    # because they are important constants that our parser and other phases
-    # would like to use without having to redefine, but  it is more modular, readable,
-    # and clean to define them seperately
-    NEWLINE = NEWLINE
+    T_INT_ENUM_VAL = T_INT_ENUM_VAL
+    T_FLOAT_ENUM_VAL = T_FLOAT_ENUM_VAL
+    T_DOT_ENUM_VAL = T_DOT_ENUM_VAL
+    T_STRING_ENUM_VAL = T_STRING_ENUM_VAL
+    T_IDENT_ENUM_VAL = T_IDENT_ENUM_VAL
+    T_BOOL_ENUM_VAL = T_BOOL_ENUM_VAL
+    T_NONE_ENUM_VAL = T_NONE_ENUM_VAL
+    T_IN_ENUM_VAL = T_IN_ENUM_VAL
+
+    COMMENT = COMMENT
     DECIMAL = DECIMAL
+    NEWLINE = NEWLINE
     SENTINEL = SENTINEL
     STRING = STRING
     UNDERSCORE = UNDERSCORE
-    SYMBOLS = SYMBOLS
+
+    # cache dictionaries
     KEYWORDS = KEYWORDS
+    SYMBOLS = SYMBOLS
 
     def __init__(self, file_path):
         # reading entire file to memory
@@ -71,6 +86,7 @@ class Lexer:
         self.tokens = []
 
     def tokenizer(self):
+        cls = self.__class__
         tokens = self.tokens
         text = self.text
         len_text = len(text)
@@ -79,24 +95,31 @@ class Lexer:
         line_start = 0
 
         # localizing token types to avoid lookups
-        T_INT = TokenType.T_INT
-        T_FLOAT = TokenType.T_FLOAT
-        T_DOT = TokenType.T_DOT
-        T_STRING = TokenType.T_STRING
-        T_IDENT = TokenType.T_IDENT
-        T_BOOL = TokenType.T_BOOL
-        T_NONE = TokenType.T_NONE
-        T_IN = TokenType.T_IN
+        T_INT_ENUM_VAL = cls.T_INT_ENUM_VAL
+        T_FLOAT_ENUM_VAL = cls.T_FLOAT_ENUM_VAL
+        T_DOT_ENUM_VAL = cls.T_DOT_ENUM_VAL
+        T_STRING_ENUM_VAL = cls.T_STRING_ENUM_VAL
+        T_IDENT_ENUM_VAL = cls.T_IDENT_ENUM_VAL
+        T_BOOL_ENUM_VAL = cls.T_BOOL_ENUM_VAL
+        T_NONE_ENUM_VAL = cls.T_NONE_ENUM_VAL
+        T_IN_ENUM_VAL = cls.T_IN_ENUM_VAL
+
+        COMMENT = cls.COMMENT
+        DECIMAL = cls.DECIMAL
+        NEWLINE = cls.NEWLINE
+        SENTINEL = cls.SENTINEL
+        STRING = cls.STRING
+        UNDERSCORE = cls.UNDERSCORE
 
         # cache dictionaries
-        kw_map = KEYWORDS
-        sym_map = SYMBOLS
+        KEYWORDS = cls.KEYWORDS
+        SYMBOLS = cls.SYMBOLS
 
-        def create_lexeme(ttype, val, start_pos, end_pos):
+        def create_lexeme(ttype_id, val, start_pos, end_pos):
             # + 1 because zero index
             col_start = start_pos - line_start + 1
             col_end = end_pos - line_start + 1
-            return Lexeme(ttype, ttype.value, val, line, col_start, col_end)
+            return Lexeme(ttype_id, val, line, col_start, col_end)
 
         # conditions most likely to occur, or necessary ones,
         # are places at the top of while loop to avoid checking
@@ -130,15 +153,15 @@ class Lexer:
 
                 # heuristically speaking most likely to be bool
                 if value == "true" or value == "false":
-                    tokens.append(create_lexeme(T_BOOL, value, start, pos))
+                    tokens.append(create_lexeme(T_BOOL_ENUM_VAL, value, start, pos))
                 elif value == "none":
-                    tokens.append(create_lexeme(T_NONE, value, start, pos))
+                    tokens.append(create_lexeme(T_NONE_ENUM_VAL, value, start, pos))
                 elif value == "in":
-                    tokens.append(create_lexeme(T_IN, value, start, pos))
-                elif value in kw_map:
-                    tokens.append(create_lexeme(kw_map[value], value, start, pos))
+                    tokens.append(create_lexeme(T_IN_ENUM_VAL, value, start, pos))
+                elif value in KEYWORDS:
+                    tokens.append(create_lexeme(KEYWORDS[value], value, start, pos))
                 else:
-                    tokens.append(create_lexeme(T_IDENT, value, start, pos))
+                    tokens.append(create_lexeme(T_IDENT_ENUM_VAL, value, start, pos))
 
                 continue
 
@@ -162,11 +185,11 @@ class Lexer:
 
                 if dot_seen:
                     if len(value) == 1 and value == ".":
-                        tokens.append(create_lexeme(T_DOT, value, start, pos))
+                        tokens.append(create_lexeme(T_DOT_ENUM_VAL, value, start, pos))
                     else:
-                        tokens.append(create_lexeme(T_FLOAT, value, start, pos))
+                        tokens.append(create_lexeme(T_FLOAT_ENUM_VAL, value, start, pos))
                 else:
-                    tokens.append(create_lexeme(T_INT, value, start, pos))
+                    tokens.append(create_lexeme(T_INT_ENUM_VAL, value, start, pos))
                 continue
 
             if char == STRING:
@@ -179,7 +202,7 @@ class Lexer:
 
                 value = text[pos + 1 : end_quote]  # Extract content without quotes
                 pos = end_quote + 1
-                tokens.append(create_lexeme(T_STRING, value, start, pos))
+                tokens.append(create_lexeme(T_STRING_ENUM_VAL, value, start, pos))
                 continue
 
             if char == COMMENT:
@@ -192,14 +215,14 @@ class Lexer:
             # try two char symbol
             if pos + 1 < len(text):
                 two_char = text[pos : pos + 2]
-                if two_char in sym_map:
-                    tokens.append(create_lexeme(sym_map[two_char], two_char, pos, pos + 2))
+                if two_char in SYMBOLS:
+                    tokens.append(create_lexeme(SYMBOLS[two_char], two_char, pos, pos + 2))
                     pos += 2
                     continue
 
             # Try 1-char symbol
-            if char in sym_map:
-                tokens.append(create_lexeme(sym_map[char], char, pos, pos + 1))
+            if char in SYMBOLS:
+                tokens.append(create_lexeme(SYMBOLS[char], char, pos, pos + 1))
                 pos += 1
                 continue
 

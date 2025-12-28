@@ -8,18 +8,38 @@
 
 from bang.parsing.expression_parser import ParserError
 from bang.parsing.parser_nodes import (
-    ElifNode,
-    ElseNode,
-    EndNode,
-    ForNode,
-    FunctionNode,
-    IFNode,
-    ReturnNode,
-    WhileNode,
+    ELIF_NODE_CLASS,
+    ELSE_NODE_CLASS,
+    END_NODE_CLASS,
+    FOR_NODE_CLASS,
+    FUNCTION_NODE_CLASS,
+    IF_NODE_CLASS,
+    RETURN_NODE_CLASS,
+    WHILE_NODE_CLASS,
 )
 
 
 class ControlFlowParser:
+    ELIF_NODE_CLASS = ELIF_NODE_CLASS
+    ELSE_NODE_CLASS = ELSE_NODE_CLASS
+    END_NODE_CLASS = END_NODE_CLASS
+    FOR_NODE_CLASS = FOR_NODE_CLASS
+    FUNCTION_NODE_CLASS = FUNCTION_NODE_CLASS
+    IF_NODE_CLASS = IF_NODE_CLASS
+    RETURN_NODE_CLASS = RETURN_NODE_CLASS
+    WHILE_NODE_CLASS = WHILE_NODE_CLASS
+
+    CONTROL_FLOW_NODES = (
+        IF_NODE_CLASS,
+        ELIF_NODE_CLASS,
+        FOR_NODE_CLASS,
+        WHILE_NODE_CLASS,
+        ELSE_NODE_CLASS,
+        FUNCTION_NODE_CLASS,
+    )
+
+    DEPENDANT_NODES = (ELIF_NODE_CLASS, ELSE_NODE_CLASS)
+
     def __init__(self, file, expression_nodes):
         self.file = file
 
@@ -33,30 +53,27 @@ class ControlFlowParser:
         self.post_blockenize = []
 
     def blockenize(self):
+        cls = self.__class__
+        DEPENDANT_NODES = cls.DEPENDANT_NODES
+        CONTROL_FLOW_NODES = cls.CONTROL_FLOW_NODES
+        ELIF_NODE_CLASS = cls.END_NODE_CLASS
+        END_NODE_CLASS = cls.END_NODE_CLASS
+        FUNCTION_NODE_CLASS = cls.FUNCTION_NODE_CLASS
+        IF_NODE_CLASS = cls.IF_NODE_CLASS
         # stack is going to be our current control-flow construct we are in
         # once we see an end, we pop of the stack and either add it to the post blockenize
         # or add it to the thing behind it in the stack (meaning it's a nested construct)
         stack = []
-
-        control_flow_nodes = {
-            IFNode,
-            ElifNode,
-            ForNode,
-            WhileNode,
-            ElseNode,
-            FunctionNode,
-        }
-
-        dependant_nodes = (ElifNode, ElseNode)
 
         for node in self.expression_nodes:
             # so if we see a control flow construct,
             # we just add it to the stack and if we
             # see a non construct, add it to the body
             # its nested in
-            if type(node) in control_flow_nodes:
+            type_node = type(node)
+            if type_node in CONTROL_FLOW_NODES:
                 stack.append(node)
-            elif type(node) is EndNode:
+            elif type_node is END_NODE_CLASS:
                 if not stack:
                     raise ParserError(
                         self.file,
@@ -66,8 +83,9 @@ class ControlFlowParser:
                         node.meta_data.column_end,
                     )
                 construct = stack.pop()
-                if type(construct) in dependant_nodes:
-                    if not stack or (type(stack[-1]) is not IFNode):
+                type_construct = type(construct)
+                if type_construct in DEPENDANT_NODES:
+                    if not stack or (type(stack[-1]) is not IF_NODE_CLASS):
                         raise ParserError(
                             self.file,
                             "This construct is dependant on an if statement",
@@ -75,7 +93,7 @@ class ControlFlowParser:
                             construct.meta_data.column_start,
                             construct.meta_data.column_end,
                         )
-                    if type(construct) is ElifNode:
+                    if type_construct is ELIF_NODE_CLASS:
                         stack[-1].elif_branch.block.append(construct)
                     else:
                         stack[-1].else_branch.block.append(construct)
@@ -84,8 +102,8 @@ class ControlFlowParser:
                         self.post_blockenize.append(construct)
                     else:
                         stack[-1].body.block.append(construct)
-            elif type(node) is ReturnNode:
-                if not any(type(item) is FunctionNode for item in stack):
+            elif type_node is RETURN_NODE_CLASS:
+                if not any(type(item) is FUNCTION_NODE_CLASS for item in stack):
                     raise ParserError(
                         self.file,
                         "missing matching construct",
