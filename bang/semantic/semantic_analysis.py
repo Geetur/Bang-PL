@@ -4,46 +4,98 @@
 # all statically known indexes are guaranteed to be numbers;
 # all bin ops and unary ops are guaranteed to be valid if statically known
 # the majority of errors that can be statically determined are determined.
-from bang.lexing.lexer import TokenType
+
+from bang.lexing.lexer_tokens import (
+    T_AND_ENUM_VAL,
+    T_ASSIGN_ENUM_VAL,
+    T_ASTERISK_ASSIGN_ENUM_VAL,
+    T_ASTERISK_ENUM_VAL,
+    T_BOOL_ENUM_VAL,
+    T_BREAK_ENUM_VAL,
+    T_COMMA_ENUM_VAL,
+    T_CONTINUE_ENUM_VAL,
+    T_DATA_ENUM_VAL,
+    T_DOT_ENUM_VAL,
+    T_DSLASH_ENUM_VAL,
+    T_ELIF_ENUM_VAL,
+    T_ELSE_ENUM_VAL,
+    T_END_ENUM_VAL,
+    T_EQ_ENUM_VAL,
+    T_EXPO_ENUM_VAL,
+    T_FLOAT_ENUM_VAL,
+    T_FN_ENUM_VAL,
+    T_FOR_ENUM_VAL,
+    T_GT_ENUM_VAL,
+    T_GTEQ_ENUM_VAL,
+    T_IDENT_ENUM_VAL,
+    T_IF_ENUM_VAL,
+    T_IN_ENUM_VAL,
+    T_INT_ENUM_VAL,
+    T_LBRACE_ENUM_VAL,
+    T_LBRACKET_ENUM_VAL,
+    T_LEQ_ENUM_VAL,
+    T_LPAREN_ENUM_VAL,
+    T_LT_ENUM_VAL,
+    T_MINUS_ASSIGN_ENUM_VAL,
+    T_MINUS_ENUM_VAL,
+    T_NEGATE_ENUM_VAL,
+    T_NEQ_ENUM_VAL,
+    T_NONE_ENUM_VAL,
+    T_OR_ENUM_VAL,
+    T_PLUS_ASSIGN_ENUM_VAL,
+    T_PLUS_ENUM_VAL,
+    T_RBRACE_ENUM_VAL,
+    T_RBRACKET_ENUM_VAL,
+    T_RETURN_ENUM_VAL,
+    T_RPAREN_ENUM_VAL,
+    T_SEMICOLON_ENUM_VAL,
+    T_SLASH_ASSIGN_ENUM_VAL,
+    T_SLASH_ENUM_VAL,
+    T_STRING_ENUM_VAL,
+    T_UMINUS_ENUM_VAL,
+    T_UPLUS_ENUM_VAL,
+    T_WHILE_ENUM_VAL,
+)
 from bang.parsing.parser_nodes import (
-    ArrayLiteralNode,
-    AssignmentNode,
-    BinOpNode,
-    BlockNode,
-    BooleanLiteralNode,
-    BreakNode,
-    CallNode,
-    ContinueNode,
-    DataClassNode,
-    ElifNode,
-    ElseNode,
-    ExpressionNode,
-    FieldAccessNode,
-    FloatLiteralNode,
-    ForNode,
-    FunctionNode,
-    IdentifierNode,
-    IFNode,
-    IndexNode,
-    IntegerLiteralNode,
-    NoneLiteralNode,
-    ReturnNode,
-    StringLiteralNode,
-    UnaryOPNode,
-    WhileNode,
+    ARRAY_LITERAL_NODE_CLASS,
+    ASSIGNMENT_NODE_CLASS,
+    BIN_OP_NODE_CLASS,
+    BLOCK_NODE_CLASS,
+    BOOLEAN_LITERAL_NODE_CLASS,
+    BREAK_NODE_CLASS,
+    CALL_NODE_CLASS,
+    CONTINUE_NODE_CLASS,
+    DATA_CLASS_NODE_CLASS,
+    ELIF_NODE_CLASS,
+    ELSE_NODE_CLASS,
+    END_NODE_CLASS,
+    EXPRESSION_NODE_CLASS,
+    FIELD_ACCESS_NODE_CLASS,
+    FLOAT_LITERAL_NODE_CLASS,
+    FOR_NODE_CLASS,
+    FUNCTION_NODE_CLASS,
+    IDENTIFIER_NODE_CLASS,
+    IF_NODE_CLASS,
+    INDEX_NODE_CLASS,
+    INTEGER_LITERAL_NODE_CLASS,
+    NONE_LITERAL_NODE_CLASS,
+    RETURN_NODE_CLASS,
+    STRING_LITERAL_NODE_CLASS,
+    UNARY_OP_NODE_CLASS,
+    WHILE_NODE_CLASS,
 )
 from bang.semantic.semantic_nodes import (
-    ArrayType,
-    BoolType,
-    DataClassType,
-    DictType,
-    DynamicType,
-    FunctionType,
-    InstanceType,
-    NoneType,
-    NumberType,
-    SetType,
-    StringType,
+    ARRAY_TYPE_CLASS,
+    BOOL_TYPE_CLASS,
+    DATA_CLASS_TYPE_CLASS,
+    DICT_TYPE_CLASS,
+    DYNAMIC_TYPE_CLASS,
+    FUNCTION_TYPE_CLASS,
+    INSTANCE_TYPE_CLASS,
+    NONE_TYPE_CLASS,
+    NUMBER_TYPE_CLASS,
+    SET_TYPE_CLASS,
+    STRING_TYPE_CLASS,
 )
 
 
@@ -82,10 +134,185 @@ class SemanticError(Exception):
 
 
 class SemanticAnalysis:
+    # SEMANTIC TYPES
+
+    ARRAY_TYPE_CLASS = ARRAY_TYPE_CLASS
+    BOOL_TYPE_CLASS = BOOL_TYPE_CLASS
+    DATA_CLASS_TYPE_CLASS = DATA_CLASS_TYPE_CLASS
+    DICT_TYPE_CLASS = DICT_TYPE_CLASS
+    DYNAMIC_TYPE_CLASS = DYNAMIC_TYPE_CLASS
+    FUNCTION_TYPE_CLASS = FUNCTION_TYPE_CLASS
+    INSTANCE_TYPE_CLASS = INSTANCE_TYPE_CLASS
+    NONE_TYPE_CLASS = NONE_TYPE_CLASS
+    NUMBER_TYPE_CLASS = NUMBER_TYPE_CLASS
+    SET_TYPE_CLASS = SET_TYPE_CLASS
+    STRING_TYPE_CLASS = STRING_TYPE_CLASS
+
+    # PARSER NODES
+
+    ARRAY_LITERAL_NODE_CLASS = ARRAY_LITERAL_NODE_CLASS
+    ASSIGNMENT_NODE_CLASS = ASSIGNMENT_NODE_CLASS
+    BIN_OP_NODE_CLASS = BIN_OP_NODE_CLASS
+    BOOLEAN_LITERAL_NODE_CLASS = BOOLEAN_LITERAL_NODE_CLASS
+    BREAK_NODE_CLASS = BREAK_NODE_CLASS
+    CALL_NODE_CLASS = CALL_NODE_CLASS
+    CONTINUE_NODE_CLASS = CONTINUE_NODE_CLASS
+    DATA_CLASS_NODE_CLASS = DATA_CLASS_NODE_CLASS
+    ELIF_NODE_CLASS = ELIF_NODE_CLASS
+    ELSE_NODE_CLASS = ELSE_NODE_CLASS
+    END_NODE_CLASS = END_NODE_CLASS
+    EXPRESSION_NODE_CLASS = EXPRESSION_NODE_CLASS
+    FIELD_ACCESS_NODE_CLASS = FIELD_ACCESS_NODE_CLASS
+    FLOAT_LITERAL_NODE_CLASS = FLOAT_LITERAL_NODE_CLASS
+    FOR_NODE_CLASS = FOR_NODE_CLASS
+    FUNCTION_NODE_CLASS = FUNCTION_NODE_CLASS
+    IDENTIFIER_NODE_CLASS = IDENTIFIER_NODE_CLASS
+    IF_NODE_CLASS = IF_NODE_CLASS
+    INDEX_NODE_CLASS = INDEX_NODE_CLASS
+    INTEGER_LITERAL_NODE_CLASS = INTEGER_LITERAL_NODE_CLASS
+    NONE_LITERAL_NODE_CLASS = NONE_LITERAL_NODE_CLASS
+    RETURN_NODE_CLASS = RETURN_NODE_CLASS
+    STRING_LITERAL_NODE_CLASS = STRING_LITERAL_NODE_CLASS
+    UNARY_OP_NODE_CLASS = UNARY_OP_NODE_CLASS
+    WHILE_NODE_CLASS = WHILE_NODE_CLASS
+    BLOCK_NODE_CLASS = BLOCK_NODE_CLASS
+
+    # LEXER_ENUMS
+
+    T_PLUS_ENUM_VAL = T_PLUS_ENUM_VAL  # +
+    T_MINUS_ENUM_VAL = T_MINUS_ENUM_VAL  # -
+    T_ASTERISK_ENUM_VAL = T_ASTERISK_ENUM_VAL  # *
+    T_SLASH_ENUM_VAL = T_SLASH_ENUM_VAL  # /
+    T_ASSIGN_ENUM_VAL = T_ASSIGN_ENUM_VAL  # =
+    T_NEGATE_ENUM_VAL = T_NEGATE_ENUM_VAL  # !
+
+    # these unary tokens will not be
+    # created in the lexer, but will
+    # we useful for elegantly remapping
+    # expressions into their unambiguous
+    # versions, with unary support
+    T_UPLUS_ENUM_VAL = T_UPLUS_ENUM_VAL  # +1, +1.2
+    T_UMINUS_ENUM_VAL = T_UMINUS_ENUM_VAL  # -1, -2.2
+
+    # Grouping & Punctuation
+    T_LPAREN_ENUM_VAL = T_LPAREN_ENUM_VAL  # (
+    T_RPAREN_ENUM_VAL = T_RPAREN_ENUM_VAL  # )
+    T_LBRACE_ENUM_VAL = T_LBRACE_ENUM_VAL  # {
+    T_RBRACE_ENUM_VAL = T_RBRACE_ENUM_VAL  # }
+    T_LBRACKET_ENUM_VAL = T_LBRACKET_ENUM_VAL  # [
+    T_RBRACKET_ENUM_VAL = T_RBRACKET_ENUM_VAL  # ]
+    T_COMMA_ENUM_VAL = T_COMMA_ENUM_VAL  # ,
+    T_SEMICOLON_ENUM_VAL = T_SEMICOLON_ENUM_VAL  # ;
+    T_DOT_ENUM_VAL = T_DOT_ENUM_VAL  # .
+
+    # Double-character tokens
+    T_PLUS_ASSIGN_ENUM_VAL = T_PLUS_ASSIGN_ENUM_VAL  # +=
+    T_MINUS_ASSIGN_ENUM_VAL = T_MINUS_ASSIGN_ENUM_VAL  # -=
+    T_ASTERISK_ASSIGN_ENUM_VAL = T_ASTERISK_ASSIGN_ENUM_VAL  # *=
+    T_SLASH_ASSIGN_ENUM_VAL = T_SLASH_ASSIGN_ENUM_VAL  # /=
+
+    T_EQ_ENUM_VAL = T_EQ_ENUM_VAL  # ==
+    T_NEQ_ENUM_VAL = T_NEQ_ENUM_VAL  # !=
+    T_LT_ENUM_VAL = T_LT_ENUM_VAL  # <
+    T_LEQ_ENUM_VAL = T_LEQ_ENUM_VAL  # <=
+    T_GT_ENUM_VAL = T_GT_ENUM_VAL  # >
+    T_GTEQ_ENUM_VAL = T_GTEQ_ENUM_VAL  # >=
+    T_DSLASH_ENUM_VAL = T_DSLASH_ENUM_VAL  # //
+    T_EXPO_ENUM_VAL = T_EXPO_ENUM_VAL  # **
+    T_AND_ENUM_VAL = T_AND_ENUM_VAL  # &&
+    T_OR_ENUM_VAL = T_OR_ENUM_VAL  # ||
+
+    # Literals
+    T_NONE_ENUM_VAL = T_NONE_ENUM_VAL  # none
+    T_INT_ENUM_VAL = T_INT_ENUM_VAL  # 1, 2, 3, ...
+    T_FLOAT_ENUM_VAL = T_FLOAT_ENUM_VAL  # 1.1, 2.2, 3.3, ...
+    T_BOOL_ENUM_VAL = T_BOOL_ENUM_VAL  # true/false
+    T_STRING_ENUM_VAL = T_STRING_ENUM_VAL  # "hi"
+    T_IDENT_ENUM_VAL = T_IDENT_ENUM_VAL  # my_variable
+
+    # Keywords
+    T_IF_ENUM_VAL = T_IF_ENUM_VAL  # if
+    T_ELIF_ENUM_VAL = T_ELIF_ENUM_VAL  # elif
+    T_ELSE_ENUM_VAL = T_ELSE_ENUM_VAL  # else
+    T_FOR_ENUM_VAL = T_FOR_ENUM_VAL  # for
+    T_WHILE_ENUM_VAL = T_WHILE_ENUM_VAL  # while
+    T_BREAK_ENUM_VAL = T_BREAK_ENUM_VAL  # break
+    T_CONTINUE_ENUM_VAL = T_CONTINUE_ENUM_VAL  # continue
+    T_RETURN_ENUM_VAL = T_RETURN_ENUM_VAL  # return
+    T_END_ENUM_VAL = T_END_ENUM_VAL  # end
+    T_FN_ENUM_VAL = T_FN_ENUM_VAL  # fn
+    T_IN_ENUM_VAL = T_IN_ENUM_VAL  # in
+    T_DATA_ENUM_VAL = T_DATA_ENUM_VAL  # data
+
+    BUILT_IN_FUNCTIONS = {
+        "print": FUNCTION_TYPE_CLASS,
+        "len": FUNCTION_TYPE_CLASS,
+        "sum": FUNCTION_TYPE_CLASS,
+        "min": FUNCTION_TYPE_CLASS,
+        "max": FUNCTION_TYPE_CLASS,
+        "sort": FUNCTION_TYPE_CLASS,
+        "set": SET_TYPE_CLASS,
+        "dict": DICT_TYPE_CLASS,
+        "range": FUNCTION_TYPE_CLASS,
+    }
+
+    LITERALS = {
+        INTEGER_LITERAL_NODE_CLASS: NUMBER_TYPE_CLASS,
+        FLOAT_LITERAL_NODE_CLASS: NUMBER_TYPE_CLASS,
+        STRING_LITERAL_NODE_CLASS: STRING_TYPE_CLASS,
+        BOOLEAN_LITERAL_NODE_CLASS: BOOL_TYPE_CLASS,
+        NONE_LITERAL_NODE_CLASS: NONE_TYPE_CLASS,
+    }
+
+    ARITH_OPS = {
+        T_PLUS_ENUM_VAL,
+        T_MINUS_ENUM_VAL,
+        T_ASTERISK_ENUM_VAL,
+        T_SLASH_ENUM_VAL,
+        T_DSLASH_ENUM_VAL,
+        T_EXPO_ENUM_VAL,
+    }
+
+    ASSIGNMENT_TO_NORMAL = {
+        T_PLUS_ASSIGN_ENUM_VAL: T_PLUS_ENUM_VAL,
+        T_MINUS_ASSIGN_ENUM_VAL: T_MINUS_ENUM_VAL,
+        T_ASTERISK_ASSIGN_ENUM_VAL: T_ASTERISK_ENUM_VAL,
+        T_SLASH_ASSIGN_ENUM_VAL: T_SLASH_ENUM_VAL,
+    }
+
+    ARITH_ASSIGNMENTS = {
+        T_PLUS_ASSIGN_ENUM_VAL,
+        T_MINUS_ASSIGN_ENUM_VAL,
+        T_SLASH_ASSIGN_ENUM_VAL,
+        T_ASTERISK_ASSIGN_ENUM_VAL,
+    }
+
+    ALLOWED_UNARY_OPS = {
+        NUMBER_TYPE_CLASS,
+    }
+
+    UNHASHABLE_TYPES = {
+        ARRAY_TYPE_CLASS,
+        DICT_TYPE_CLASS,
+        SET_TYPE_CLASS,
+    }
+
+    BIN_OP_DIFFERENT_RULES = {
+        # I honestly should just merge number type and booltype
+        # but thatll be for another day
+        (STRING_TYPE_CLASS, NUMBER_TYPE_CLASS, T_ASTERISK_ENUM_VAL): STRING_TYPE_CLASS,
+        (NUMBER_TYPE_CLASS, STRING_TYPE_CLASS, T_ASTERISK_ENUM_VAL): STRING_TYPE_CLASS,
+        (STRING_TYPE_CLASS, BOOL_TYPE_CLASS, T_ASTERISK_ENUM_VAL): STRING_TYPE_CLASS,
+        (BOOL_TYPE_CLASS, STRING_TYPE_CLASS, T_ASTERISK_ENUM_VAL): STRING_TYPE_CLASS,
+        (ARRAY_TYPE_CLASS, NUMBER_TYPE_CLASS, T_ASTERISK_ENUM_VAL): ARRAY_TYPE_CLASS,
+        (NUMBER_TYPE_CLASS, ARRAY_TYPE_CLASS, T_ASTERISK_ENUM_VAL): ARRAY_TYPE_CLASS,
+        (ARRAY_TYPE_CLASS, BOOL_TYPE_CLASS, T_ASTERISK_ENUM_VAL): ARRAY_TYPE_CLASS,
+        (BOOL_TYPE_CLASS, ARRAY_TYPE_CLASS, T_ASTERISK_ENUM_VAL): ARRAY_TYPE_CLASS,
+    }
+
     def __init__(self, file, roots):
         self.file = file
         self.roots = roots
-
         # the scope stack is the only semi confusing
         # thing about semantic analysis really, everything else
         # is just psuedo-intepreting to type check.
@@ -98,97 +325,31 @@ class SemanticAnalysis:
 
         self.scope_stack = [{}]
 
-        self.built_in_functions = {
-            "print": FunctionType,
-            "len": FunctionType,
-            "sum": FunctionType,
-            "min": FunctionType,
-            "max": FunctionType,
-            "sort": FunctionType,
-            "set": SetType,
-            "dict": DictType,
-            "range": FunctionType,
-        }
-
         self.scope_stack[0].update(
-            {name: typ(value=None) for name, typ in self.built_in_functions.items()}
+            {name: typ(value=None) for name, typ in self.BUILT_IN_FUNCTIONS.items()}
         )
+
+        self.CONSTRUCTS_TO_WALK = {
+            self.ASSIGNMENT_NODE_CLASS: self.walk_assignments,
+            self.IF_NODE_CLASS: self.walk_if,
+            self.ELIF_NODE_CLASS: self.walk_elif,
+            self.ELSE_NODE_CLASS: self.walk_else,
+            self.FOR_NODE_CLASS: self.walk_for,
+            self.WHILE_NODE_CLASS: self.walk_while,
+            self.BLOCK_NODE_CLASS: self.walk_block,
+            self.BREAK_NODE_CLASS: self.walk_break,
+            self.CONTINUE_NODE_CLASS: self.walk_continue,
+            self.RETURN_NODE_CLASS: self.walk_return,
+            self.EXPRESSION_NODE_CLASS: self.walk_expression,
+            self.FUNCTION_NODE_CLASS: self.walk_function,
+            self.CALL_NODE_CLASS: self.walk_expression,
+            self.DATA_CLASS_NODE_CLASS: self.walk_dataclass,
+        }
 
         # we need to know the loop depth for the break/continue etc constructs
         # because if we see a break outside of a loop for example we can throw an error
         self.loop_depth = 0
         self.func_depth = 0
-
-        self.literals = {
-            IntegerLiteralNode: NumberType,
-            FloatLiteralNode: NumberType,
-            StringLiteralNode: StringType,
-            BooleanLiteralNode: BoolType,
-            NoneLiteralNode: NoneType,
-        }
-
-        self.ARITH_OPS = {
-            TokenType.T_PLUS,
-            TokenType.T_MINUS,
-            TokenType.T_ASTERISK,
-            TokenType.T_SLASH,
-            TokenType.T_DSLASH,
-            TokenType.T_EXPO,
-        }
-
-        self.assignment_to_normal = {
-            TokenType.T_PLUS_ASSIGN: TokenType.T_PLUS,
-            TokenType.T_MINUS_ASSIGN: TokenType.T_MINUS,
-            TokenType.T_ASTERISK_ASSIGN: TokenType.T_ASTERISK,
-            TokenType.T_SLASH_ASSIGN: TokenType.T_SLASH,
-        }
-
-        self.ARITH_ASSIGNMENTS = {
-            TokenType.T_PLUS_ASSIGN,
-            TokenType.T_MINUS_ASSIGN,
-            TokenType.T_SLASH_ASSIGN,
-            TokenType.T_ASTERISK_ASSIGN,
-        }
-
-        self.allowed_unary_ops = {
-            NumberType,
-        }
-
-        self.unhashable_types = {
-            ArrayType,
-            DictType,
-            SetType,
-        }
-
-        self.BIN_OP_DIFFERENT_RULES = {
-            # I honestly should just merge number type and booltype
-            # but thatll be for another day
-            (StringType, NumberType, TokenType.T_ASTERISK): StringType,
-            (NumberType, StringType, TokenType.T_ASTERISK): StringType,
-            (StringType, BoolType, TokenType.T_ASTERISK): StringType,
-            (BoolType, StringType, TokenType.T_ASTERISK): StringType,
-            (ArrayType, NumberType, TokenType.T_ASTERISK): ArrayType,
-            (NumberType, ArrayType, TokenType.T_ASTERISK): ArrayType,
-            (ArrayType, BoolType, TokenType.T_ASTERISK): ArrayType,
-            (BoolType, ArrayType, TokenType.T_ASTERISK): ArrayType,
-        }
-
-        self.construct_to_walk = {
-            AssignmentNode: self.walk_assignments,
-            IFNode: self.walk_if,
-            ElifNode: self.walk_elif,
-            ElseNode: self.walk_else,
-            ForNode: self.walk_for,
-            WhileNode: self.walk_while,
-            BlockNode: self.walk_block,
-            BreakNode: self.walk_break,
-            ContinueNode: self.walk_continue,
-            ReturnNode: self.walk_return,
-            ExpressionNode: self.walk_expression,
-            FunctionNode: self.walk_function,
-            CallNode: self.walk_expression,
-            DataClassNode: self.walk_dataclass,
-        }
 
     def walk_program(self):
         for construct in self.roots:
@@ -198,7 +359,7 @@ class SemanticAnalysis:
     # typically but its clearer to just call the specific expression
     # in some cases although this could change
     def walk_construct(self, root):
-        handler = self.construct_to_walk.get(type(root))
+        handler = self.CONSTRUCTS_TO_WALK[type(root)]
         return handler(root)
 
     def walk_function(self, root):
@@ -206,11 +367,11 @@ class SemanticAnalysis:
         args_name = root.arg_list_name
         # its really important to initalize the function outside of its bodys scope
         #
-        self.initalize_var(function_name, FunctionType(value=root.body))
+        self.initalize_var(function_name, FUNCTION_TYPE_CLASS(value=root.body))
 
         self.func_depth += 1
         self.scope_stack.append({})
-        self.initalize_var(args_name, DynamicType())
+        self.initalize_var(args_name, DYNAMIC_TYPE_CLASS())
 
         self.walk_block(root.body)
         self.scope_stack.pop()
@@ -221,7 +382,7 @@ class SemanticAnalysis:
         # removing duplicate names
         seen = set()
         dataclass_fields = [f for f in root.fields if not (f in seen or seen.add(f))]
-        self.initalize_var(dataclass_name, DataClassType(fields=dataclass_fields))
+        self.initalize_var(dataclass_name, DATA_CLASS_TYPE_CLASS(fields=dataclass_fields))
 
     def walk_block(self, root):
         # A block just walks its children in the current scope
@@ -255,8 +416,8 @@ class SemanticAnalysis:
         self.loop_depth += 1
         self.scope_stack.append({})
         left_hand_name = root.variable.value
-        right_hand_type = DynamicType()
-        if type(right_hand_type) in (NoneType,):
+        right_hand_type = DYNAMIC_TYPE_CLASS()
+        if type(right_hand_type) in (NONE_TYPE_CLASS,):
             raise SemanticError(
                 self.file,
                 "For loop bound must be an array, identifier, or number",
@@ -320,7 +481,7 @@ class SemanticAnalysis:
         self.scope_stack[-1][left_hand] = right_hand
 
     def search_for_var(self, name):
-        if type(name) is IdentifierNode:
+        if type(name) is IDENTIFIER_NODE_CLASS:
             name = name.value
 
         for scope in reversed(self.scope_stack):
@@ -329,15 +490,25 @@ class SemanticAnalysis:
         return ""
 
     def walk_assignments(self, root):
-        def walk_assignment_typical(left_hand, op_type, right_hand):
+        DYNAMIC_TYPE_CLASS = self.DYNAMIC_TYPE_CLASS
+        NUMBER_TYPE_CLASS = self.NUMBER_TYPE_CLASS
+        BOOL_TYPE_CLASS = self.BOOL_TYPE_CLASS
+
+        ARITH_ASSIGNMENTS = self.ARITH_ASSIGNMENTS
+        ASSIGNMENTS_TO_NORMAL = self.ASSIGNMENT_TO_NORMAL
+        BIN_OP_DIFFERENT_RULES = self.BIN_OP_DIFFERENT_RULES
+
+        def walk_assignment_typical(left_hand, op_type_id, right_hand):
             left_hand_name = left_hand.value
             left_hand_type = self.search_for_var(left_hand_name)
+            type_left_hand_type = type(left_hand_type)
+            type_right_hand = type(right_hand)
             if (
-                type(left_hand_type) is not DynamicType
-                and op_type in self.ARITH_ASSIGNMENTS
-                and type(right_hand) is not DynamicType
+                type_left_hand_type is not DYNAMIC_TYPE_CLASS
+                and op_type_id in ARITH_ASSIGNMENTS
+                and type_right_hand is not DYNAMIC_TYPE_CLASS
             ):
-                op_type = self.assignment_to_normal[op_type]
+                op_type_id = ASSIGNMENTS_TO_NORMAL[op_type_id]
                 if not left_hand_type:
                     raise SemanticError(
                         self.file,
@@ -349,17 +520,17 @@ class SemanticAnalysis:
                 # is it the same type?
                 if not (
                     (
-                        type(right_hand) in (NumberType, BoolType)
-                        and type(left_hand_type) in (NumberType, BoolType)
+                        type_right_hand in (NUMBER_TYPE_CLASS, BOOL_TYPE_CLASS)
+                        and type_left_hand_type in (NUMBER_TYPE_CLASS, BOOL_TYPE_CLASS)
                     )
-                    or type(left_hand_type) is type(right_hand)
+                    or type_left_hand_type is type_right_hand
                 ):
                     # does it adhere to different type operation rules?
                     if (
-                        type(left_hand_type),
-                        type(right_hand),
-                        op_type,
-                    ) not in self.BIN_OP_DIFFERENT_RULES:
+                        type_left_hand_type,
+                        type_right_hand,
+                        op_type_id,
+                    ) not in BIN_OP_DIFFERENT_RULES:
                         raise SemanticError(
                             self.file,
                             "Invalid operation",
@@ -369,9 +540,14 @@ class SemanticAnalysis:
                         )
             self.initalize_var(left_hand_name, right_hand)
 
-        def walk_assignment_index(left_hand, op_type, right_hand):
+        def walk_assignment_index(left_hand, op_type_id, right_hand):
             left_hand_type = self.walk_expression(left_hand)
-            if type(left_hand_type) is not DynamicType and type(right_hand) is not DynamicType:
+            type_left_hand_type = type(left_hand_type)
+            type_right_hand = type(right_hand)
+            if (
+                type_left_hand_type is not DYNAMIC_TYPE_CLASS
+                and type_right_hand is not DYNAMIC_TYPE_CLASS
+            ):
                 if not left_hand_type:
                     raise SemanticError(
                         self.file,
@@ -380,20 +556,20 @@ class SemanticAnalysis:
                         root.meta_data.column_start,
                         root.meta_data.column_end,
                     )
-                if op_type in self.ARITH_ASSIGNMENTS:
-                    op_type = self.assignment_to_normal[op_type]
+                if op_type_id in ARITH_ASSIGNMENTS:
+                    op_type_id = ASSIGNMENTS_TO_NORMAL[op_type_id]
                     if not (
                         (
-                            type(right_hand) in (NumberType, BoolType)
-                            and type(left_hand_type) in (NumberType, BoolType)
+                            type_right_hand in (NUMBER_TYPE_CLASS, BOOL_TYPE_CLASS)
+                            and type_left_hand_type in (NUMBER_TYPE_CLASS, BOOL_TYPE_CLASS)
                         )
-                        or type(left_hand_type) is type(right_hand)
+                        or type_left_hand_type is type_right_hand
                     ):
                         if (
-                            type(left_hand_type),
-                            type(right_hand),
-                            op_type,
-                        ) not in self.BIN_OP_DIFFERENT_RULES:
+                            type_left_hand_type,
+                            type_right_hand,
+                            op_type_id,
+                        ) not in BIN_OP_DIFFERENT_RULES:
                             raise SemanticError(
                                 self.file,
                                 "Invalid operation",
@@ -402,14 +578,16 @@ class SemanticAnalysis:
                                 root.meta_data.column_end,
                             )
 
-        def walk_assignment_field_access(left_hand, op_type, right_hand):
+        def walk_assignment_field_access(left_hand, op_type_id, right_hand):
+            INSTANCE_TYPE_CLASS = self.INSTANCE_TYPE_CLASS
             base_type = self.walk_expression(left_hand.base)
-
             fields_chain = left_hand.field
+            type_right_hand = type(right_hand)
             for name in fields_chain[:-1]:
-                if type(base_type) is DynamicType:
+                type_base_type = type(base_type)
+                if type_base_type is DYNAMIC_TYPE_CLASS:
                     return
-                if type(base_type) is not InstanceType:
+                if type_base_type is not INSTANCE_TYPE_CLASS:
                     raise SemanticError(
                         self.file,
                         "field access only performable on instances of classes",
@@ -418,9 +596,10 @@ class SemanticAnalysis:
                         left_hand.meta_data.column_end,
                     )
                 derived_class = self.search_for_var(base_type.of)
-                if type(derived_class) is DynamicType:
+                type_derived_class = type(derived_class)
+                if type_derived_class is DYNAMIC_TYPE_CLASS:
                     return
-                if type(derived_class) is not DataClassType:
+                if type_derived_class is not DATA_CLASS_TYPE_CLASS:
                     raise SemanticError(
                         self.file,
                         "field access is only performable on instances of classes",
@@ -438,10 +617,10 @@ class SemanticAnalysis:
                         left_hand.meta_data.column_end,
                     )
                 base_type = base_type.fields[name]
-
-            if type(base_type) is DynamicType:
+            type_base_type = type(base_type)
+            if type_base_type is DYNAMIC_TYPE_CLASS:
                 return
-            if type(base_type) is not InstanceType:
+            if type_base_type is not INSTANCE_TYPE_CLASS:
                 raise SemanticError(
                     self.file,
                     "field access is only performable on instances of classes",
@@ -453,10 +632,13 @@ class SemanticAnalysis:
             parent_instance_type = base_type
             final_field = fields_chain[-1]
             derived_class = self.search_for_var(parent_instance_type.of)
-
-            if type(derived_class) is DynamicType:
+            type_derived_class = type(derived_class)
+            if type_derived_class is DYNAMIC_TYPE_CLASS:
                 return
-            if type(derived_class) is not DataClassType or final_field not in derived_class.fields:
+            if (
+                type_derived_class is not DATA_CLASS_TYPE_CLASS
+                or final_field not in derived_class.fields
+            ):
                 raise SemanticError(
                     self.file,
                     "field name wasn't included in the definition "
@@ -467,24 +649,26 @@ class SemanticAnalysis:
                 )
 
             current_field_type = parent_instance_type.fields[final_field]
+            type_current_field_type = type(current_field_type)
             if (
-                type(current_field_type) is not DynamicType
-                and type(right_hand) is not DynamicType
-                and op_type in self.ARITH_ASSIGNMENTS
+                type_current_field_type is not DYNAMIC_TYPE_CLASS
+                and type_right_hand is not DYNAMIC_TYPE_CLASS
+                and op_type_id in ARITH_ASSIGNMENTS
             ):
-                op_norm = self.assignment_to_normal[op_type]
-                same_num_bool = type(right_hand) in (NumberType, BoolType) and type(
-                    current_field_type
-                ) in (
-                    NumberType,
-                    BoolType,
+                op_norm = ASSIGNMENTS_TO_NORMAL[op_type_id]
+                same_num_bool = type_right_hand in (
+                    NUMBER_TYPE_CLASS,
+                    BOOL_TYPE_CLASS,
+                ) and type_current_field_type in (
+                    NUMBER_TYPE_CLASS,
+                    BOOL_TYPE_CLASS,
                 )
-                if not (same_num_bool or type(current_field_type) is type(right_hand)):
+                if not (same_num_bool or type_current_field_type is type_right_hand):
                     if (
-                        type(current_field_type),
-                        type(right_hand),
+                        type_current_field_type,
+                        type_right_hand,
                         op_norm,
-                    ) not in self.BIN_OP_DIFFERENT_RULES:
+                    ) not in BIN_OP_DIFFERENT_RULES:
                         raise SemanticError(
                             self.file,
                             "Invalid operation",
@@ -494,9 +678,13 @@ class SemanticAnalysis:
                         )
             parent_instance_type.fields[final_field] = right_hand
 
-        def walk_assignment_multi(left_hand, op_type, right_hand):
-            if type(right_hand) is not DynamicType:
-                if type(right_hand) is not ArrayType:
+        def walk_assignment_multi(left_hand, op_type_id, right_hand):
+            type_right_hand = type(right_hand)
+            right_hand_value = right_hand.value
+            left_hand_elements = left_hand.elements
+            len_left_hand_elements = len(left_hand_elements)
+            if type_right_hand is not DYNAMIC_TYPE_CLASS:
+                if type_right_hand is not ARRAY_TYPE_CLASS:
                     raise SemanticError(
                         self.file,
                         "multi-initialization requires right hand"
@@ -505,7 +693,7 @@ class SemanticAnalysis:
                         root.meta_data.column_start,
                         root.meta_data.column_end,
                     )
-                if len(left_hand.elements) > len(right_hand.value):
+                if len_left_hand_elements > len(right_hand_value):
                     raise SemanticError(
                         self.file,
                         "multi-initialization requires right hand length "
@@ -516,60 +704,71 @@ class SemanticAnalysis:
                     )
 
                 rhs_types = (
-                    right_hand.value
-                    if type(right_hand) is ArrayType
-                    else [DynamicType()] * len(left_hand.elements)
+                    right_hand_value
+                    if type_right_hand is ARRAY_TYPE_CLASS
+                    else [DYNAMIC_TYPE_CLASS()] * len_left_hand_elements
                 )
 
                 dispatch = {
-                    IdentifierNode: walk_assignment_typical,
-                    IndexNode: walk_assignment_index,
-                    ArrayLiteralNode: walk_assignment_multi,  # nested destructuring
-                    FieldAccessNode: walk_assignment_field_access,
+                    IDENTIFIER_NODE_CLASS: walk_assignment_typical,
+                    INDEX_NODE_CLASS: walk_assignment_index,
+                    ARRAY_LITERAL_NODE_CLASS: walk_assignment_multi,  # nested destructuring
+                    FIELD_ACCESS_NODE_CLASS: walk_assignment_field_access,
                 }
 
-                for i, n in enumerate(left_hand.elements):
+                for i, n in enumerate(left_hand_elements):
                     left_hand_node = n.root_expr
-                    rhs_type = rhs_types[i] if i < len(rhs_types) else DynamicType()
-                    dispatch[type(left_hand_node)](left_hand_node, op_type, rhs_type)
+                    rhs_type = rhs_types[i] if i < len(rhs_types) else DYNAMIC_TYPE_CLASS
+                    dispatch[type(left_hand_node)](left_hand_node, op_type_id, rhs_type)
 
         find_assignment_type = {
-            IdentifierNode: walk_assignment_typical,
-            IndexNode: walk_assignment_index,
-            ArrayLiteralNode: walk_assignment_multi,
-            FieldAccessNode: walk_assignment_field_access,
+            IDENTIFIER_NODE_CLASS: walk_assignment_typical,
+            INDEX_NODE_CLASS: walk_assignment_index,
+            ARRAY_LITERAL_NODE_CLASS: walk_assignment_multi,
+            FIELD_ACCESS_NODE_CLASS: walk_assignment_field_access,
         }
-
-        find_assignment_type[type(root.left_hand)](
-            root.left_hand, root.op, self.walk_expression(root.right_hand.root_expr)
+        root_left_hand = root.left_hand
+        find_assignment_type[type(root_left_hand)](
+            root_left_hand, root.op, self.walk_expression(root.right_hand.root_expr)
         )
 
     def walk_expression(self, root):
-        if type(root) is ExpressionNode:
+        DYNAMIC_TYPE_CLASS = self.DYNAMIC_TYPE_CLASS
+
+        type_root = type(root)
+
+        if type_root is EXPRESSION_NODE_CLASS:
             return self.walk_expression(root.root_expr)
 
-        if type(root) in self.literals:
-            actual_type = self.literals[type(root)]
+        if type_root in self.LITERALS:
+            actual_type = self.LITERALS[type_root]
             return actual_type(root.value)
 
-        if type(root) is DynamicType:
-            return DynamicType()
+        if type_root is DYNAMIC_TYPE_CLASS:
+            return DYNAMIC_TYPE_CLASS()
 
-        elif type(root) is BinOpNode:
-            op = root.op
+        elif type_root is BIN_OP_NODE_CLASS:
             left = self.walk_expression(root.left)
             right = self.walk_expression(root.right)
+            type_left = type(left)
+            type_right = type(right)
+            root_type_id = root.op
 
-            if type(left) is DynamicType or type(right) is DynamicType:
-                return DynamicType()
+            if type_left is DYNAMIC_TYPE_CLASS or type_right is DYNAMIC_TYPE_CLASS:
+                return DYNAMIC_TYPE_CLASS()
 
-            if op == TokenType.T_IN:
-                if type(right) in (ArrayType, StringType, SetType, DictType):
-                    if not (type(left) is not StringType and type(right) is StringType):
-                        return BoolType(value=None)
+            if root_type_id == T_IN_ENUM_VAL:
+                if type_right in (
+                    ARRAY_TYPE_CLASS,
+                    STRING_TYPE_CLASS,
+                    SET_TYPE_CLASS,
+                    DICT_TYPE_CLASS,
+                ):
+                    if not (type_left is not STRING_TYPE_CLASS and type_right is STRING_TYPE_CLASS):
+                        return BOOL_TYPE_CLASS(value=None)
                 raise SemanticError(
                     self.file,
-                    f"in operator not supported between {type(left)} and {type(right)}",
+                    f"in operator not supported between {type_left} and {type_right}",
                     root.meta_data.line,
                     root.meta_data.column_start,
                     root.meta_data.column_end,
@@ -577,11 +776,14 @@ class SemanticAnalysis:
 
             if (
                 not (
-                    (type(right) in (NumberType, BoolType) and type(left) in (NumberType, BoolType))
-                    or type(left) is type(right)
+                    (
+                        type_right in (NUMBER_TYPE_CLASS, BOOL_TYPE_CLASS)
+                        and type_left in (NUMBER_TYPE_CLASS, BOOL_TYPE_CLASS)
+                    )
+                    or type_left is type_right
                 )
-            ) and op in self.ARITH_OPS:
-                if (type(left), type(right), op) not in self.BIN_OP_DIFFERENT_RULES:
+            ) and root_type_id in self.ARITH_OPS:
+                if (type_left, type_right, root_type_id) not in self.BIN_OP_DIFFERENT_RULES:
                     raise SemanticError(
                         self.file,
                         "Invalid operation",
@@ -590,23 +792,27 @@ class SemanticAnalysis:
                         root.meta_data.column_end,
                     )
                 else:
-                    return self.BIN_OP_DIFFERENT_RULES[(type(left), type(right), op)](value=None)
+                    return self.BIN_OP_DIFFERENT_RULES[(type_left, type_right, root_type_id)](
+                        value=None
+                    )
 
             # the value is none because we aren't evaluating
             # anything just determining its type
             # anythingt that requires binop to be evaluated to
             # throw an error will be a runtime error
 
-            cls = type(left) if op in self.ARITH_OPS else BoolType
-            return cls(value=None)
+            c = type_left if root_type_id in self.ARITH_OPS else BOOL_TYPE_CLASS
+            return c(value=None)
 
-        elif type(root) is UnaryOPNode:
+        elif type_root is UNARY_OP_NODE_CLASS:
+            root_type_id = root.op
             op = self.walk_expression(root.operand)
+            type_op = type(op)
 
-            if type(op) is DynamicType:
-                return DynamicType()
+            if type_op is DYNAMIC_TYPE_CLASS:
+                return DYNAMIC_TYPE_CLASS()
 
-            if type(op) not in self.allowed_unary_ops and root.op != TokenType.T_NEGATE:
+            if type_op not in self.ALLOWED_UNARY_OPS and root_type_id != T_NEGATE_ENUM_VAL:
                 raise SemanticError(
                     self.file,
                     "Invalid operation",
@@ -619,24 +825,30 @@ class SemanticAnalysis:
             # anything just determining its type
             # anythingt that requires binop to be evaluated to
             # throw an error will be a runtime error
-            return BoolType(value=None) if root.op == TokenType.T_NEGATE else NumberType(value=None)
+            return (
+                BOOL_TYPE_CLASS(value=None)
+                if root_type_id == T_NEGATE_ENUM_VAL
+                else NUMBER_TYPE_CLASS(value=None)
+            )
 
-        elif type(root) is ArrayLiteralNode:
+        elif type_root is ARRAY_LITERAL_NODE_CLASS:
             checking_exprs = []
             for e in root.elements:
                 typed_expression = (
                     self.walk_expression(e.root_expr)
-                    if type(e) is ExpressionNode
+                    if type(e) is EXPRESSION_NODE_CLASS
                     else self.walk_expression(e)
                 )
                 checking_exprs.append(typed_expression)
 
-            return ArrayType(value=checking_exprs)
+            return ARRAY_TYPE_CLASS(value=checking_exprs)
 
-        elif type(root) is IndexNode:
+        elif type_root is INDEX_NODE_CLASS:
             base = self.walk_expression(root.base)
-            if type(base) is DynamicType:
-                return DynamicType()
+            type_base = type(base)
+            base_value = base.value
+            if type_base is DYNAMIC_TYPE_CLASS:
+                return DYNAMIC_TYPE_CLASS()
             # notice the if base.value
             # remember that if it dosent have a value its not staically knowable
             # so we only throw an error ifs its knowable and an error
@@ -644,11 +856,11 @@ class SemanticAnalysis:
 
             # pretty sure from here down there is some
             # redundant code but it is only redundant, and working
-            if base.value:
-                if type(base) not in (ArrayType, StringType, DictType):
+            if base_value:
+                if type_base not in (ARRAY_TYPE_CLASS, STRING_TYPE_CLASS, DICT_TYPE_CLASS):
                     raise SemanticError(
                         self.file,
-                        f"object of {type(base)} not indexable",
+                        f"object of {type_base} not indexable",
                         root.meta_data.line,
                         root.meta_data.column_start,
                         root.meta_data.column_end,
@@ -658,8 +870,12 @@ class SemanticAnalysis:
 
             for idx in root.index:
                 idx_type = self.walk_expression(idx.root_expr)
-                if type(base) in (ArrayType, StringType):
-                    if type(idx_type) not in (NumberType, BoolType, DynamicType):
+                if type_base in (ARRAY_TYPE_CLASS, STRING_TYPE_CLASS):
+                    if type(idx_type) not in (
+                        NUMBER_TYPE_CLASS,
+                        BOOL_TYPE_CLASS,
+                        DYNAMIC_TYPE_CLASS,
+                    ):
                         raise SemanticError(
                             self.file,
                             f"Index must be number when base is type {type(base)}",
@@ -671,11 +887,12 @@ class SemanticAnalysis:
 
             # if the base is unknowable statically than their is no point
             # to run over static indexes because we dont know the bounds of the base
-            if not base.value or type(base) is DictType:
-                return DynamicType()
+            if not base_value or type_base is DICT_TYPE_CLASS:
+                return DYNAMIC_TYPE_CLASS()
 
             for _pos, idx in enumerate(indexes):
-                if type(base) not in (ArrayType, StringType):
+                idx_value = idx.value
+                if type_base not in (ARRAY_TYPE_CLASS, STRING_TYPE_CLASS):
                     raise SemanticError(
                         self.file,
                         "Index out of bounds",
@@ -683,13 +900,13 @@ class SemanticAnalysis:
                         root.meta_data.column_start,
                         root.meta_data.column_end,
                     )
-                element_list = base.value
+                element_list = base_value
 
                 # if the value is statically unknowable we cant continue iterating
                 # through the indexes because we dont know where to nest into
-                if idx.value is not None:
+                if idx_value is not None:
                     try:
-                        base = element_list[idx.value]
+                        base = element_list[idx_value]
                     except (IndexError, TypeError, KeyError):
                         raise SemanticError(
                             self.file,
@@ -700,11 +917,11 @@ class SemanticAnalysis:
                         ) from None
 
                 else:
-                    return DynamicType()
+                    return DYNAMIC_TYPE_CLASS()
 
             return base
 
-        elif type(root) is IdentifierNode:
+        elif type_root is IDENTIFIER_NODE_CLASS:
             # making sure each identifier is defined if its used in a given scope
             actual_type = self.search_for_var(root.value)
             if not actual_type:
@@ -717,28 +934,31 @@ class SemanticAnalysis:
                 )
             return actual_type
 
-        elif type(root) is CallNode:
+        elif type_root is CALL_NODE_CLASS:
             # call functions that can be statically determined
 
             def walk_built_in_set(root):
                 expected_return = []
                 typed_args = [self.walk_expression(arg.root_expr) for arg in root.args]
+                len_typed_args = len(typed_args)
 
-                if not len(typed_args):
-                    return SetType(value=expected_return)
+                if not len_typed_args:
+                    return SET_TYPE_CLASS(value=expected_return)
+                typed_args_0 = typed_args[0]
+                type_typed_args_0 = type(typed_args_0)
 
-                if len(typed_args) == 1:
-                    if type(typed_args[0]) is DynamicType:
-                        return SetType(value=expected_return)
-                    elif type(typed_args[0]) in (SetType, ArrayType):
-                        typed_args = typed_args[0].value
+                if len_typed_args == 1:
+                    if type_typed_args_0 is DYNAMIC_TYPE_CLASS:
+                        return SET_TYPE_CLASS(value=expected_return)
+                    elif type_typed_args_0 in (SET_TYPE_CLASS, ARRAY_TYPE_CLASS):
+                        typed_args = typed_args_0.value
                         # need this is none check due to bin op/un op
                         # returning base_type(value=None)
                         if typed_args is None:
-                            return SetType(value=expected_return)
+                            return SET_TYPE_CLASS(value=expected_return)
 
                 for arg in typed_args:
-                    if type(arg) in self.unhashable_types:
+                    if type(arg) in self.UNHASHABLE_TYPES:
                         raise SemanticError(
                             self.file,
                             f"set expects hashable types only, not {type(arg)}",
@@ -747,23 +967,30 @@ class SemanticAnalysis:
                             root.meta_data.column_end,
                         )
                     expected_return.append(arg)
-                return SetType(value=expected_return)
+                return SET_TYPE_CLASS(value=expected_return)
 
             def walk_built_in_dict(root):
                 expected_return = []
                 is_key = True
                 typed_args = [self.walk_expression(arg.root_expr) for arg in root.args]
+                len_typed_args = len(typed_args)
 
-                if not len(typed_args):
-                    return DictType(value=expected_return)
+                if not len_typed_args:
+                    return DICT_TYPE_CLASS(value=expected_return)
 
-                if len(typed_args) == 1:
-                    if type(typed_args[0]) is DynamicType:
-                        return DictType(value=expected_return)
-                    elif type(typed_args[0]) in (SetType, ArrayType):
-                        typed_args = typed_args[0].value
+                typed_args_0 = typed_args[0]
+                type_typed_args_0 = type(typed_args_0)
 
-                if len(typed_args) % 2 != 0:
+                if len_typed_args == 1:
+                    if type_typed_args_0 is DYNAMIC_TYPE_CLASS:
+                        return DICT_TYPE_CLASS(value=expected_return)
+                    elif type_typed_args_0 in (SET_TYPE_CLASS, ARRAY_TYPE_CLASS):
+                        typed_args = typed_args_0.value
+                        if typed_args is None:
+                            return DICT_TYPE_CLASS(value=expected_return)
+                        len_typed_args = len(typed_args)
+
+                if len_typed_args % 2 != 0:
                     raise SemanticError(
                         self.file,
                         f"'{root.name.value}' dict must be even; every key must have a value",
@@ -772,7 +999,7 @@ class SemanticAnalysis:
                         root.meta_data.column_end,
                     )
                 for arg in typed_args:
-                    if type(arg) in self.unhashable_types and is_key:
+                    if type(arg) in self.UNHASHABLE_TYPES and is_key:
                         raise SemanticError(
                             self.file,
                             f"'{root.name.value}' dict key expects hashable types only,"
@@ -783,23 +1010,29 @@ class SemanticAnalysis:
                         )
                     is_key = not is_key
                     expected_return.append(arg)
-                return DictType(value=expected_return)
+                return DICT_TYPE_CLASS(value=expected_return)
 
             built_in_to_walk = {
                 "set": walk_built_in_set,
                 "dict": walk_built_in_dict,
             }
 
-            if type(root.name) is not IdentifierNode:
-                return DynamicType()
+            root_args = root.args
+            root_name = root.name
+            type_root_name = type(root_name)
+            len_root_args = len(root_args)
 
-            callee_type = self.search_for_var(root.name)
+            if type_root_name is not IDENTIFIER_NODE_CLASS:
+                return DYNAMIC_TYPE_CLASS()
 
-            if type(callee_type) is DynamicType:
-                return DynamicType()
+            callee_type = self.search_for_var(root_name)
+            type_callee_type = type(callee_type)
 
-            if type(callee_type) is DataClassType:
-                if len(root.args) > len(callee_type.fields):
+            if type_callee_type is DYNAMIC_TYPE_CLASS:
+                return DYNAMIC_TYPE_CLASS()
+
+            if type_callee_type is DATA_CLASS_TYPE_CLASS:
+                if len_root_args > len(callee_type.fields):
                     raise SemanticError(
                         self.file,
                         "more arguments than dataclass paramaters",
@@ -809,11 +1042,11 @@ class SemanticAnalysis:
                     )
                 fields = {}
                 for idx, field in enumerate(callee_type.fields):
-                    fields[field] = DynamicType()
-                    if len(root.args) > idx:
-                        fields[field] = self.walk_expression(root.args[idx].root_expr)
+                    fields[field] = DYNAMIC_TYPE_CLASS()
+                    if len_root_args > idx:
+                        fields[field] = self.walk_expression(root_args[idx].root_expr)
 
-                return InstanceType(of=root.name.value, fields=fields)
+                return INSTANCE_TYPE_CLASS(of=root.name.value, fields=fields)
 
             if not callee_type:
                 raise SemanticError(
@@ -824,7 +1057,7 @@ class SemanticAnalysis:
                     root.meta_data.column_end,
                 )
 
-            if type(callee_type) not in (FunctionType, SetType, DictType):
+            if type_callee_type not in (FUNCTION_TYPE_CLASS, SET_TYPE_CLASS, DICT_TYPE_CLASS):
                 raise SemanticError(
                     self.file,
                     f"attempt to call non-function '{root.name.value}'",
@@ -836,24 +1069,30 @@ class SemanticAnalysis:
             # if a decision is made to really add to the semantic analysis
             # with type checking for every built in function, this will change
             # from hardcode to like self.builtintypes or something
-            if root.name.value in built_in_to_walk and type(callee_type) in (SetType, DictType):
-                return built_in_to_walk[root.name.value](root)
+            root_name_value = root.name.value
+            if root_name_value in built_in_to_walk and type_callee_type in (
+                SET_TYPE_CLASS,
+                DICT_TYPE_CLASS,
+            ):
+                return built_in_to_walk[root_name_value](root)
 
             # Analyse each argument expression normally.
-            for arg in root.args:
+            for arg in root_args:
                 self.walk_expression(arg.root_expr)
 
-            return DynamicType()
+            return DYNAMIC_TYPE_CLASS()
 
-        elif type(root) is FieldAccessNode:
+        elif type(root) is FIELD_ACCESS_NODE_CLASS:
             # to do
             base = self.walk_expression(root.base)
+
             fields = root.field
 
             for field_name in fields:
-                if type(base) is DynamicType:
-                    return DynamicType()
-                if type(base) is not InstanceType:
+                type_base = type(base)
+                if type_base is DYNAMIC_TYPE_CLASS:
+                    return DYNAMIC_TYPE_CLASS()
+                if type_base is not INSTANCE_TYPE_CLASS:
                     raise SemanticError(
                         self.file,
                         "field access is only performable on instances of classes",
@@ -862,9 +1101,10 @@ class SemanticAnalysis:
                         root.meta_data.column_end,
                     )
                 derived_class = self.search_for_var(base.of)
-                if type(derived_class) is DynamicType:
-                    return DynamicType()
-                if type(derived_class) is not DataClassType:
+                type_derived_class = type(derived_class)
+                if type_derived_class is DYNAMIC_TYPE_CLASS:
+                    return DYNAMIC_TYPE_CLASS()
+                if type_derived_class is not DATA_CLASS_TYPE_CLASS:
                     raise SemanticError(
                         self.file,
                         "field access is only performable on instances of classes",

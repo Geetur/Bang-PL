@@ -1,319 +1,407 @@
+import random
+import string
+
 import pytest
 
-from bang.lexing.lexer import Lexer
-from bang.parsing.expression_parser import ExpressionParser, ParserError
-from bang.parsing.parser_nodes import (
-    ArrayLiteralNode,
-    AssignmentNode,
-    BinOpNode,
-    BooleanLiteralNode,
-    BreakNode,
-    ContinueNode,
-    ElseNode,
-    EndNode,
-    ExpressionNode,
-    FloatLiteralNode,
-    ForNode,
-    IFNode,
-    IndexNode,
-    ReturnNode,
-    StringLiteralNode,
-    UnaryOPNode,
-    WhileNode,
+from bang.lexing.lexer import Lexer, LexerError, TokenType
+
+
+def lex_string(source_code: str, tmp_path):
+    p = tmp_path / "temp.bang"
+    p.write_text(source_code, encoding="utf-8")
+    return Lexer(str(p)).tokenizer()
+
+
+def types(tokens):
+    return [t.type for t in tokens]
+
+
+def assert_tok(tok, ttype, value=None, line=None, col_start=None, col_end=None):
+    assert tok.type == ttype
+    if value is not None:
+        assert tok.value == value
+    if line is not None:
+        assert tok.line == line
+    if col_start is not None:
+        assert tok.column_start == col_start
+    if col_end is not None:
+        assert tok.column_end == col_end
+
+
+# ----------------------------
+# Basic: EOF & whitespace
+# ----------------------------
+
+def test_always_ends_with_eof(tmp_path):
+    toks = lex_string("", tmp_path)
+    assert len(toks) == 1
+    assert_tok(toks[0], TokenType.T_EOF, value="")
+
+
+def test_ignores_whitespace(tmp_path):
+    toks = lex_string("   \n\t 42 \n\n   ", tmp_path)
+    assert types(toks) == [TokenType.T_INT, TokenType.T_EOF]
+    assert toks[0].value == 42
+
+
+# ----------------------------
+# Numbers
+# ----------------------------
+
+@pytest.mark.parametrize(
+    "src, expected",
+    [
+        ("0", 0),
+        ("7", 7),
+        ("42", 42),
+        ("00012", 12),
+        ("1234567890", 1234567890),
+    ],
 )
-
-
-def parse_lines(code, tmp_path):
-    # write code to temporary file
-    file = tmp_path / "code.txt"
-    file.write_text(code)
-    # lex
-    lexer = Lexer(str(file))
-    tokens = lexer.tokenizer()
-    # parse
-    lines = code.splitlines(keepends=True)
-    parser = ExpressionParser(tokens, lines)
-    parser.split()
-    nodes = parser.loading_into_algos()
-    return nodes
-
-
-def test_assignment_and_return(tmp_path):
-    code = """
-    x = 1 + 2
-    return x
-    """
-    nodes = parse_lines(code, tmp_path)
-    # Expect two nodes: AssignmentNode and ReturnNode
-    assert len(nodes) == 2
-    assign, ret = nodes
-    assert isinstance(assign, AssignmentNode)
-    # Check identifier on left-hand side
-    assert assign.left_hand.value == "x"
-    # Check expression inside assignment
-    expr_node = assign.right_hand
-    assert isinstance(expr_node, ExpressionNode)
-    # The root inside ExpressionNode is a BinOpNode
-    assert isinstance(expr_node.root_expr, BinOpNode)
-    # Check return node
-    assert isinstance(ret, ReturnNode)
-
-
-def test_unary_and_binary_operations(tmp_path):
-    code = "value = -3 * (4 + +5)"
-    nodes = parse_lines(code + "\n", tmp_path)
-    assert len(nodes) == 1
-    assign = nodes[0]
-    assert isinstance(assign, AssignmentNode)
-    # Get the top-level BinOpNode
-    expr_node = assign.right_hand
-    binop = expr_node.root_expr
-    assert isinstance(binop, BinOpNode)
-    left, op, right = binop.left, binop.op, binop.right
-    # Left should be a UnaryOPNode
-    assert isinstance(left, UnaryOPNode)
-    # Operator should be multiplication
-    from bang.lexing.lexer import TokenType as TT
-
-    assert op == TT.T_ASTERISK
-    # Right should be an ExpressionNode nested
-    assert isinstance(right, BinOpNode)
-
-
-def test_array_and_index(tmp_path):
-    code = "arr = [1, 2, 3]\nnext = arr[1]"
-    nodes = parse_lines(code, tmp_path)
-    assert len(nodes) == 2
-    arr_assign, next_assign = nodes
-    # Test array literal
-    assert isinstance(arr_assign, AssignmentNode)
-    array_expr = arr_assign.right_hand.root_expr
-    assert isinstance(array_expr, ArrayLiteralNode)
-    assert len(array_expr.elements) == 3
-    # Test index node
-    assert isinstance(next_assign, AssignmentNode)
-    idx_expr = next_assign.right_hand.root_expr
-    assert isinstance(idx_expr, IndexNode)
-    assert isinstance(idx_expr.index[0], ExpressionNode)
-
-
-def test_string_literal(tmp_path):
-    code = 'msg = "hello"\n'
-    nodes = parse_lines(code, tmp_path)
-    assert len(nodes) == 1
-    assign = nodes[0]
-    assert isinstance(assign, AssignmentNode)
-    str_expr = assign.right_hand.root_expr
-    assert isinstance(str_expr, StringLiteralNode)
-    assert str_expr.value == "hello"
-
-
-def test_control_structures(tmp_path):
-    code = """
-    if x < 10
-    else
-    for i 5
-    while true
-    break
-    continue
-    end
-    return 0
-    """
-    nodes = parse_lines(code, tmp_path)
-    # Expect nodes in sequence
-    types = [IFNode, ElseNode, ForNode, WhileNode, BreakNode, ContinueNode, EndNode, ReturnNode]
-    assert len(nodes) == len(types)
-    for node, expected in zip(nodes, types, strict=False):
-        assert isinstance(node, expected)
-
-
-def test_parser_error_mismatched_parenthesis(tmp_path):
-    code = "x = (1 + 2\n"
-    with pytest.raises(ParserError):
-        parse_lines(code, tmp_path)
-
-
-def test_parser_error_invalid_assignment(tmp_path):
-    code = "= 5 + 3\n"
-    with pytest.raises(ParserError):
-        parse_lines(code, tmp_path)
-
-
-def test_float_operations(tmp_path):
-    code = "result = 3.5 * 2.0 + 1.25"
-    nodes = parse_lines(code + "\n", tmp_path)
-    assert len(nodes) == 1
-    assign = nodes[0]
-    assert isinstance(assign, AssignmentNode)
-    expr = assign.right_hand.root_expr
-    assert isinstance(expr, BinOpNode)
-    # Ensure left side float literal
-    left = expr.left
-    assert isinstance(left, BinOpNode)
-    # Right side is nested BinOpNode
-    assert isinstance(expr.right, FloatLiteralNode)
-
-
-def test_boolean_literal(tmp_path):
-    code = "flag = true && false || true"
-    nodes = parse_lines(code + "\n", tmp_path)
-    assert len(nodes) == 1
-    assign = nodes[0]
-    expr = assign.right_hand.root_expr
-    # Top-level OR
-    assert isinstance(expr, BinOpNode)
-    # Check boolean literal types
-    left_and = expr.left
-    assert isinstance(left_and, BinOpNode)
-    assert isinstance(left_and.left, BooleanLiteralNode)
-    assert isinstance(left_and.right, BooleanLiteralNode)
-    # Right operand of OR
-    assert isinstance(expr.right, BooleanLiteralNode)
-
-
-def test_exponent_precedence(tmp_path):
-    code = "val = 2 ** 3 ** 2"
-    nodes = parse_lines(code + "\n", tmp_path)
-    assign = nodes[0]
-    expr = assign.right_hand.root_expr
-    # Exponent is right-associative: 3 ** 2 evaluated first
-    assert isinstance(expr, BinOpNode)
-    assert expr.op.name == "T_EXPO"
-    # Right operand of outer ** is a BinOpNode
-    assert isinstance(expr.right, BinOpNode)
-
-
-# its really important to remember here that an array isn't an expression
-# in our langauge, its a container of expressions.
-# this might be somewhat confusing
-# because if you pass an array into the SYA
-# it will be wrapped in a expression node, but that is only
-# because its the root expression. all an expression node is in this lanaguge
-def test_array_nesting(tmp_path):
-    code = "arr = [[1,2], [3, [4,5]]]"
-    nodes = parse_lines(code + "\n", tmp_path)
-    assign = nodes[0]
-    array_node = assign.right_hand.root_expr
-    assert isinstance(array_node, ArrayLiteralNode)
-    # Two top-level elements
-    assert len(array_node.elements) == 2
-    # First element is an ArrayLiteralNode wrapped in ExpressionNode
-
-    first = array_node.elements[0]
-
-    assert isinstance(first, ArrayLiteralNode)
-    # Nested deeper
-    second = array_node.elements[1]
-    assert isinstance(second, ArrayLiteralNode)
-    inner = second.elements[1]
-    assert isinstance(inner, ArrayLiteralNode)
-
-
-def test_invalid_indexing_error(tmp_path):
-    code = "5[0]"
-    with pytest.raises(ParserError):
-        parse_lines(code + "\n", tmp_path)
-
-
-def test_compound_assignment(tmp_path):
-    code = "count = 1\ncount += 2"
-    nodes = parse_lines(code + "\n", tmp_path)
-    assert len(nodes) == 2
-    _, plus_assign = nodes
-    assert isinstance(plus_assign, AssignmentNode)
-    assert plus_assign.op.name == "T_PLUS_ASSIGN"
-
-
-def test_parser_error_mismatched_brackets(tmp_path):
-    code = "arr = [1, 2, 3"  # missing closing bracket
-    with pytest.raises(ParserError):
-        parse_lines(code + "\n", tmp_path)
-
-
-def test_nested_parentheses(tmp_path):
-    code = "x = ((1 + 2) * 3) - 4"
-    nodes = parse_lines(code + "\n", tmp_path)
-    assert len(nodes) == 1
-    assign = nodes[0]
-    # should parse without error and produce an AssignmentNode
-    from bang.parsing.parser_nodes import AssignmentNode, BinOpNode
-
-    assert isinstance(assign, AssignmentNode)
-    # check that inside the ExpressionNode there's a BinOpNode
-    expr = assign.right_hand
-    assert hasattr(expr, "root_expr")
-    assert isinstance(expr.root_expr, BinOpNode)
-
-
-def test_empty_parentheses_error(tmp_path):
-    with pytest.raises(ParserError):
-        parse_lines("x = ()\n", tmp_path)
-
-
-# 2. Unary-operator edge-cases
-
-
-def test_multiple_unary_operators(tmp_path):
-    code = "x = + - + - 5"
-    nodes = parse_lines(code + "\n", tmp_path)
-    assert len(nodes) == 1
-    from bang.parsing.parser_nodes import AssignmentNode
-
-    assert isinstance(nodes[0], AssignmentNode)
-
-
-def test_unary_missing_operand_error(tmp_path):
-    with pytest.raises(ParserError):
-        parse_lines("x = +\n", tmp_path)
-    with pytest.raises(ParserError):
-        parse_lines("x = -\n", tmp_path)
-
-
-def test_chained_indexing(tmp_path):
-    code = "val = arr[1][2][i + 1]"
-    nodes = parse_lines(code + "\n", tmp_path)
-    assert len(nodes) == 1
-    from bang.parsing.parser_nodes import AssignmentNode
-
-    assert isinstance(nodes[0], AssignmentNode)
-
-
-# 4. Logical vs. relational mixing
-
-
-def test_logical_and_relational(tmp_path):
-    code = "flag = a < b && c > d || !e"
-    nodes = parse_lines(code + "\n", tmp_path)
-    assert len(nodes) == 1
-
-
-# 5. Literal edge-cases
-
-
-def test_float_without_leading_zero(tmp_path):
-    code = "x = .5 * 2"
-    nodes = parse_lines(code + "\n", tmp_path)
-    assert len(nodes) == 1
-    from bang.parsing.parser_nodes import AssignmentNode
-
-    assert isinstance(nodes[0], AssignmentNode)
-
-
-def test_consecutive_operators_error(tmp_path):
-    with pytest.raises(ParserError):
-        parse_lines("x = 1 +* 2\n", tmp_path)
-
-
-def test_array_missing_comma_error(tmp_path):
-    with pytest.raises(ParserError):
-        parse_lines("x = [1 2, 3]\n", tmp_path)
-
-
-def test_mismatched_index_brackets_error(tmp_path):
-    with pytest.raises(ParserError):
-        parse_lines("x = arr[1,2]\n", tmp_path)
-
-
-def test_indexing_after_expression(tmp_path):
-    with pytest.raises(ParserError):
-        parse_lines("val = (a + b)[2]\n", tmp_path)
+def test_integer_token_values(tmp_path, src, expected):
+    toks = lex_string(src, tmp_path)
+    assert types(toks) == [TokenType.T_INT, TokenType.T_EOF]
+    assert toks[0].value == expected
+
+
+@pytest.mark.parametrize(
+    "src, expected",
+    [
+        ("3.14", 3.14),
+        (".5", 0.5),
+        ("2.", 2.0),
+        ("0.0", 0.0),
+        ("10.000", 10.0),
+    ],
+)
+def test_float_token_values(tmp_path, src, expected):
+    toks = lex_string(src, tmp_path)
+    assert types(toks) == [TokenType.T_FLOAT, TokenType.T_EOF]
+    assert toks[0].value == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("src", ["1.2.3", "0..1", ".1."])
+def test_multiple_decimal_error(tmp_path, src):
+    with pytest.raises(LexerError):
+        lex_string(src, tmp_path)
+
+
+# ----------------------------
+# Identifiers / keywords / literals
+# ----------------------------
+
+@pytest.mark.parametrize(
+    "src, expected_type, expected_value",
+    [
+        ("abc", TokenType.T_IDENT, "abc"),
+        ("a1", TokenType.T_IDENT, "a1"),
+        ("_x", TokenType.T_IDENT, "_x"),
+        ("_", TokenType.T_IDENT, "_"),
+        ("true", TokenType.T_TRUE, "true"),
+        ("false", TokenType.T_FALSE, "false"),
+        ("none", TokenType.T_NONE, "none"),
+        ("if", TokenType.T_IF, "if"),
+        ("elif", TokenType.T_ELIF, "elif"),
+        ("else", TokenType.T_ELSE, "else"),
+        ("for", TokenType.T_FOR, "for"),
+        ("while", TokenType.T_WHILE, "while"),
+        ("break", TokenType.T_BREAK, "break"),
+        ("continue", TokenType.T_CONTINUE, "continue"),
+        ("return", TokenType.T_RETURN, "return"),
+        ("end", TokenType.T_END, "end"),
+        ("fn", TokenType.T_FN, "fn"),
+        ("data", TokenType.T_DATA, "data"),
+        # Operator keyword
+        ("in", TokenType.T_IN, "in"),
+        # Keyword prefix should remain identifier
+        ("endif", TokenType.T_IDENT, "endif"),
+        ("inline", TokenType.T_IDENT, "inline"),
+        ("forx", TokenType.T_IDENT, "forx"),
+        ("truee", TokenType.T_IDENT, "truee"),
+    ],
+)
+def test_identifier_keywords_and_literals(tmp_path, src, expected_type, expected_value):
+    toks = lex_string(src, tmp_path)
+    assert types(toks) == [expected_type, TokenType.T_EOF]
+    assert toks[0].value == expected_value
+
+
+# ----------------------------
+# Strings
+# ----------------------------
+
+def test_string_token_basic(tmp_path):
+    toks = lex_string('"hello"', tmp_path)
+    assert types(toks) == [TokenType.T_STR, TokenType.T_EOF]
+    assert toks[0].value == "hello"
+
+
+def test_string_can_contain_hash_without_comment(tmp_path):
+    toks = lex_string('"# not a comment"', tmp_path)
+    assert types(toks) == [TokenType.T_STR, TokenType.T_EOF]
+    assert toks[0].value == "# not a comment"
+
+
+def test_unterminated_string_error(tmp_path):
+    with pytest.raises(LexerError):
+        lex_string('"hello', tmp_path)
+
+
+# ----------------------------
+# Operators & punctuation
+# ----------------------------
+
+@pytest.mark.parametrize(
+    "src, expected_types",
+    [
+        ("+", [TokenType.T_PLUS]),
+        ("-", [TokenType.T_MINUS]),
+        ("*", [TokenType.T_STAR]),
+        ("/", [TokenType.T_FSLASH]),
+        ("//", [TokenType.T_DSLASH]),
+        ("**", [TokenType.T_DOUBLESTAR]),
+        ("=", [TokenType.T_EQ]),
+        ("==", [TokenType.T_DOUBLEEQ]),
+        ("!=", [TokenType.T_NOTEQUAL]),
+        (">", [TokenType.T_GT]),
+        ("<", [TokenType.T_LT]),
+        (">=", [TokenType.T_GTE]),
+        ("<=", [TokenType.T_LTE]),
+        ("&&", [TokenType.T_AND]),
+        ("||", [TokenType.T_OR]),
+        ("!", [TokenType.T_BANG]),
+        ("(", [TokenType.T_LPAREN]),
+        (")", [TokenType.T_RPAREN]),
+        ("[", [TokenType.T_LBRACKET]),
+        ("]", [TokenType.T_RBRACKET]),
+        ("{", [TokenType.T_LBRACE]),
+        ("}", [TokenType.T_RBRACE]),
+        (",", [TokenType.T_COMMA]),
+        (".", [TokenType.T_DOT]),
+        (";", [TokenType.T_SEMI]),
+        ("+=", [TokenType.T_PLUS_ASSIGN]),
+        ("-=", [TokenType.T_MINUS_ASSIGN]),
+        ("*=", [TokenType.T_STAR_ASSIGN]),
+        ("/=", [TokenType.T_FSLASH_ASSIGN]),
+    ],
+)
+def test_operators_and_punctuation(tmp_path, src, expected_types):
+    toks = lex_string(src, tmp_path)
+    assert types(toks) == expected_types + [TokenType.T_EOF]
+
+
+def test_operator_longest_match_examples(tmp_path):
+    # "===" -> "==" then "="
+    toks = lex_string("===", tmp_path)
+    assert types(toks) == [TokenType.T_DOUBLEEQ, TokenType.T_EQ, TokenType.T_EOF]
+
+    # "****" -> "**" then "**"
+    toks = lex_string("****", tmp_path)
+    assert types(toks) == [TokenType.T_DOUBLESTAR, TokenType.T_DOUBLESTAR, TokenType.T_EOF]
+
+
+# ----------------------------
+# Comments
+# ----------------------------
+
+def test_comment_only_line(tmp_path):
+    toks = lex_string("# hello\n42", tmp_path)
+    assert types(toks) == [TokenType.T_INT, TokenType.T_EOF]
+    assert toks[0].value == 42
+    assert toks[0].line == 2
+
+
+def test_comment_after_code(tmp_path):
+    toks = lex_string("x = 1 # comment here\ny = 2", tmp_path)
+    assert types(toks) == [
+        TokenType.T_IDENT, TokenType.T_EQ, TokenType.T_INT,
+        TokenType.T_IDENT, TokenType.T_EQ, TokenType.T_INT,
+        TokenType.T_EOF,
+    ]
+    assert toks[0].value == "x"
+    assert toks[2].value == 1
+    assert toks[3].value == "y"
+    assert toks[5].value == 2
+
+
+# ----------------------------
+# Line/column metadata sanity checks
+# ----------------------------
+
+def test_metadata_single_line_positions(tmp_path):
+    # 12345
+    # x = 42
+    toks = lex_string("x = 42", tmp_path)
+    assert_tok(toks[0], TokenType.T_IDENT, value="x", line=1, col_start=1, col_end=1)
+    assert_tok(toks[1], TokenType.T_EQ, value="=", line=1, col_start=3, col_end=3)
+    assert_tok(toks[2], TokenType.T_INT, value=42, line=1, col_start=5, col_end=6)
+
+
+def test_metadata_multi_line_positions(tmp_path):
+    src = "x=1\ny = 2\n  z=3"
+    toks = lex_string(src, tmp_path)
+    # x=1
+    assert_tok(toks[0], TokenType.T_IDENT, "x", line=1, col_start=1, col_end=1)
+    assert_tok(toks[1], TokenType.T_EQ, "=", line=1, col_start=2, col_end=2)
+    assert_tok(toks[2], TokenType.T_INT, 1, line=1, col_start=3, col_end=3)
+    # y = 2
+    assert_tok(toks[3], TokenType.T_IDENT, "y", line=2, col_start=1, col_end=1)
+    assert_tok(toks[4], TokenType.T_EQ, "=", line=2, col_start=3, col_end=3)
+    assert_tok(toks[5], TokenType.T_INT, 2, line=2, col_start=5, col_end=5)
+    # "  z=3"
+    assert_tok(toks[6], TokenType.T_IDENT, "z", line=3, col_start=3, col_end=3)
+    assert_tok(toks[7], TokenType.T_EQ, "=", line=3, col_start=4, col_end=4)
+    assert_tok(toks[8], TokenType.T_INT, 3, line=3, col_start=5, col_end=5)
+
+
+def test_string_metadata_includes_quotes_in_span(tmp_path):
+    toks = lex_string('"ab"', tmp_path)
+    # string token spans columns 1..4 (includes both quotes)
+    assert_tok(toks[0], TokenType.T_STR, "ab", line=1, col_start=1, col_end=4)
+
+
+# ----------------------------
+# Invalid characters & error location sanity
+# ----------------------------
+
+def test_invalid_character_raises(tmp_path):
+    with pytest.raises(LexerError):
+        lex_string("@", tmp_path)
+
+
+def test_invalid_character_in_middle(tmp_path):
+    with pytest.raises(LexerError):
+        lex_string("x = 1 @ y", tmp_path)
+
+
+# ----------------------------
+# Mixed programs / integration-ish lexer checks
+# ----------------------------
+
+def test_simple_expression_stream(tmp_path):
+    toks = lex_string("a+=1; b = a**2 // 3", tmp_path)
+    assert types(toks) == [
+        TokenType.T_IDENT, TokenType.T_PLUS_ASSIGN, TokenType.T_INT, TokenType.T_SEMI,
+        TokenType.T_IDENT, TokenType.T_EQ, TokenType.T_IDENT, TokenType.T_DOUBLESTAR,
+        TokenType.T_INT, TokenType.T_DSLASH, TokenType.T_INT,
+        TokenType.T_EOF,
+    ]
+
+
+def test_in_operator_in_context(tmp_path):
+    toks = lex_string("0 in [1,2,3]", tmp_path)
+    assert types(toks) == [
+        TokenType.T_INT, TokenType.T_IN, TokenType.T_LBRACKET,
+        TokenType.T_INT, TokenType.T_COMMA, TokenType.T_INT, TokenType.T_COMMA, TokenType.T_INT,
+        TokenType.T_RBRACKET,
+        TokenType.T_EOF,
+    ]
+
+
+# ----------------------------
+# Deterministic fuzz-like coverage
+# ----------------------------
+
+def test_many_valid_random_streams(tmp_path):
+    # We intentionally generate only "safe" pieces that should always lex.
+    rng = random.Random(1337)
+
+    keywords = [
+        "if", "elif", "else", "for", "while", "break", "continue", "return", "end", "fn", "data",
+        "true", "false", "none", "in",
+    ]
+    # Keep operators here to those you support (and that are unambiguous in lexer)
+    ops = [
+        "+", "-", "*", "/", "//", "**", "=", "==", "!=", ">", "<", ">=", "<=", "&&", "||", "!", ",", ".", ";",
+        "(", ")", "[", "]", "{", "}",
+        "+=", "-=", "*=", "/=",
+    ]
+
+    def rand_ident():
+        first = rng.choice(string.ascii_letters + "_")
+        rest = "".join(rng.choice(string.ascii_letters + string.digits + "_") for _ in range(rng.randint(0, 10)))
+        s = first + rest
+        # avoid producing exact keywords too often unless chosen explicitly
+        if s in keywords:
+            s = s + "_x"
+        return s
+
+    def rand_number():
+        if rng.random() < 0.7:
+            return str(rng.randint(0, 10_000))
+        # float forms (avoid multiple dots)
+        if rng.random() < 0.5:
+            return f"{rng.randint(0, 999)}.{rng.randint(0, 999)}"
+        return f".{rng.randint(0, 999)}"
+
+    def expected_type(piece: str):
+        if piece == "true":
+            return TokenType.T_TRUE
+        if piece == "false":
+            return TokenType.T_FALSE
+        if piece == "none":
+            return TokenType.T_NONE
+        if piece in ("if", "elif", "else", "for", "while", "break", "continue", "return", "end", "fn", "data"):
+            return getattr(TokenType, f"T_{piece.upper()}")
+        if piece == "in":
+            return TokenType.T_IN
+        if piece in ops:
+            # map operator lexeme to TokenType by explicit dict
+            op_map = {
+                "+": TokenType.T_PLUS,
+                "-": TokenType.T_MINUS,
+                "*": TokenType.T_STAR,
+                "/": TokenType.T_FSLASH,
+                "//": TokenType.T_DSLASH,
+                "**": TokenType.T_DOUBLESTAR,
+                "=": TokenType.T_EQ,
+                "==": TokenType.T_DOUBLEEQ,
+                "!=": TokenType.T_NOTEQUAL,
+                ">": TokenType.T_GT,
+                "<": TokenType.T_LT,
+                ">=": TokenType.T_GTE,
+                "<=": TokenType.T_LTE,
+                "&&": TokenType.T_AND,
+                "||": TokenType.T_OR,
+                "!": TokenType.T_BANG,
+                "(": TokenType.T_LPAREN,
+                ")": TokenType.T_RPAREN,
+                "[": TokenType.T_LBRACKET,
+                "]": TokenType.T_RBRACKET,
+                "{": TokenType.T_LBRACE,
+                "}": TokenType.T_RBRACE,
+                ",": TokenType.T_COMMA,
+                ".": TokenType.T_DOT,
+                ";": TokenType.T_SEMI,
+                "+=": TokenType.T_PLUS_ASSIGN,
+                "-=": TokenType.T_MINUS_ASSIGN,
+                "*=": TokenType.T_STAR_ASSIGN,
+                "/=": TokenType.T_FSLASH_ASSIGN,
+            }
+            return op_map[piece]
+        # numbers
+        if piece.startswith(".") or "." in piece:
+            return TokenType.T_FLOAT
+        if piece.isdigit():
+            return TokenType.T_INT
+        return TokenType.T_IDENT
+
+    for _ in range(150):
+        pieces = []
+        for _ in range(rng.randint(5, 60)):
+            r = rng.random()
+            if r < 0.25:
+                pieces.append(rng.choice(keywords))
+            elif r < 0.55:
+                pieces.append(rng.choice(ops))
+            elif r < 0.75:
+                pieces.append(rand_number())
+            else:
+                pieces.append(rand_ident())
+
+        src = " ".join(pieces)
+        toks = lex_string(src, tmp_path)
+
+        expected = [expected_type(p) for p in pieces] + [TokenType.T_EOF]
+        got = types(toks)
+        assert got == expected, f"\nSRC:\n{src}\n\nEXPECTED:\n{expected}\n\nGOT:\n{got}\n"
