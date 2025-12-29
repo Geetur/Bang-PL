@@ -356,6 +356,19 @@ class ExpressionParser:
         BOOLEAN_LITERAL_NODE_CLASS,
     )
 
+    VALID_LEFT_HANDS = (
+        INDEX_NODE_CLASS,
+        IDENTIFIER_NODE_CLASS,
+        ARRAY_LITERAL_NODE_CLASS,
+        FIELD_ACCESS_NODE_CLASS,
+    )
+
+    SINGLE_TOKEN_TO_CLASS = {
+        T_END_ENUM_VAL: END_NODE_CLASS,
+        T_BREAK_ENUM_VAL: BREAK_NODE_CLASS,
+        T_CONTINUE_ENUM_VAL: CONTINUE_NODE_CLASS,
+    }
+
     @classmethod
     def _init_type_tables(cls):
         max_id = max(t.value for t in TokenType) + 1
@@ -414,17 +427,6 @@ class ExpressionParser:
     # constructs, it's easier to handle each singular construct different, and allow
     # them to interweave with eachother to create a legible Node
     def loading_into_algos(self):
-        T_IF_ENUM_VAL = self.T_IF_ENUM_VAL
-        T_ELIF_ENUM_VAL = self.T_ELIF_ENUM_VAL
-        T_ELSE_ENUM_VAL = self.T_ELSE_ENUM_VAL
-        T_FOR_ENUM_VAL = self.T_FOR_ENUM_VAL
-        T_WHILE_ENUM_VAL = self.T_WHILE_ENUM_VAL
-        T_BREAK_ENUM_VAL = self.T_BREAK_ENUM_VAL
-        T_CONTINUE_ENUM_VAL = self.T_CONTINUE_ENUM_VAL
-        T_RETURN_ENUM_VAL = self.T_RETURN_ENUM_VAL
-        T_END_ENUM_VAL = self.T_END_ENUM_VAL
-        T_FN_ENUM_VAL = self.T_FN_ENUM_VAL
-        T_DATA_ENUM_VAL = self.T_DATA_ENUM_VAL
         for line_idx, line in enumerate(self.post_split):
             self.illegal_assignment = 0
             if not line:
@@ -434,25 +436,29 @@ class ExpressionParser:
             first_type_id = first.type_enum_id
 
             # keyword constructs must start the line, so check only first token
-            if first_type_id in (T_IF_ENUM_VAL, T_ELIF_ENUM_VAL, T_ELSE_ENUM_VAL):
+            if first_type_id in (self.T_IF_ENUM_VAL, self.T_ELIF_ENUM_VAL, self.T_ELSE_ENUM_VAL):
                 self.handle_if_else_condition(line_idx)
                 continue
-            if first_type_id == T_FOR_ENUM_VAL:
+            if first_type_id == self.T_FOR_ENUM_VAL:
                 self.handle_for_loop(line_idx)
                 continue
-            if first_type_id == T_WHILE_ENUM_VAL:
+            if first_type_id == self.T_WHILE_ENUM_VAL:
                 self.handle_while_loop(line_idx)
                 continue
-            if first_type_id in (T_BREAK_ENUM_VAL, T_CONTINUE_ENUM_VAL, T_END_ENUM_VAL):
+            if first_type_id in (
+                self.T_BREAK_ENUM_VAL,
+                self.T_CONTINUE_ENUM_VAL,
+                self.T_END_ENUM_VAL,
+            ):
                 self.handle_single_tokens(line_idx)
                 continue
-            if first_type_id == T_FN_ENUM_VAL:
+            if first_type_id == self.T_FN_ENUM_VAL:
                 self.handle_function_def(line_idx)
                 continue
-            if first_type_id == T_DATA_ENUM_VAL:
+            if first_type_id == self.T_DATA_ENUM_VAL:
                 self.handle_dataclass_def(line_idx)
                 continue
-            if first_type_id == T_RETURN_ENUM_VAL:
+            if first_type_id == self.T_RETURN_ENUM_VAL:
                 self.handle_return(line_idx)
                 continue
 
@@ -470,8 +476,8 @@ class ExpressionParser:
 
         # handling the else keyword seperately for the if and elif
         # since it follows different syntax than the if-elif constructs
-        if if_token_id == T_ELSE_ENUM_VAL:
-            else_node = ELSE_NODE_CLASS(meta_data=if_token)
+        if if_token_id == self.T_ELSE_ENUM_VAL:
+            else_node = self.ELSE_NODE_CLASS(meta_data=if_token)
             self.post_SYA.append(else_node)
         else:
             if len(line) < 2:
@@ -488,9 +494,9 @@ class ExpressionParser:
             expr_node = self.shunting_yard_algo(expected_expression)
 
             if_node = (
-                IF_NODE_CLASS(condition=expr_node, meta_data=if_token)
+                self.IF_NODE_CLASS(condition=expr_node, meta_data=if_token)
                 if if_token_id == T_IF_ENUM_VAL
-                else ELIF_NODE_CLASS(condition=expr_node, meta_data=if_token)
+                else self.ELIF_NODE_CLASS(condition=expr_node, meta_data=if_token)
             )
 
             self.post_SYA.append(if_node)
@@ -509,7 +515,7 @@ class ExpressionParser:
             )
 
         variable_token = line[1]
-        if variable_token.type_enum_id != T_IDENT_ENUM_VAL:
+        if variable_token.type_enum_id != self.T_IDENT_ENUM_VAL:
             raise ParserError(
                 self.file,
                 "for loop syntax is '[for][some identifier][some expression]'",
@@ -520,10 +526,14 @@ class ExpressionParser:
 
         expected_expression = line[2:]
 
-        variable_node = IDENTIFIER_NODE_CLASS(value=variable_token.value, meta_data=variable_token)
+        variable_node = self.IDENTIFIER_NODE_CLASS(
+            value=variable_token.value, meta_data=variable_token
+        )
         expr_node = self.shunting_yard_algo(expected_expression)
 
-        for_node = FOR_NODE_CLASS(variable=variable_node, bound=expr_node, meta_data=variable_token)
+        for_node = self.FOR_NODE_CLASS(
+            variable=variable_node, bound=expr_node, meta_data=variable_token
+        )
 
         self.post_SYA.append(for_node)
 
@@ -543,7 +553,7 @@ class ExpressionParser:
 
         expr_node = self.shunting_yard_algo(expected_expression)
 
-        while_node = WHILE_NODE_CLASS(condition=expr_node, meta_data=while_token)
+        while_node = self.WHILE_NODE_CLASS(condition=expr_node, meta_data=while_token)
 
         self.post_SYA.append(while_node)
 
@@ -560,12 +570,8 @@ class ExpressionParser:
                 single_token.column_start,
                 single_token.column_end,
             )
-        single_token_to_class = {
-            T_END_ENUM_VAL: END_NODE_CLASS,
-            T_BREAK_ENUM_VAL: BREAK_NODE_CLASS,
-            T_CONTINUE_ENUM_VAL: CONTINUE_NODE_CLASS,
-        }
-        single_node = single_token_to_class[single_token.type_enum_id]
+
+        single_node = self.SINGLE_TOKEN_TO_CLASS[single_token.type_enum_id]
 
         single_node_class = single_node(single_token)
 
@@ -589,8 +595,8 @@ class ExpressionParser:
 
         if (
             # not worth localizing
-            expected_args_name.type_enum_id != T_IDENT_ENUM_VAL
-            or expected_func_name.type_enum_id != T_IDENT_ENUM_VAL
+            expected_args_name.type_enum_id != self.T_IDENT_ENUM_VAL
+            or expected_func_name.type_enum_id != self.T_IDENT_ENUM_VAL
         ):
             raise ParserError(
                 self.file,
@@ -600,7 +606,7 @@ class ExpressionParser:
                 single_token.column_end,
             )
 
-        function_node = FUNCTION_NODE_CLASS(
+        function_node = self.FUNCTION_NODE_CLASS(
             name=expected_func_name.value,
             arg_list_name=expected_args_name.value,
             meta_data=single_token,
@@ -623,7 +629,7 @@ class ExpressionParser:
             )
 
         dataclass_name = line[1]
-        if dataclass_name.type_enum_id != T_IDENT_ENUM_VAL:
+        if dataclass_name.type_enum_id != self.T_IDENT_ENUM_VAL:
             raise ParserError(
                 self.file,
                 "dataclass name must be an identifier",
@@ -639,7 +645,7 @@ class ExpressionParser:
         # vast majority of cases, the dataclass
         # field name list will be less than 20 tokens long, o(20)
         # list comprehensions are pretty fast
-        if type(list_of_field_names.root_expr) is not ARRAY_LITERAL_NODE_CLASS or (
+        if type(list_of_field_names.root_expr) is not self.ARRAY_LITERAL_NODE_CLASS or (
             any(
                 type(i.root_expr) is not IDENTIFIER_NODE_CLASS
                 for i in list_of_field_names.root_expr.elements
@@ -655,7 +661,7 @@ class ExpressionParser:
         list_of_field_names_raw_values = [
             i.root_expr.value for i in list_of_field_names.root_expr.elements
         ]
-        dataclass_node = DATA_CLASS_NODE_CLASS(
+        dataclass_node = self.DATA_CLASS_NODE_CLASS(
             dataclass_name.value, list_of_field_names_raw_values, data_keyword_token
         )
         self.post_SYA.append(dataclass_node)
@@ -672,7 +678,7 @@ class ExpressionParser:
         creators = []
 
         if type(function_name) in self.LITERAL_MAP or type(function_name) in (
-            ARRAY_LITERAL_NODE_CLASS,
+            self.ARRAY_LITERAL_NODE_CLASS,
         ):
             raise ParserError(
                 self.file,
@@ -708,7 +714,7 @@ class ExpressionParser:
                 current.append(tok)
                 creators.pop()
 
-            elif tok_type_id == T_COMMA_ENUM_VAL and depth == 0:
+            elif depth == 0 and tok_type_id == T_COMMA_ENUM_VAL:
                 if current:
                     elements.append(self.shunting_yard_algo(current))
                 current = []
@@ -728,7 +734,6 @@ class ExpressionParser:
         )
 
     def handle_return(self, line_idx):
-        RETURN_NODE_CLASS = self.RETURN_NODE_CLASS
         line = self.post_split[line_idx]
         return_token = line[0]
         if len(line) <= 1:
@@ -744,24 +749,18 @@ class ExpressionParser:
 
         expr_node = self.shunting_yard_algo(expected_expression)
 
-        return_node = RETURN_NODE_CLASS(meta_data=return_token, expression=expr_node)
+        return_node = self.RETURN_NODE_CLASS(meta_data=return_token, expression=expr_node)
 
         self.post_SYA.append(return_node)
 
     def handle_assignments(self, line, assignment_idx):
-        valid_left_hands = (
-            INDEX_NODE_CLASS,
-            IDENTIFIER_NODE_CLASS,
-            ARRAY_LITERAL_NODE_CLASS,
-            FIELD_ACCESS_NODE_CLASS,
-        )
-
+        VALID_LEFT_HANDS = self.VALID_LEFT_HANDS
         assignment_op_token = line[assignment_idx]
         left_hand = line[:assignment_idx]
 
         left_hand_node = self.shunting_yard_algo(left_hand).root_expr
 
-        if type(left_hand_node) not in valid_left_hands:
+        if type(left_hand_node) not in VALID_LEFT_HANDS:
             raise ParserError(
                 self.file,
                 "assignment statement syntax is [identifier][=][expression]",
@@ -770,9 +769,9 @@ class ExpressionParser:
                 assignment_op_token.column_end,
             )
 
-        if type(left_hand_node) is ARRAY_LITERAL_NODE_CLASS:
+        if type(left_hand_node) is self.ARRAY_LITERAL_NODE_CLASS:
             for i in left_hand_node.elements:
-                if type(i.root_expr) not in valid_left_hands:
+                if type(i.root_expr) not in VALID_LEFT_HANDS:
                     raise ParserError(
                         self.file,
                         f"{type(i.root_expr)} multi-initalization syntax is"
@@ -787,7 +786,7 @@ class ExpressionParser:
 
         self.illegal_assignment = 1
 
-        assignment_node = ASSIGNMENT_NODE_CLASS(
+        assignment_node = self.ASSIGNMENT_NODE_CLASS(
             left_hand=left_hand_node,
             op=assignment_op_token.type_enum_id,
             meta_data=assignment_op_token,
@@ -904,29 +903,6 @@ class ExpressionParser:
     # to this algo, which will either return a valid expression node
     # , or raise an error because the list wasn't a valid expression
     def shunting_yard_algo(self, line):
-        IDENTIFIER_NODE_CLASS = self.IDENTIFIER_NODE_CLASS
-
-        IS_ASSIGN = self.IS_ASSIGN
-        IS_BIN2UN = self.IS_BIN2UN
-        CAN_OPND = self.CAN_OPND
-        CAN_OPR = self.CAN_OPR
-        IS_UNARY = self.IS_UNARY
-        IS_LITERAL = self.IS_LITERAL
-
-        ASSOCIATIVITY = self.ASSOCIATIVITY
-        BINARY_TO_UNARY_OP = self.BINARY_TO_UNARY_OP
-        PRECEDENCE = self.PRECEDENCE
-        LITERAL_MAP = self.LITERAL_MAP
-
-        T_IDENT_ENUM_VAL = self.T_IDENT_ENUM_VAL
-        T_DOT_ENUM_VAL = self.T_DOT_ENUM_VAL
-        T_RBRACKET_ENUM_VAL = self.T_RBRACKET_ENUM_VAL
-        T_RBRACE_ENUM_VAL = self.T_RBRACE_ENUM_VAL
-        T_LBRACKET_ENUM_VAL = self.T_LBRACKET_ENUM_VAL
-        T_LPAREN_ENUM_VAL = self.T_LPAREN_ENUM_VAL
-        T_RPAREN_ENUM_VAL = self.T_RPAREN_ENUM_VAL
-        T_LBRACE_ENUM_VAL = self.T_LBRACE_ENUM_VAL
-
         output = []
         op_stack = []
         expect_operand = True
@@ -937,25 +913,25 @@ class ExpressionParser:
         # into the caller for indexing and function literals to ensure this
         def _collapse_field_ops():
             # op_stack item = tuple(token, token_type)
+            T_DOT_ENUM_VAL = self.T_DOT_ENUM_VAL
             while op_stack and op_stack[-1][1] == T_DOT_ENUM_VAL:
                 apply_operator()
 
         def apply_operator():
-            FIELD_ACCESS_NODE_CLASS = self.FIELD_ACCESS_NODE_CLASS
             op_tok, op_tok_type_id = op_stack.pop()
-            is_unary = IS_UNARY[op_tok_type_id]
+
             # unary
             # we probably want to make this and most other things in this
             # parser called from a first-class dict
-            if is_unary:
+            if self.IS_UNARY[op_tok_type_id]:
                 operand = output.pop()
                 output.append(
-                    UNARY_OP_NODE_CLASS(op=op_tok_type_id, meta_data=op_tok, operand=operand)
+                    self.UNARY_OP_NODE_CLASS(op=op_tok_type_id, meta_data=op_tok, operand=operand)
                 )
-            elif op_tok_type_id == T_DOT_ENUM_VAL:
+            elif op_tok_type_id == self.T_DOT_ENUM_VAL:
                 right = output.pop()
                 left = output.pop()
-                if type(right) is not IDENTIFIER_NODE_CLASS:
+                if type(right) is not self.IDENTIFIER_NODE_CLASS:
                     raise ParserError(
                         self.file,
                         "member access must be an identifier",
@@ -963,19 +939,23 @@ class ExpressionParser:
                         op_tok.column_start,
                         op_tok.column_end,
                     )
-                if type(left) is FIELD_ACCESS_NODE_CLASS:
+                if type(left) is self.FIELD_ACCESS_NODE_CLASS:
                     left.field.append(right.value)
                     output.append(left)
                 else:
                     output.append(
-                        FIELD_ACCESS_NODE_CLASS(base=left, field=[right.value], meta_data=op_tok)
+                        self.FIELD_ACCESS_NODE_CLASS(
+                            base=left, field=[right.value], meta_data=op_tok
+                        )
                     )
             else:
                 # binary
                 right = output.pop()
                 left = output.pop()
                 output.append(
-                    BIN_OP_NODE_CLASS(left=left, op=op_tok_type_id, meta_data=op_tok, right=right)
+                    self.BIN_OP_NODE_CLASS(
+                        left=left, op=op_tok_type_id, meta_data=op_tok, right=right
+                    )
                 )
 
         # the while loop is really important; it can't be replaced
@@ -987,19 +967,10 @@ class ExpressionParser:
             tok = line[tok_idx]
             tok_type_id = tok.type_enum_id
 
-            if expect_operand and IS_BIN2UN[tok_type_id]:
-                tok_type_id = BINARY_TO_UNARY_OP[tok_type_id]
+            if expect_operand and self.IS_BIN2UN[tok_type_id]:
+                tok_type_id = self.BINARY_TO_UNARY_OP[tok_type_id]
 
-            # ------------------------------- BOOL FLAGS
-            tok_type_in_ASSIGNMENT = IS_ASSIGN[tok_type_id]
-            tok_type_in_CAN_FOLLOW_OPERAND = CAN_OPND[tok_type_id]
-            tok_type_in_CAN_FOLLOW_OPERATOR = CAN_OPR[tok_type_id]
-            tok_type_in_UNARY_OPS = IS_UNARY[tok_type_id]
-            tok_type_in_LITERAL_MAP = IS_LITERAL[tok_type_id]
-
-            # ------------------------------- BOOL FLAGS
-
-            if tok_type_in_ASSIGNMENT:
+            if self.IS_ASSIGN[tok_type_id]:
                 if self.illegal_assignment:
                     raise ParserError(
                         self.file, "illegal assignment", tok.line, tok.column_start, tok.column_end
@@ -1013,7 +984,7 @@ class ExpressionParser:
 
             # define the can_follow groups with all expression-level syntax
             # and so if a token isn't in these two, it isn't a token meant for expressions
-            if not tok_type_in_CAN_FOLLOW_OPERAND and not tok_type_in_CAN_FOLLOW_OPERATOR:
+            if not self.CAN_OPND[tok_type_id] and not self.CAN_OPR[tok_type_id]:
                 raise ParserError(
                     self.file,
                     "token not allowed in expressions",
@@ -1025,13 +996,13 @@ class ExpressionParser:
             # we should naturally never come across an R bracket
             # because that means we didn't come across
             # a LBRACKET first, and that merits an immediate error
-            elif tok_type_id in (T_RBRACKET_ENUM_VAL, T_RBRACE_ENUM_VAL):
+            elif tok_type_id in (self.T_RBRACKET_ENUM_VAL, self.T_RBRACE_ENUM_VAL):
                 raise ParserError(
                     self.file, "Mismatched grouping", tok.line, tok.column_start, tok.column_end
                 )
 
             elif expect_operand:
-                if not tok_type_in_CAN_FOLLOW_OPERATOR:
+                if not self.CAN_OPR[tok_type_id]:
                     raise ParserError(
                         self.file,
                         "Token not allowed to follow to follow operator or start expression",
@@ -1042,13 +1013,13 @@ class ExpressionParser:
                     # these token types are the operands mentioned above
                     # that dont merit a state transition
                 if (
-                    tok_type_id not in (T_LBRACKET_ENUM_VAL, T_LPAREN_ENUM_VAL)
-                    and not tok_type_in_UNARY_OPS
+                    tok_type_id not in (self.T_LBRACKET_ENUM_VAL, self.T_LPAREN_ENUM_VAL)
+                    and not self.IS_UNARY[tok_type_id]
                 ):
                     expect_operand = False
 
             else:
-                if not tok_type_in_CAN_FOLLOW_OPERAND:
+                if not self.CAN_OPND[tok_type_id]:
                     raise ParserError(
                         self.file,
                         "Token not allowed to follow operand",
@@ -1056,20 +1027,20 @@ class ExpressionParser:
                         tok.column_start,
                         tok.column_end,
                     )
-                if tok_type_id not in (T_LBRACKET_ENUM_VAL, T_RPAREN_ENUM_VAL):
+                if tok_type_id not in (self.T_LBRACKET_ENUM_VAL, self.T_RPAREN_ENUM_VAL):
                     expect_operand = True
 
             # ----------------------------------------------------------ERROR CHECKING FINISHED
 
             # A) Literals & identifiers → output
-            if tok_type_in_LITERAL_MAP:
-                output.append(LITERAL_MAP[tok_type_id](tok))
+            if self.IS_LITERAL[tok_type_id]:
+                output.append(self.LITERAL_MAP[tok_type_id](tok))
 
-            elif tok_type_id == T_IDENT_ENUM_VAL:
-                output.append(IDENTIFIER_NODE_CLASS(value=tok.value, meta_data=tok))
+            elif tok_type_id == self.T_IDENT_ENUM_VAL:
+                output.append(self.IDENTIFIER_NODE_CLASS(value=tok.value, meta_data=tok))
 
             # handling array literal in seperate function
-            elif tok_type_id == T_LBRACKET_ENUM_VAL:
+            elif tok_type_id == self.T_LBRACKET_ENUM_VAL:
                 # if the bracket is following an operator and thus
                 # expecting an operand we must treat the brackets as an array literal
                 if expect_operand:
@@ -1091,7 +1062,7 @@ class ExpressionParser:
                     tok_idx += consumed
                 expect_operand = False
 
-            elif tok_type_id == T_LBRACE_ENUM_VAL:
+            elif tok_type_id == self.T_LBRACE_ENUM_VAL:
                 _collapse_field_ops()
                 function_name = output.pop()
                 call_node, consumed = self.handle_function_call(line[tok_idx:], function_name)
@@ -1100,9 +1071,10 @@ class ExpressionParser:
                 expect_operand = False
 
             # C) Any operator
-            elif tok_type_id in PRECEDENCE:
+            elif tok_type_id in self.PRECEDENCE:
+                PRECEDENCE = self.PRECEDENCE
                 p1 = PRECEDENCE[tok_type_id]
-                assoc = ASSOCIATIVITY[tok_type_id]
+                assoc = self.ASSOCIATIVITY[tok_type_id]
                 # op_stack item = tuple(token, token_type_id)
                 while op_stack and op_stack[-1][1] in PRECEDENCE:
                     top, top_type_id = op_stack[-1]
@@ -1114,13 +1086,13 @@ class ExpressionParser:
                 op_stack.append((tok, tok_type_id))
 
             # D) Left grouping
-            elif tok_type_id == T_LPAREN_ENUM_VAL:
+            elif tok_type_id == self.T_LPAREN_ENUM_VAL:
                 op_stack.append((tok, tok_type_id))
 
             # F) right paren
-            elif tok_type_id == T_RPAREN_ENUM_VAL:
+            elif tok_type_id == self.T_RPAREN_ENUM_VAL:
                 # op_stack item = tuple(token, token_type)
-                while op_stack and op_stack[-1][1] != T_LPAREN_ENUM_VAL:
+                while op_stack and op_stack[-1][1] != self.T_LPAREN_ENUM_VAL:
                     apply_operator()
                 if not op_stack:
                     raise ParserError(
@@ -1133,7 +1105,7 @@ class ExpressionParser:
         if self.illegal_assignment != 2:
             while op_stack:
                 top, top_type_id = op_stack[-1]
-                if top_type_id in (T_LPAREN_ENUM_VAL, T_RPAREN_ENUM_VAL):
+                if top_type_id in (self.T_LPAREN_ENUM_VAL, self.T_RPAREN_ENUM_VAL):
                     raise ParserError(
                         self.file, "Mismatched grouping", top.line, top.column_start, top.column_end
                     )
@@ -1148,4 +1120,4 @@ class ExpressionParser:
                 apply_operator()
 
             root = output.pop()
-            return EXPRESSION_NODE_CLASS(root_expr=root)
+            return self.EXPRESSION_NODE_CLASS(root_expr=root)

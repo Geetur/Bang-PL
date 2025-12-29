@@ -629,7 +629,7 @@ class Evaluator:
         dataclass_name = root.name
         seen = set()
         dataclass_fields = [f for f in root.fields if not (f in seen or seen.add(f))]
-        self.initalize_var(dataclass_name, RUN_TIME_DATACLASS(fields=dataclass_fields))
+        self.initalize_var(dataclass_name, self.RUN_TIME_DATACLASS(fields=dataclass_fields))
 
     def eval_function(self, root):
         function_name = root.name
@@ -645,7 +645,7 @@ class Evaluator:
 
         self.initalize_var(
             function_name,
-            RUN_TIME_FUNCTION(body=root.body, params_name=args_name, closure=closure),
+            self.RUN_TIME_FUNCTION(body=root.body, params_name=args_name, closure=closure),
         )
 
     def eval_block(self, root):
@@ -879,6 +879,7 @@ class Evaluator:
 
         def eval_assignment_multi(left_hand, right_hand_value):
             ARRAY_LITERAL_NODE_CLASS = self.ARRAY_LITERAL_NODE_CLASS
+
             if type(right_hand_value) not in (list, ARRAY_LITERAL_NODE_CLASS):
                 raise EvaluatorError(
                     self.file,
