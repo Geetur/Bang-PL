@@ -367,11 +367,11 @@ class SemanticAnalysis:
         args_name = root.arg_list_name
         # its really important to initalize the function outside of its bodys scope
         #
-        self.initalize_var(function_name, FUNCTION_TYPE_CLASS(value=root.body))
+        self.initalize_var(function_name, self.FUNCTION_TYPE_CLASS(value=root.body))
 
         self.func_depth += 1
         self.scope_stack.append({})
-        self.initalize_var(args_name, DYNAMIC_TYPE_CLASS())
+        self.initalize_var(args_name, self.DYNAMIC_TYPE_CLASS())
 
         self.walk_block(root.body)
         self.scope_stack.pop()
@@ -382,7 +382,7 @@ class SemanticAnalysis:
         # removing duplicate names
         seen = set()
         dataclass_fields = [f for f in root.fields if not (f in seen or seen.add(f))]
-        self.initalize_var(dataclass_name, DATA_CLASS_TYPE_CLASS(fields=dataclass_fields))
+        self.initalize_var(dataclass_name, self.DATA_CLASS_TYPE_CLASS(fields=dataclass_fields))
 
     def walk_block(self, root):
         # A block just walks its children in the current scope
@@ -416,8 +416,8 @@ class SemanticAnalysis:
         self.loop_depth += 1
         self.scope_stack.append({})
         left_hand_name = root.variable.value
-        right_hand_type = DYNAMIC_TYPE_CLASS()
-        if type(right_hand_type) in (NONE_TYPE_CLASS,):
+        right_hand_type = self.DYNAMIC_TYPE_CLASS()
+        if type(right_hand_type) in (self.NONE_TYPE_CLASS,):
             raise SemanticError(
                 self.file,
                 "For loop bound must be an array, identifier, or number",
@@ -481,7 +481,7 @@ class SemanticAnalysis:
         self.scope_stack[-1][left_hand] = right_hand
 
     def search_for_var(self, name):
-        if type(name) is IDENTIFIER_NODE_CLASS:
+        if type(name) is self.IDENTIFIER_NODE_CLASS:
             name = name.value
 
         for scope in reversed(self.scope_stack):
@@ -505,10 +505,10 @@ class SemanticAnalysis:
             type_right_hand = type(right_hand)
             if (
                 type_left_hand_type is not DYNAMIC_TYPE_CLASS
-                and op_type_id in ARITH_ASSIGNMENTS
+                and op_type_id in self.ARITH_ASSIGNMENTS
                 and type_right_hand is not DYNAMIC_TYPE_CLASS
             ):
-                op_type_id = ASSIGNMENTS_TO_NORMAL[op_type_id]
+                op_type_id = self.ASSIGNMENT_TO_NORMAL[op_type_id]
                 if not left_hand_type:
                     raise SemanticError(
                         self.file,
@@ -737,7 +737,7 @@ class SemanticAnalysis:
 
         type_root = type(root)
 
-        if type_root is EXPRESSION_NODE_CLASS:
+        if type_root is self.EXPRESSION_NODE_CLASS:
             return self.walk_expression(root.root_expr)
 
         if type_root in self.LITERALS:
@@ -747,7 +747,7 @@ class SemanticAnalysis:
         if type_root is DYNAMIC_TYPE_CLASS:
             return DYNAMIC_TYPE_CLASS()
 
-        elif type_root is BIN_OP_NODE_CLASS:
+        elif type_root is self.BIN_OP_NODE_CLASS:
             left = self.walk_expression(root.left)
             right = self.walk_expression(root.right)
             type_left = type(left)
@@ -757,15 +757,18 @@ class SemanticAnalysis:
             if type_left is DYNAMIC_TYPE_CLASS or type_right is DYNAMIC_TYPE_CLASS:
                 return DYNAMIC_TYPE_CLASS()
 
-            if root_type_id == T_IN_ENUM_VAL:
+            if root_type_id == self.T_IN_ENUM_VAL:
                 if type_right in (
-                    ARRAY_TYPE_CLASS,
-                    STRING_TYPE_CLASS,
-                    SET_TYPE_CLASS,
-                    DICT_TYPE_CLASS,
+                    self.ARRAY_TYPE_CLASS,
+                    self.STRING_TYPE_CLASS,
+                    self.SET_TYPE_CLASS,
+                    self.DICT_TYPE_CLASS,
                 ):
-                    if not (type_left is not STRING_TYPE_CLASS and type_right is STRING_TYPE_CLASS):
-                        return BOOL_TYPE_CLASS(value=None)
+                    if not (
+                        type_left is not self.STRING_TYPE_CLASS
+                        and type_right is self.STRING_TYPE_CLASS
+                    ):
+                        return self.BOOL_TYPE_CLASS(value=None)
                 raise SemanticError(
                     self.file,
                     f"in operator not supported between {type_left} and {type_right}",
@@ -777,8 +780,8 @@ class SemanticAnalysis:
             if (
                 not (
                     (
-                        type_right in (NUMBER_TYPE_CLASS, BOOL_TYPE_CLASS)
-                        and type_left in (NUMBER_TYPE_CLASS, BOOL_TYPE_CLASS)
+                        type_right in (self.NUMBER_TYPE_CLASS, self.BOOL_TYPE_CLASS)
+                        and type_left in (self.NUMBER_TYPE_CLASS, self.BOOL_TYPE_CLASS)
                     )
                     or type_left is type_right
                 )
@@ -801,10 +804,10 @@ class SemanticAnalysis:
             # anythingt that requires binop to be evaluated to
             # throw an error will be a runtime error
 
-            c = type_left if root_type_id in self.ARITH_OPS else BOOL_TYPE_CLASS
+            c = type_left if root_type_id in self.ARITH_OPS else self.BOOL_TYPE_CLASS
             return c(value=None)
 
-        elif type_root is UNARY_OP_NODE_CLASS:
+        elif type_root is self.UNARY_OP_NODE_CLASS:
             root_type_id = root.op
             op = self.walk_expression(root.operand)
             type_op = type(op)
@@ -812,7 +815,7 @@ class SemanticAnalysis:
             if type_op is DYNAMIC_TYPE_CLASS:
                 return DYNAMIC_TYPE_CLASS()
 
-            if type_op not in self.ALLOWED_UNARY_OPS and root_type_id != T_NEGATE_ENUM_VAL:
+            if type_op not in self.ALLOWED_UNARY_OPS and root_type_id != self.T_NEGATE_ENUM_VAL:
                 raise SemanticError(
                     self.file,
                     "Invalid operation",
@@ -826,24 +829,24 @@ class SemanticAnalysis:
             # anythingt that requires binop to be evaluated to
             # throw an error will be a runtime error
             return (
-                BOOL_TYPE_CLASS(value=None)
+                self.BOOL_TYPE_CLASS(value=None)
                 if root_type_id == T_NEGATE_ENUM_VAL
-                else NUMBER_TYPE_CLASS(value=None)
+                else self.NUMBER_TYPE_CLASS(value=None)
             )
 
-        elif type_root is ARRAY_LITERAL_NODE_CLASS:
+        elif type_root is self.ARRAY_LITERAL_NODE_CLASS:
             checking_exprs = []
             for e in root.elements:
                 typed_expression = (
                     self.walk_expression(e.root_expr)
-                    if type(e) is EXPRESSION_NODE_CLASS
+                    if type(e) is self.EXPRESSION_NODE_CLASS
                     else self.walk_expression(e)
                 )
                 checking_exprs.append(typed_expression)
 
-            return ARRAY_TYPE_CLASS(value=checking_exprs)
+            return self.ARRAY_TYPE_CLASS(value=checking_exprs)
 
-        elif type_root is INDEX_NODE_CLASS:
+        elif type_root is self.INDEX_NODE_CLASS:
             base = self.walk_expression(root.base)
             type_base = type(base)
             base_value = base.value
@@ -857,7 +860,11 @@ class SemanticAnalysis:
             # pretty sure from here down there is some
             # redundant code but it is only redundant, and working
             if base_value:
-                if type_base not in (ARRAY_TYPE_CLASS, STRING_TYPE_CLASS, DICT_TYPE_CLASS):
+                if type_base not in (
+                    self.ARRAY_TYPE_CLASS,
+                    self.STRING_TYPE_CLASS,
+                    self.DICT_TYPE_CLASS,
+                ):
                     raise SemanticError(
                         self.file,
                         f"object of {type_base} not indexable",
@@ -870,10 +877,10 @@ class SemanticAnalysis:
 
             for idx in root.index:
                 idx_type = self.walk_expression(idx.root_expr)
-                if type_base in (ARRAY_TYPE_CLASS, STRING_TYPE_CLASS):
+                if type_base in (self.ARRAY_TYPE_CLASS, self.STRING_TYPE_CLASS):
                     if type(idx_type) not in (
-                        NUMBER_TYPE_CLASS,
-                        BOOL_TYPE_CLASS,
+                        self.NUMBER_TYPE_CLASS,
+                        self.BOOL_TYPE_CLASS,
                         DYNAMIC_TYPE_CLASS,
                     ):
                         raise SemanticError(
@@ -887,12 +894,12 @@ class SemanticAnalysis:
 
             # if the base is unknowable statically than their is no point
             # to run over static indexes because we dont know the bounds of the base
-            if not base_value or type_base is DICT_TYPE_CLASS:
+            if not base_value or type_base is self.DICT_TYPE_CLASS:
                 return DYNAMIC_TYPE_CLASS()
 
             for _pos, idx in enumerate(indexes):
                 idx_value = idx.value
-                if type_base not in (ARRAY_TYPE_CLASS, STRING_TYPE_CLASS):
+                if type_base not in (self.ARRAY_TYPE_CLASS, self.STRING_TYPE_CLASS):
                     raise SemanticError(
                         self.file,
                         "Index out of bounds",
@@ -921,7 +928,7 @@ class SemanticAnalysis:
 
             return base
 
-        elif type_root is IDENTIFIER_NODE_CLASS:
+        elif type_root is self.IDENTIFIER_NODE_CLASS:
             # making sure each identifier is defined if its used in a given scope
             actual_type = self.search_for_var(root.value)
             if not actual_type:
@@ -934,7 +941,7 @@ class SemanticAnalysis:
                 )
             return actual_type
 
-        elif type_root is CALL_NODE_CLASS:
+        elif type_root is self.CALL_NODE_CLASS:
             # call functions that can be statically determined
 
             def walk_built_in_set(root):
@@ -943,19 +950,19 @@ class SemanticAnalysis:
                 len_typed_args = len(typed_args)
 
                 if not len_typed_args:
-                    return SET_TYPE_CLASS(value=expected_return)
+                    return self.SET_TYPE_CLASS(value=expected_return)
                 typed_args_0 = typed_args[0]
                 type_typed_args_0 = type(typed_args_0)
 
                 if len_typed_args == 1:
                     if type_typed_args_0 is DYNAMIC_TYPE_CLASS:
-                        return SET_TYPE_CLASS(value=expected_return)
-                    elif type_typed_args_0 in (SET_TYPE_CLASS, ARRAY_TYPE_CLASS):
+                        return self.SET_TYPE_CLASS(value=expected_return)
+                    elif type_typed_args_0 in (self.SET_TYPE_CLASS, self.ARRAY_TYPE_CLASS):
                         typed_args = typed_args_0.value
                         # need this is none check due to bin op/un op
                         # returning base_type(value=None)
                         if typed_args is None:
-                            return SET_TYPE_CLASS(value=expected_return)
+                            return self.SET_TYPE_CLASS(value=expected_return)
 
                 for arg in typed_args:
                     if type(arg) in self.UNHASHABLE_TYPES:
@@ -967,7 +974,7 @@ class SemanticAnalysis:
                             root.meta_data.column_end,
                         )
                     expected_return.append(arg)
-                return SET_TYPE_CLASS(value=expected_return)
+                return self.SET_TYPE_CLASS(value=expected_return)
 
             def walk_built_in_dict(root):
                 expected_return = []
@@ -976,18 +983,18 @@ class SemanticAnalysis:
                 len_typed_args = len(typed_args)
 
                 if not len_typed_args:
-                    return DICT_TYPE_CLASS(value=expected_return)
+                    return self.DICT_TYPE_CLASS(value=expected_return)
 
                 typed_args_0 = typed_args[0]
                 type_typed_args_0 = type(typed_args_0)
 
                 if len_typed_args == 1:
-                    if type_typed_args_0 is DYNAMIC_TYPE_CLASS:
-                        return DICT_TYPE_CLASS(value=expected_return)
-                    elif type_typed_args_0 in (SET_TYPE_CLASS, ARRAY_TYPE_CLASS):
+                    if type_typed_args_0 is self.DYNAMIC_TYPE_CLASS:
+                        return self.DICT_TYPE_CLASS(value=expected_return)
+                    elif type_typed_args_0 in (self.SET_TYPE_CLASS, self.ARRAY_TYPE_CLASS):
                         typed_args = typed_args_0.value
                         if typed_args is None:
-                            return DICT_TYPE_CLASS(value=expected_return)
+                            return self.DICT_TYPE_CLASS(value=expected_return)
                         len_typed_args = len(typed_args)
 
                 if len_typed_args % 2 != 0:
@@ -1010,7 +1017,7 @@ class SemanticAnalysis:
                         )
                     is_key = not is_key
                     expected_return.append(arg)
-                return DICT_TYPE_CLASS(value=expected_return)
+                return self.DICT_TYPE_CLASS(value=expected_return)
 
             built_in_to_walk = {
                 "set": walk_built_in_set,
@@ -1022,7 +1029,7 @@ class SemanticAnalysis:
             type_root_name = type(root_name)
             len_root_args = len(root_args)
 
-            if type_root_name is not IDENTIFIER_NODE_CLASS:
+            if type_root_name is not self.IDENTIFIER_NODE_CLASS:
                 return DYNAMIC_TYPE_CLASS()
 
             callee_type = self.search_for_var(root_name)
@@ -1031,7 +1038,7 @@ class SemanticAnalysis:
             if type_callee_type is DYNAMIC_TYPE_CLASS:
                 return DYNAMIC_TYPE_CLASS()
 
-            if type_callee_type is DATA_CLASS_TYPE_CLASS:
+            if type_callee_type is self.DATA_CLASS_TYPE_CLASS:
                 if len_root_args > len(callee_type.fields):
                     raise SemanticError(
                         self.file,
@@ -1046,7 +1053,7 @@ class SemanticAnalysis:
                     if len_root_args > idx:
                         fields[field] = self.walk_expression(root_args[idx].root_expr)
 
-                return INSTANCE_TYPE_CLASS(of=root.name.value, fields=fields)
+                return self.INSTANCE_TYPE_CLASS(of=root.name.value, fields=fields)
 
             if not callee_type:
                 raise SemanticError(
@@ -1057,7 +1064,11 @@ class SemanticAnalysis:
                     root.meta_data.column_end,
                 )
 
-            if type_callee_type not in (FUNCTION_TYPE_CLASS, SET_TYPE_CLASS, DICT_TYPE_CLASS):
+            if type_callee_type not in (
+                self.FUNCTION_TYPE_CLASS,
+                self.SET_TYPE_CLASS,
+                self.DICT_TYPE_CLASS,
+            ):
                 raise SemanticError(
                     self.file,
                     f"attempt to call non-function '{root.name.value}'",
@@ -1071,8 +1082,8 @@ class SemanticAnalysis:
             # from hardcode to like self.builtintypes or something
             root_name_value = root.name.value
             if root_name_value in built_in_to_walk and type_callee_type in (
-                SET_TYPE_CLASS,
-                DICT_TYPE_CLASS,
+                self.SET_TYPE_CLASS,
+                self.DICT_TYPE_CLASS,
             ):
                 return built_in_to_walk[root_name_value](root)
 
@@ -1082,7 +1093,7 @@ class SemanticAnalysis:
 
             return DYNAMIC_TYPE_CLASS()
 
-        elif type(root) is FIELD_ACCESS_NODE_CLASS:
+        elif type(root) is self.FIELD_ACCESS_NODE_CLASS:
             # to do
             base = self.walk_expression(root.base)
 
@@ -1092,7 +1103,7 @@ class SemanticAnalysis:
                 type_base = type(base)
                 if type_base is DYNAMIC_TYPE_CLASS:
                     return DYNAMIC_TYPE_CLASS()
-                if type_base is not INSTANCE_TYPE_CLASS:
+                if type_base is not self.INSTANCE_TYPE_CLASS:
                     raise SemanticError(
                         self.file,
                         "field access is only performable on instances of classes",
@@ -1104,7 +1115,7 @@ class SemanticAnalysis:
                 type_derived_class = type(derived_class)
                 if type_derived_class is DYNAMIC_TYPE_CLASS:
                     return DYNAMIC_TYPE_CLASS()
-                if type_derived_class is not DATA_CLASS_TYPE_CLASS:
+                if type_derived_class is not self.DATA_CLASS_TYPE_CLASS:
                     raise SemanticError(
                         self.file,
                         "field access is only performable on instances of classes",

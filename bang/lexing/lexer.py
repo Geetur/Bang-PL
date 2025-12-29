@@ -80,13 +80,12 @@ class Lexer:
     def __init__(self, file_path):
         # reading entire file to memory
         with open(file_path) as f:
-            self.text = f.read() + SENTINEL
+            self.text = f.read() + self.SENTINEL
 
         # result of lexing will be list of tokens
         self.tokens = []
 
     def tokenizer(self):
-        cls = self.__class__
         tokens = self.tokens
         text = self.text
         len_text = len(text)
@@ -95,25 +94,25 @@ class Lexer:
         line_start = 0
 
         # localizing token types to avoid lookups
-        T_INT_ENUM_VAL = cls.T_INT_ENUM_VAL
-        T_FLOAT_ENUM_VAL = cls.T_FLOAT_ENUM_VAL
-        T_DOT_ENUM_VAL = cls.T_DOT_ENUM_VAL
-        T_STRING_ENUM_VAL = cls.T_STRING_ENUM_VAL
-        T_IDENT_ENUM_VAL = cls.T_IDENT_ENUM_VAL
-        T_BOOL_ENUM_VAL = cls.T_BOOL_ENUM_VAL
-        T_NONE_ENUM_VAL = cls.T_NONE_ENUM_VAL
-        T_IN_ENUM_VAL = cls.T_IN_ENUM_VAL
+        T_INT_ENUM_VAL = self.T_INT_ENUM_VAL
+        T_FLOAT_ENUM_VAL = self.T_FLOAT_ENUM_VAL
+        T_DOT_ENUM_VAL = self.T_DOT_ENUM_VAL
+        T_STRING_ENUM_VAL = self.T_STRING_ENUM_VAL
+        T_IDENT_ENUM_VAL = self.T_IDENT_ENUM_VAL
+        T_BOOL_ENUM_VAL = self.T_BOOL_ENUM_VAL
+        T_NONE_ENUM_VAL = self.T_NONE_ENUM_VAL
+        T_IN_ENUM_VAL = self.T_IN_ENUM_VAL
 
-        COMMENT = cls.COMMENT
-        DECIMAL = cls.DECIMAL
-        NEWLINE = cls.NEWLINE
-        SENTINEL = cls.SENTINEL
-        STRING = cls.STRING
-        UNDERSCORE = cls.UNDERSCORE
+        COMMENT = self.COMMENT
+        DECIMAL = self.DECIMAL
+        NEWLINE = self.NEWLINE
+        SENTINEL = self.SENTINEL
+        STRING = self.STRING
+        UNDERSCORE = self.UNDERSCORE
 
         # cache dictionaries
-        KEYWORDS = cls.KEYWORDS
-        SYMBOLS = cls.SYMBOLS
+        KEYWORDS = self.KEYWORDS
+        SYMBOLS = self.SYMBOLS
 
         def create_lexeme(ttype_id, val, start_pos, end_pos):
             # + 1 because zero index
