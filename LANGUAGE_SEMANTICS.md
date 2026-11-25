@@ -54,10 +54,12 @@ print{c{}, c{}}   # 1 2
 - Instances retain their original declaration/schema even if the variable naming that constructor is reassigned or redeclared.
 - An if may have multiple elif branches and at most one final else. Each dependent branch uses its existing `end`, followed by the owning if's final `end`. An else header contains only `else`.
 - Integer for-bounds iterate from zero toward the bound, excluding the bound. Predicate booleans work like the corresponding integer bounds.
+- For-loops traverse the original collection. Changing dictionary keys during traversal produces a Bang diagnostic if the iterator is advanced again. Updating existing values is allowed; breaking immediately after adding a key is also allowed.
 
 ## Checking and diagnostics
 
 - The checker records an operation's result type, not the type or literal shape of its RHS. It updates/invalidate facts when indexed/field mutation or aliases make earlier information stale.
+- Control-flow joins preserve record aliases shared on every path. Uncertain sharing is treated conservatively, and writes through unknown references invalidate potentially affected mutable facts.
 - Unknown user calls invalidate potentially changed facts. Runtime checks validate values that cannot be determined statically. This is a best-effort checker, not a claim of complete static type safety.
 - Expressions use explicit stacks for checking and evaluation, so long flat arithmetic trees and call/index/field chains do not consume the Python call stack.
 - `Evaluator.MAX_CALL_DEPTH`, `ExpressionParser.MAX_EXPRESSION_DEPTH`, and `ControlFlowParser.MAX_BLOCK_DEPTH` default to 64. They bound nested function invocations, recursive collection/call parsing, and nested control blocks. Parentheses handled iteratively and flat operator chains do not consume the recursive-parser limit. Excess nesting produces a Bang diagnostic.

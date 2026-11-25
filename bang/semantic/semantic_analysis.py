@@ -467,25 +467,43 @@ class SemanticAnalysis:
             self.SET_TYPE_CLASS,
             self.DICT_TYPE_CLASS,
         )
+        bindings = []
+        owners = {}
+        ambiguous = set()
         for depth, scope in enumerate(self.scope_stack):
-            for name, before in list(scope.items()):
+            for name, before in scope.items():
                 options = [before] + [path[depth][name] for path in paths]
-                typ = type(before)
-                if typ in scalar_types and all(type(value) is typ for value in options):
-                    scope[name] = typ(None)
-                elif typ in (
-                    BuiltinType,
-                    self.FUNCTION_TYPE_CLASS,
-                    self.DATA_CLASS_TYPE_CLASS,
-                ) and all(value is before for value in options):
-                    scope[name] = before
-                elif typ is self.INSTANCE_TYPE_CLASS and all(
-                    type(value) is typ and value.of is before.of for value in options
+                signature = None
+                if type(before) is self.INSTANCE_TYPE_CLASS and all(
+                    type(value) is self.INSTANCE_TYPE_CLASS and value.of is before.of
+                    for value in options
                 ):
+                    signature = tuple(id(value) for value in options)
+                    for position, value in enumerate(options):
+                        previous = owners.setdefault((position, id(value)), signature)
+                        if previous != signature:
+                            ambiguous.update((previous, signature))
+                bindings.append((scope, name, before, options, signature))
+
+        records = {}
+        for scope, name, before, options, signature in bindings:
+            typ = type(before)
+            if typ in scalar_types and all(type(value) is typ for value in options):
+                scope[name] = typ(None)
+            elif typ in (
+                BuiltinType,
+                self.FUNCTION_TYPE_CLASS,
+                self.DATA_CLASS_TYPE_CLASS,
+            ) and all(value is before for value in options):
+                scope[name] = before
+            elif signature is not None and signature not in ambiguous:
+                # Share one merged fact only when every path agrees on aliasing.
+                if signature not in records:
                     fields = {field: self.DYNAMIC_TYPE_CLASS() for field in before.fields}
-                    scope[name] = self.INSTANCE_TYPE_CLASS(before.of, fields)
-                else:
-                    scope[name] = self.DYNAMIC_TYPE_CLASS()
+                    records[signature] = self.INSTANCE_TYPE_CLASS(before.of, fields)
+                scope[name] = records[signature]
+            else:
+                scope[name] = self.DYNAMIC_TYPE_CLASS()
 
     def walk_if(self, root):
         saved_scopes = self.scope_stack
@@ -681,7 +699,7 @@ class SemanticAnalysis:
             current = self._field_type(base, target.field[-1], target)
             if type(base) is self.INSTANCE_TYPE_CLASS:
                 return current, lambda value: base.fields.__setitem__(target.field[-1], value)
-            return current, lambda value: None
+            return current, lambda _value: self._invalidate_mutable_facts()
         if typ is self.INDEX_NODE_CLASS:
             base = self.walk_expression(target.base)
             for part in target.index[:-1]:
@@ -698,6 +716,8 @@ class SemanticAnalysis:
                         base.value = None
                 elif type(base) is self.DICT_TYPE_CLASS:
                     base.value = None
+                elif type(base) is self.DYNAMIC_TYPE_CLASS:
+                    self._invalidate_mutable_facts()
 
             return current, update
         self._error("invalid assignment target", target)
@@ -733,7 +753,9 @@ class SemanticAnalysis:
         else:
             assign(root.left_hand, self.walk_expression(root.right_hand.root_expr))
 
-    def _invalidate_mutable_facts(self, facts):
+    def _invalidate_mutable_facts(self, facts=None):
+        if facts is None:
+            facts = (value for scope in self.scope_stack for value in scope.values())
         pending = list(facts)
         seen = set()
         while pending:
@@ -750,13 +772,13 @@ class SemanticAnalysis:
                 for name in value.fields:
                     value.fields[name] = self.DYNAMIC_TYPE_CLASS()
             elif type(value) in (self.SET_TYPE_CLASS, self.DICT_TYPE_CLASS):
+                if value.value is not None:
+                    pending.extend(value.value)
                 value.value = None
 
     def _invalidate_call_facts(self):
         """An unknown user call may rebind captures and mutate reachable objects."""
-        self._invalidate_mutable_facts(
-            value for scope in self.scope_stack for value in scope.values()
-        )
+        self._invalidate_mutable_facts()
         for scope in self.scope_stack:
             for name in scope:
                 scope[name] = self.DYNAMIC_TYPE_CLASS()
@@ -886,3 +908,4 @@ class SemanticAnalysis:
                     del values[-count:]
                 values.append(self._infer_call_type(node, task[2], arguments))
         return values.pop()
+

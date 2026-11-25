@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from bang.cli import run_file
 from bang.lexing.lexer import Lexer
 from bang.parsing.control_flow_parser import ControlFlowParser
 from bang.parsing.expression_parser import ExpressionParser
@@ -196,6 +197,81 @@ class RegressionTests(unittest.TestCase):
 
     def test_string_division_has_array_result_type(self):
         self.assert_output('x = "a b" / " "; print{x + ["c"]}', "['a', 'b', 'c']\n")
+
+    def test_indirect_mutations_invalidate_shared_type_facts(self):
+        cases = [
+            'a=[1]; d=dict{"x",a}; d["x"][0]="hi"; print{a[0]+"!"}',
+            'data P [x]; p=P{1}; d=dict{"p",p}; d["p"].x="hi"; print{p.x+"!"}',
+            'a=[1]; b=min{[a]}; b[0]="hi"; print{a[0]+"!"}',
+            'a=[1]; b=sort{[a]}[0]; b[0]="hi"; print{a[0]+"!"}',
+            'data P [x]; p=P{1}; b=([p]+[])[0]; b.x="hi"; print{p.x+"!"}',
+            'data P [x]; p=P{1}; for item [p]; item.x="hi"; print{p.x+"!"}; end',
+            'a=[1]; b=max{[a]}; [b[0]]=["hi"]; print{a[0]+"!"}',
+            'a=["h"]; d=dict{"x",a}; d["x"][0]+="i"; print{a[0]+"!"}',
+        ]
+        for code in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, "hi!\n")
+
+    def test_control_flow_preserves_or_widens_record_aliases(self):
+        for control in ('if true; end', 'for i 0; end', 'while false; end'):
+            code = 'data P [x]; p=P{0}; q=p; '+control+'; p.x="s"; q.x=1; print{p.x+1}'
+            with self.subTest(control=control):
+                self.assert_output(code, "2\n")
+                # Proven sharing should still diagnose a known invalid operation.
+                with self.assertRaises(SemanticError):
+                    compile_program(code.replace('p.x+1', 'p.x+"!"'))
+        for condition, expression, expected in (
+            ('true', 'p.x+1', '2\n'), ('false', 'p.x+"!"', 's!\n'),
+        ):
+            with self.subTest(condition=condition):
+                self.assert_output(
+                    'data P [x]; p=P{0}; q=P{0}; if '+condition+'; q=p; end; '
+                    'p.x="s"; q.x=1; print{'+expression+'}', expected,
+                )
+
+    def test_dictionary_iteration_mutation_is_controlled(self):
+        for body in ('d["b"]=2', 'grow{}', 'd["b"]=2; continue'):
+            code = 'd=dict{"a",1}; fn grow args; d["b"]=2; end; for k d; '+body+'; end'
+            with self.subTest(body=body):
+                evaluator = compile_program(code)
+                with self.assertRaisesRegex(EvaluatorError, 'changed during iteration'):
+                    evaluator.eval_program()
+                self.assertEqual(len(evaluator.scope_stack), 1)
+                self.assertEqual(evaluator.loop_depth, 0)
+                self.assertEqual(evaluator.func_depth, 0)
+        for code, expected in (
+            ('d=dict{"a",1}; for k d; d[k]+=1; end; print{d["a"]}', '2\n'),
+            ('d=dict{"a",1}; for k d; d["b"]=2; break; end; print{len{d}}', '2\n'),
+            ('for k dict{}; print{k}; end', ''),
+        ):
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'iteration.bang'
+            source.write_text('d=dict{"a",1}\nfor k d\nd["b"]=2\nend\n', encoding='utf-8')
+            error = io.StringIO()
+            with contextlib.redirect_stderr(error):
+                self.assertEqual(run_file(str(source)), 4)
+            self.assertIn('[EvaluatorError] Line 2,', error.getvalue())
+            self.assertNotIn('Traceback', error.getvalue())
+
+    def test_numeric_results_remain_finite_across_arrays_and_builtins(self):
+        expressions = [
+            'big*2', '[big]*[2]', '[big]*[2,3]', '[2,3]*[big]',
+            '[big]/[tiny]', '[big]/[tiny,tiny]', '[big,big]/[tiny]',
+            '[big]//[tiny]', 'sum{big,big}', 'sum{[big,big]}', 'sum{set{big,big*0.9}}',
+            '(-1)**0.5',
+        ]
+        for expression in expressions:
+            with self.subTest(expression=expression):
+                evaluator = compile_program('big=10.0**308; tiny=10.0**-308; '+expression)
+                with self.assertRaises(EvaluatorError):
+                    evaluator.eval_program()
+        self.assert_output(
+            'big=10.0**308; print{[big]*[1],sum{big,-big},sum{[]},[0]/[2],[]*[big]}',
+            '[1e+308] 0.0 0 [0.0] []\n',
+        )
 
 
 if __name__ == "__main__":

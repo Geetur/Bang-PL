@@ -693,7 +693,7 @@ class Evaluator:
     def eval_for(self, root):
         bound = self.eval_expression(root.bound.root_expr)
         if isinstance(bound, int):
-            iterator = range(0, bound, -1 if bound < 0 else 1)
+            iterator = iter(range(0, bound, -1 if bound < 0 else 1))
         else:
             try:
                 iterator = iter(bound)
@@ -709,7 +709,19 @@ class Evaluator:
         self.loop_depth += 1
         self.scope_stack.append({})
         try:
-            for value in iterator:
+            while True:
+                try:
+                    value = next(iterator)
+                except StopIteration:
+                    break
+                except RuntimeError as error:
+                    raise EvaluatorError(
+                        self.file,
+                        "collection changed during iteration",
+                        root.meta_data.line,
+                        root.meta_data.column_start,
+                        root.meta_data.column_end,
+                    ) from error
                 self.initalize_var(root.variable.value, value)
                 try:
                     self.eval_block(root.body)
@@ -1023,7 +1035,7 @@ class Evaluator:
             return self.eval_call(callee, args, metadata)
         if callable(callee) and callee in self.built_in_function_objects:
             try:
-                result = callee(args, metadata)
+                result = self._checked_real_result(callee(args, metadata))
             except (TypeError, ValueError, ArithmeticError, RecursionError) as error:
                 raise EvaluatorError(
                     self.file,
@@ -1054,12 +1066,15 @@ class Evaluator:
         right = self.eval_expression(root.right)
         return self._eval_binary_values(root, left, right)
 
+    @staticmethod
+    def _checked_real_result(result):
+        if isinstance(result, complex) or (isinstance(result, float) and not isfinite(result)):
+            raise ValueError("numeric result is outside the supported real-number range")
+        return result
+
     def _eval_binary_values(self, root, left, right):
         try:
-            result = self._apply_binary_values(root, left, right)
-            if isinstance(result, complex) or (isinstance(result, float) and not isfinite(result)):
-                raise ValueError("numeric result is outside the supported real-number range")
-            return result
+            return self._checked_real_result(self._apply_binary_values(root, left, right))
         except (TypeError, ValueError, ArithmeticError, RecursionError) as error:
             raise EvaluatorError(
                 self.file,
@@ -1202,7 +1217,7 @@ class Evaluator:
                         root.meta_data.column_start,
                         root.meta_data.column_end,
                     )
-                return a / b if div_type == "true" else a // b
+                return self._checked_real_result(a / b if div_type == "true" else a // b)
 
             def list_sub(a, b):
                 try:
@@ -1226,9 +1241,11 @@ class Evaluator:
                             )
                         multiplier = b[0] if len(b) == 1 else a[0]
                         base = a if len(a) != 1 else b
-                        return [x * multiplier for x in base]
+                        return [self._checked_real_result(x * multiplier) for x in base]
                     else:
-                        return [i * j for i, j in zip(a, b, strict=False)]
+                        return [
+                            self._checked_real_result(i * j) for i, j in zip(a, b, strict=False)
+                        ]
                 else:
                     # this will be where operations such as [1] * 3
                     # go which we will need to change semantic pass to allow
