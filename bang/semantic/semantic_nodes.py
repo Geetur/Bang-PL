@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from typing import Any
 
-from bang.parsing.parser_nodes import BlockNode
-
 
 @dataclass(slots=True)
 class NumberType:
@@ -44,9 +42,20 @@ class IdentifierType:
     value: Any
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class FunctionType:
-    value: BlockNode
+    value: Any = None
+
+    def __deepcopy__(self, memo):
+        return self
+
+
+@dataclass(frozen=True, slots=True)
+class BuiltinType:
+    name: str
+
+    def __deepcopy__(self, memo):
+        return self
 
 
 @dataclass(slots=True)
@@ -59,14 +68,17 @@ class DictType:
     value: Any
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class DataClassType:
-    fields: list[str]
+    fields: tuple[str, ...]
+
+    def __deepcopy__(self, memo):
+        return self
 
 
 @dataclass(slots=True)
 class InstanceType:
-    of: str  # dataclass name
+    of: DataClassType
     fields: dict[str, Any]
 
 

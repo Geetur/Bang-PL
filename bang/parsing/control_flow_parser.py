@@ -20,6 +20,8 @@ from bang.parsing.parser_nodes import (
 
 
 class ControlFlowParser:
+    MAX_BLOCK_DEPTH = 64
+
     ELIF_NODE_CLASS = ELIF_NODE_CLASS
     ELSE_NODE_CLASS = ELSE_NODE_CLASS
     END_NODE_CLASS = END_NODE_CLASS
@@ -72,6 +74,14 @@ class ControlFlowParser:
             # its nested in
             type_node = type(node)
             if type_node in CONTROL_FLOW_NODES:
+                if len(stack) >= self.MAX_BLOCK_DEPTH:
+                    raise ParserError(
+                        self.file,
+                        f"block nesting exceeds the limit of {self.MAX_BLOCK_DEPTH}",
+                        node.meta_data.line,
+                        node.meta_data.column_start,
+                        node.meta_data.column_end,
+                    )
                 stack.append(node)
             elif type_node is END_NODE_CLASS:
                 if not stack:
@@ -89,6 +99,14 @@ class ControlFlowParser:
                         raise ParserError(
                             self.file,
                             "This construct is dependant on an if statement",
+                            construct.meta_data.line,
+                            construct.meta_data.column_start,
+                            construct.meta_data.column_end,
+                        )
+                    if stack[-1].else_branch.block:
+                        raise ParserError(
+                            self.file,
+                            "else must be the last branch and may appear only once",
                             construct.meta_data.line,
                             construct.meta_data.column_start,
                             construct.meta_data.column_end,

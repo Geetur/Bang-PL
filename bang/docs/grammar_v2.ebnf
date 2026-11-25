@@ -77,7 +77,8 @@ Line           ::= Statement [ SEMICOLON ] NEWLINE
 # continues until a matching KW_END line. "return" is only valid inside
 # a function; "break"/"continue" only inside loops.
 
-Statement      ::= DataClassStmt
+Statement      ::= AssignmentStmt
+                 | DataClassStmt
                  | FunctionHeader
                  | IfHeader
                  | ElifHeader
@@ -135,19 +136,20 @@ IdentList      ::= IDENT { COMMA IDENT } ;
 #   - IDENT
 #   - IndexExpr
 #   - FieldExpr
-#   - Destructure (flat list of IDENTs)
+#   - Destructure (nested lists of assignable targets)
 # Compound assignments (+=, -=, *=, /=) are also supported.
-Expression     ::= Assignment ;
+Expression     ::= OrExpr ;
 
-Assignment     ::= Assignable AssignOp Expression
-                 | OrExpr ;
+# Assignments are statements: nested and chained assignments are rejected.
+AssignmentStmt ::= Assignable AssignOp Expression ;
 
 Assignable     ::= IDENT
                  | IndexExpr
                  | FieldExpr
                  | Destructure ;
 
-Destructure    ::= LBRACKET IdentList RBRACKET ;
+Destructure    ::= LBRACKET [ TargetList ] RBRACKET ;
+TargetList     ::= Assignable { COMMA Assignable } [ COMMA ] ;
 
 AssignOp       ::= ASSIGN | PLUS_ASSIGN | MINUS_ASSIGN | ASTERISK_ASSIGN | SLASH_ASSIGN ;
 
@@ -181,7 +183,7 @@ UnaryExpr      ::= ( NEGATE | PLUS | MINUS ) UnaryExpr
 PostfixExpr    ::= Primary { FieldSuffix | IndexSuffix | CallSuffix } ;
 
 FieldSuffix    ::= DOT IDENT ;
-IndexSuffix    ::= LBRACKET [ ArgList ] RBRACKET ;   # one top-level expr; use multiple [] for multi-index
+IndexSuffix    ::= LBRACKET Expression RBRACKET ;   # one top-level expr; use multiple [] for multi-index
 CallSuffix     ::= LBRACE [ ArgList ] RBRACE ;
 
 ArgList        ::= Expression { COMMA Expression } ;
@@ -208,3 +210,7 @@ Literals       ::= INT_LIT | FLOAT_LIT | BOOL_LIT | NONE_LIT | STRING_LIT ;
 #   ||        (left-assoc)
 # Unary +, -, ! bind tighter than all binary ops.
 
+
+# Runtime contract and resource limits are specified in LANGUAGE_SEMANTICS.md.
+# Numeric literals use ASCII digits. Strings cannot contain raw newlines.
+# Each if has at most one else, and no elif may follow it.

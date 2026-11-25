@@ -26,7 +26,10 @@ def run_file(path: str, *, show_tokens=False, show_ast=False, trace=False) -> in
         cf = ControlFlowParser(lex.text, ex.post_SYA)
         roots = cf.blockenize()
         if show_ast:
-            print(roots)
+            try:
+                print(roots)
+            except RecursionError:
+                print("AST is too deep to display.", file=sys.stderr)
 
         SemanticAnalysis(lex.text, roots).walk_program()
 
@@ -40,6 +43,9 @@ def run_file(path: str, *, show_tokens=False, show_ast=False, trace=False) -> in
 
         Evaluator(lex.text, roots, **kwargs).eval_program()
         return 0
+    except OSError as e:
+        print(f"[FileError] {e}", file=sys.stderr)
+        return 1
     except LexerError as e:
         print(e, file=sys.stderr)
         return 1

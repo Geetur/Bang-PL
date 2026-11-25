@@ -233,6 +233,10 @@ output:
 8
 ```
 
+## Stabilized behavior
+
+See [LANGUAGE_SEMANTICS.md](LANGUAGE_SEMANTICS.md) for operator rules, persistent closures, evaluation order, records, and diagnostic limits.
+
 ## Running the Test-Suite
 ```
 python -m pytest -q
@@ -248,7 +252,7 @@ The default selection runs the lexer, parser, semantic, evaluator, and regressio
 The parser and regression suites can also run without pytest:
 
 ```bash
-python -m unittest bang.parsing.tests_parser.test_expr_parser_correctness bang.tests.test_regressions
+python -m unittest bang.parsing.tests_parser.test_expr_parser_correctness bang.tests.test_regressions 
 ```
 
 ## Extending the Language
@@ -273,7 +277,7 @@ Tip: Each phase is cleanly decoupled; you can unit-test a new feature in isolati
 
 ## Contributing
 
-PRs and issue reports are welcome! Please run pytest and ruff (optional for now since ruff isn't a dependency) (or your formatter of choice) before opening a pull-request.
+PRs and issue reports are welcome! Please run pytest and ruff (included in the dev dependencies) (or your formatter of choice) before opening a pull-request.
 
 * Fork the repo
 

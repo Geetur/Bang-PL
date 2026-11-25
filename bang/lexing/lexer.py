@@ -79,8 +79,14 @@ class Lexer:
 
     def __init__(self, file_path):
         # reading entire file to memory
-        with open(file_path) as f:
-            self.text = f.read() + self.SENTINEL
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                source = f.read()
+        except UnicodeError as error:
+            raise LexerError("source must be valid UTF-8", "", 0) from error
+        if "\0" in source:
+            raise LexerError("NUL characters are not allowed in source", source, source.index("\0"))
+        self.text = source + self.SENTINEL
 
         # result of lexing will be list of tokens
         self.tokens = []
@@ -137,6 +143,8 @@ class Lexer:
                 continue
 
             if char == SENTINEL:
+                if pos != len_text - 1:
+                    raise LexerError("NUL characters are not allowed in source", text, pos)
                 break
 
             if char.isalpha() or char == UNDERSCORE:
@@ -164,7 +172,7 @@ class Lexer:
 
                 continue
 
-            if char.isdigit() or char == DECIMAL:
+            if ("0" <= char <= "9") or char == DECIMAL:
                 start = pos
                 dot_seen = False
 
@@ -177,7 +185,7 @@ class Lexer:
 
                     pos += 1
                     char = text[pos]
-                    if not (char.isdigit() or char == DECIMAL):
+                    if not (("0" <= char <= "9") or char == DECIMAL):
                         break
 
                 value = text[start:pos]
@@ -199,6 +207,8 @@ class Lexer:
                 if end_quote == -1:
                     raise LexerError("unterminated string literal", text, pos)
 
+                if NEWLINE in text[pos + 1 : end_quote]:
+                    raise LexerError("newline in string literal", text, pos)
                 value = text[pos + 1 : end_quote]  # Extract content without quotes
                 pos = end_quote + 1
                 tokens.append(create_lexeme(T_STRING_ENUM_VAL, value, start, pos))

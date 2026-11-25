@@ -9,6 +9,7 @@
 # walking for types, and in this we are tree walking for runtime values
 import operator
 from copy import deepcopy
+from math import isfinite
 
 from bang.lexing.lexer_tokens import (
     T_AND_ENUM_VAL,
@@ -104,7 +105,7 @@ class EvaluatorError(Exception):
         super().__init__(self._format())
 
     def _get_real_error_line(self):
-        lines = self.text.splitlines()
+        lines = self.text.rstrip("\0").splitlines()
         # Row is 1-based in tokens, so -1 for index
         if 0 <= self.row - 1 < len(lines):
             return lines[self.row - 1]
@@ -115,7 +116,7 @@ class EvaluatorError(Exception):
         crt_length = self.end - self.start if self.end - self.start != 0 else 1
         pointers = " " * (self.start - 1) + "^" * crt_length
         return (
-            f"[EvaluatorError] Line {self.row + 1}, Column {self.start}-{self.end}:\n"
+            f"[EvaluatorError] Line {self.row}, Column {self.start}-{self.end}:\n"
             f"{error_line.rstrip()}\n"
             f"{pointers}\n"
             f"{self.msg}"
@@ -159,6 +160,8 @@ class _ContinueSignal(Exception):
 
 
 class Evaluator:
+    MAX_CALL_DEPTH = 64
+
     T_PLUS_ENUM_VAL = T_PLUS_ENUM_VAL  # +
     T_MINUS_ENUM_VAL = T_MINUS_ENUM_VAL  # -
     T_ASTERISK_ENUM_VAL = T_ASTERISK_ENUM_VAL  # *
@@ -301,6 +304,7 @@ class Evaluator:
 
         def _built_in_print(args, meta_data):
             print(*args)
+            return 0
 
         def _built_in_len(args, meta_data):
             # changet this len args != 1 to accomodate any number of expected arguments
@@ -334,31 +338,29 @@ class Evaluator:
             if not args:
                 return 0
 
+            if all(isinstance(value, (int, float)) for value in args):
+                return sum(args)
             expected_type = type(args[0])
-            if expected_type is int:
-                base = 0
-            elif expected_type is str:
-                base = ""
-            elif expected_type is list:
-                base = []
-            elif expected_type is set:
-                base = set()
-            elif expected_type is dict:
-                base = {}
-
-            for i in args:
-                if type(i) is not expected_type:
+            factories = {str: str, list: list, set: set, dict: dict}
+            if expected_type not in factories:
+                raise EvaluatorError(
+                    self.file,
+                    "sum expects numbers, strings, arrays, sets, or dictionaries",
+                    meta_data.line,
+                    meta_data.column_start,
+                    meta_data.column_end,
+                )
+            base = factories[expected_type]()
+            for value in args:
+                if type(value) is not expected_type:
                     raise EvaluatorError(
                         self.file,
-                        "sum function expects argument list of homegenous type",
+                        "sum expects homogeneous values or numeric values",
                         meta_data.line,
                         meta_data.column_start,
                         meta_data.column_end,
                     )
-                if type(i) in (set, dict):
-                    base |= i
-                else:
-                    base += i
+                base = base | value if expected_type in (set, dict) else base + value
             return base
 
         def _built_in_min(args, meta_data):
@@ -382,7 +384,9 @@ class Evaluator:
             expected_type = type(args[0])
             base = args[0]
             for i in args:
-                if type(i) is not expected_type:
+                if type(i) is not expected_type and not (
+                    isinstance(base, (int, float)) and isinstance(i, (int, float))
+                ):
                     raise EvaluatorError(
                         self.file,
                         "min function expects argument list of homegenous type",
@@ -423,7 +427,9 @@ class Evaluator:
             expected_type = type(args[0])
             base = args[0]
             for i in args:
-                if type(i) is not expected_type:
+                if type(i) is not expected_type and not (
+                    isinstance(base, (int, float)) and isinstance(i, (int, float))
+                ):
                     raise EvaluatorError(
                         self.file,
                         "max function expects argument list of homegenous type",
@@ -616,7 +622,17 @@ class Evaluator:
 
     def eval_program(self):
         for construct in self.roots:
-            self.eval_construct(construct)
+            try:
+                self.eval_construct(construct)
+            except RecursionError as error:
+                metadata = getattr(construct, "meta_data", None)
+                raise EvaluatorError(
+                    self.file,
+                    "maximum evaluation nesting exceeded",
+                    metadata.line if metadata else 1,
+                    metadata.column_start if metadata else 1,
+                    metadata.column_end if metadata else 2,
+                ) from error
 
     # could probably use this eval_construct more
     # typically but its clearer to just call the specific expression
@@ -629,7 +645,8 @@ class Evaluator:
         dataclass_name = root.name
         seen = set()
         dataclass_fields = [f for f in root.fields if not (f in seen or seen.add(f))]
-        self.initalize_var(dataclass_name, self.RUN_TIME_DATACLASS(fields=dataclass_fields))
+        declaration = self.RUN_TIME_DATACLASS(fields=tuple(dataclass_fields), name=dataclass_name)
+        self.initalize_var(dataclass_name, declaration)
 
     def eval_function(self, root):
         function_name = root.name
@@ -675,7 +692,7 @@ class Evaluator:
 
     def eval_for(self, root):
         bound = self.eval_expression(root.bound.root_expr)
-        if type(bound) is int:
+        if isinstance(bound, int):
             iterator = range(0, bound, -1 if bound < 0 else 1)
         else:
             try:
@@ -869,130 +886,160 @@ class Evaluator:
     # this function handles all expression level contructs such as literals, binary ops,
     # unary ops, and function calls
     def eval_expression(self, root):
-        type_root = type(root)
-        if type_root in (int, bool, str, float, list, set, dict):
-            return root
-
-        if type_root is self.EXPRESSION_NODE_CLASS:
-            root = root.root_expr
-            type_root = type(root)
-
-        if type_root in self.LITERALS:
-            # converting bang literals to python literals
-            actual_value_function = self.LITERALS[type_root]
-            return actual_value_function(root.value)
-
-        elif type_root is self.BIN_OP_NODE_CLASS:
-            # converting bang binary operation into a python literal
-
-            return self.eval_bin_ops(root)
-
-        elif type_root is self.UNARY_OP_NODE_CLASS:
-            # converting bang unary operation into a python literal
-            return self.eval_unary_ops(root)
-
-        elif type_root is self.ARRAY_LITERAL_NODE_CLASS:
-            # converting bang list into python list of python literals
-            return [self.eval_expression(i.root_expr) for i in root.elements]
-
-        elif type_root is self.INDEX_NODE_CLASS:
-            # converting bang index into python literal
-            index_chain = [self.eval_expression(i.root_expr) for i in root.index]
-            base = self.eval_expression(root.base)
-            for i in index_chain:
+        """Evaluate an expression with an explicit stack and left-to-right effects."""
+        tasks = [("eval", root)]
+        values = []
+        raw_types = (
+            int,
+            bool,
+            str,
+            float,
+            list,
+            set,
+            dict,
+            self.RUN_TIME_FUNCTION,
+            self.RUN_TIME_DATACLASS,
+            self.RUN_TIME_INSTANCE,
+        )
+        while tasks:
+            task = tasks.pop()
+            tag, node = task[:2]
+            if tag == "eval":
+                typ = type(node)
+                if typ in raw_types:
+                    values.append(node)
+                elif node is None:
+                    values.append(0)
+                elif typ is self.EXPRESSION_NODE_CLASS:
+                    tasks.append(("eval", node.root_expr))
+                elif typ in self.LITERALS:
+                    values.append(self.LITERALS[typ](node.value))
+                elif typ is self.IDENTIFIER_NODE_CLASS:
+                    frame = self.scope_stack[self.search_for_var(node.value, node.meta_data)]
+                    values.append(frame[node.value])
+                elif typ is self.BIN_OP_NODE_CLASS:
+                    tasks.extend((("binary_left", node), ("eval", node.left)))
+                elif typ is self.UNARY_OP_NODE_CLASS:
+                    tasks.extend((("unary", node), ("eval", node.operand)))
+                elif typ is self.ARRAY_LITERAL_NODE_CLASS:
+                    tasks.append(("array", node, len(node.elements)))
+                    tasks.extend(("eval", item.root_expr) for item in reversed(node.elements))
+                elif typ is self.INDEX_NODE_CLASS:
+                    tasks.extend((("index", node, 0), ("eval", node.base)))
+                elif typ is self.FIELD_ACCESS_NODE_CLASS:
+                    tasks.extend((("field", node), ("eval", node.base)))
+                elif typ is self.CALL_NODE_CLASS:
+                    tasks.extend((("callee", node), ("eval", node.name)))
+                else:
+                    raise EvaluatorError(self.file, "invalid expression node", 1, 1, 2)
+            elif tag == "binary_left":
+                left = values.pop()
+                if (
+                    node.op == self.T_AND_ENUM_VAL
+                    and not left
+                    or node.op == self.T_OR_ENUM_VAL
+                    and left
+                ):
+                    values.append(left)
+                elif node.op in (self.T_AND_ENUM_VAL, self.T_OR_ENUM_VAL):
+                    tasks.append(("eval", node.right))
+                else:
+                    tasks.extend((("binary_right", node, left), ("eval", node.right)))
+            elif tag == "binary_right":
+                values.append(self._eval_binary_values(node, task[2], values.pop()))
+            elif tag == "unary":
+                values.append(self._eval_unary_values(node, values.pop()))
+            elif tag == "array":
+                count = task[2]
+                result = values[-count:] if count else []
+                if count:
+                    del values[-count:]
+                values.append(result)
+            elif tag == "index":
+                base, position = values.pop(), task[2]
+                if position == len(node.index):
+                    values.append(base)
+                else:
+                    tasks.extend(
+                        (
+                            ("indexed", node, position, base),
+                            ("eval", node.index[position].root_expr),
+                        )
+                    )
+            elif tag == "indexed":
                 try:
-                    base = base[i]
-                except (IndexError, TypeError, KeyError):
+                    value = task[3][values.pop()]
+                except (IndexError, KeyError, TypeError) as error:
                     raise EvaluatorError(
                         self.file,
-                        "Index out of bounds",
-                        root.meta_data.line,
-                        root.meta_data.column_start,
-                        root.meta_data.column_end,
-                    ) from None
-            return base
+                        "invalid index or index out of bounds",
+                        node.meta_data.line,
+                        node.meta_data.column_start,
+                        node.meta_data.column_end,
+                    ) from error
+                values.append(value)
+                tasks.append(("index", node, task[2] + 1))
+            elif tag == "field":
+                value = values.pop()
+                for name in node.field:
+                    if type(value) is not self.RUN_TIME_INSTANCE or name not in value.fields:
+                        raise EvaluatorError(
+                            self.file,
+                            "field is not defined on this instance",
+                            node.meta_data.line,
+                            node.meta_data.column_start,
+                            node.meta_data.column_end,
+                        )
+                    value = value.fields[name]
+                values.append(value)
+            elif tag == "callee":
+                callee = values.pop()
+                tasks.append(("call", node, callee, len(node.args)))
+                tasks.extend(("eval", item.root_expr) for item in reversed(node.args))
+            elif tag == "call":
+                count = task[3]
+                args = values[-count:] if count else []
+                if count:
+                    del values[-count:]
+                values.append(self._invoke_callable(task[2], args, node.meta_data))
+        return values.pop()
 
-        elif type_root is self.IDENTIFIER_NODE_CLASS:
-            # converting every bang identifier into a python literal
-            return self.scope_stack[self.search_for_var(root.value, root.meta_data)][root.value]
-
-        elif type_root is self.CALL_NODE_CLASS:
-            # executing a bang block
-
-            # calling dynamic value?
-            root_name = root.name
-            if type(root_name) is self.IDENTIFIER_NODE_CLASS:
-                func_name = root.name.value
-                callee = self.scope_stack[self.search_for_var(func_name, root.meta_data)][func_name]
-            else:
-                func_name = None
-                callee = self.eval_expression(root_name)
-
-            arg_vals = [self.eval_expression(i.root_expr) for i in root.args]
-
-            # calling dataclass
-            type_callee = type(callee)
-            if type_callee is self.RUN_TIME_DATACLASS:
-                fields = {}
-                for idx, field in enumerate(callee.fields):
-                    fields[field] = 0
-                    if len(root.args) > idx:
-                        fields[field] = arg_vals[idx]
-
-                return self.RUN_TIME_INSTANCE(of=root_name.value, fields=fields)
-
-            # calling function value?
-            if type_callee is self.RUN_TIME_FUNCTION:
-                return self.eval_call(callee, arg_vals, root.meta_data)
-
-            if not callable(callee):
+    def _invoke_callable(self, callee, args, metadata):
+        if type(callee) is self.RUN_TIME_DATACLASS:
+            if len(args) > len(callee.fields):
                 raise EvaluatorError(
                     self.file,
-                    f"attempt to call non-function (type {type_callee})",
-                    root.meta_data.line,
-                    root.meta_data.column_start,
-                    root.meta_data.column_end,
+                    f"{callee.name} received too many constructor arguments",
+                    metadata.line,
+                    metadata.column_start,
+                    metadata.column_end,
                 )
-
-            # has to be last due to dict access throwing error on non-func-name
-            if func_name in self.built_in_functions:
-                return self.built_in_functions[func_name](arg_vals, root.meta_data)
-
-            # this is required because, for ex., callee the case of bar{}{1,2},
-            # where bar returns a function signature, is a raw function object
-            if callee in self.built_in_function_objects:
-                return callee(arg_vals, root.meta_data)
-
-            raise EvaluatorError(
-                self.file,
-                f"'{root.name}' is not callable",
-                root.meta_data.line,
-                root.meta_data.column_start,
-                root.meta_data.column_end,
-            )
-
-        elif type_root is self.FIELD_ACCESS_NODE_CLASS:
-            base = self.eval_expression(root.base)
-            for name in root.field:
-                if type(base) is not self.RUN_TIME_INSTANCE:
-                    raise EvaluatorError(
-                        self.file,
-                        "field access is only performable on instances of classes",
-                        root.meta_data.line,
-                        root.meta_data.column_start,
-                        root.meta_data.column_end,
-                    )
-                if name not in base.fields:
-                    raise EvaluatorError(
-                        self.file,
-                        "field name wasn't included in the definition of "
-                        "the instance's corresponding class",
-                        root.meta_data.line,
-                        root.meta_data.column_start,
-                        root.meta_data.column_end,
-                    )
-                base = base.fields[name]
-            return base
+            fields = {
+                name: args[index] if index < len(args) else 0
+                for index, name in enumerate(callee.fields)
+            }
+            return self.RUN_TIME_INSTANCE(of=callee, fields=fields)
+        if type(callee) is self.RUN_TIME_FUNCTION:
+            return self.eval_call(callee, args, metadata)
+        if callable(callee) and callee in self.built_in_function_objects:
+            try:
+                result = callee(args, metadata)
+            except (TypeError, ValueError, ArithmeticError, RecursionError) as error:
+                raise EvaluatorError(
+                    self.file,
+                    f"invalid builtin operation: {error}",
+                    metadata.line,
+                    metadata.column_start,
+                    metadata.column_end,
+                ) from error
+            return 0 if result is None else result
+        raise EvaluatorError(
+            self.file,
+            "attempt to call a non-function",
+            metadata.line,
+            metadata.column_start,
+            metadata.column_end,
+        )
 
     # -------------------------------------------
     # BINARY OPERATIONS START
@@ -1008,6 +1055,21 @@ class Evaluator:
         return self._eval_binary_values(root, left, right)
 
     def _eval_binary_values(self, root, left, right):
+        try:
+            result = self._apply_binary_values(root, left, right)
+            if isinstance(result, complex) or (isinstance(result, float) and not isfinite(result)):
+                raise ValueError("numeric result is outside the supported real-number range")
+            return result
+        except (TypeError, ValueError, ArithmeticError, RecursionError) as error:
+            raise EvaluatorError(
+                self.file,
+                f"invalid operator operands or numeric result: {error}",
+                root.meta_data.line,
+                root.meta_data.column_start,
+                root.meta_data.column_end,
+            ) from error
+
+    def _apply_binary_values(self, root, left, right):
         T_PLUS_ENUM_VAL = self.T_PLUS_ENUM_VAL
         T_MINUS_ENUM_VAL = self.T_MINUS_ENUM_VAL
         T_ASTERISK_ENUM_VAL = self.T_ASTERISK_ENUM_VAL
@@ -1025,6 +1087,13 @@ class Evaluator:
         T_IN_ENUM_VAL = self.T_IN_ENUM_VAL
 
         op = root.op
+        if op in (T_EQ_ENUM_VAL, T_NEQ_ENUM_VAL):
+            return left == right if op == T_EQ_ENUM_VAL else left != right
+        # Booleans participate in all numeric overloads like 0 and 1.
+        if type(left) is bool:
+            left = int(left)
+        if type(right) is bool:
+            right = int(right)
         type_left = type(left)
         type_right = type(right)
 
@@ -1136,8 +1205,11 @@ class Evaluator:
                 return a / b if div_type == "true" else a // b
 
             def list_sub(a, b):
-                to_remove = set(b)
-                return [x for x in a if x not in to_remove]
+                try:
+                    to_remove = set(b)
+                    return [x for x in a if x not in to_remove]
+                except TypeError:
+                    return [x for x in a if x not in b]
 
             def list_mul(a, b):
                 if type(a) is list and type(b) is list:
@@ -1326,7 +1398,7 @@ class Evaluator:
         same_type = (int, float, bool)
         dispatcher = eval_different_bin_op
         if type_left is type_right or (type_left in same_type and type_right in same_type):
-            dispatcher = type_dispatch[type_left]
+            dispatcher = type_dispatch.get(type_left, eval_different_bin_op)
         return dispatcher(left, op, right)
 
     # -------------------------------------------
@@ -1338,6 +1410,9 @@ class Evaluator:
     # -------------------------------------------
 
     def eval_unary_ops(self, root):
+        return self._eval_unary_values(root, self.eval_expression(root.operand))
+
+    def _eval_unary_values(self, root, operand):
         # since each unary operation is pretty clear on what it does
         # we will dispatch based on unary operator not type
 
@@ -1345,7 +1420,7 @@ class Evaluator:
             return not operand
 
         def eval_uminus(operand):
-            if type(operand) in (int, float):
+            if isinstance(operand, (int, float)):
                 return -operand
             raise EvaluatorError(
                 self.file,
@@ -1356,7 +1431,7 @@ class Evaluator:
             )
 
         def eval_uplus(operand):
-            if type(operand) in (int, float):
+            if isinstance(operand, (int, float)):
                 return +operand
             raise EvaluatorError(
                 self.file,
@@ -1372,8 +1447,6 @@ class Evaluator:
             T_UPLUS_ENUM_VAL: eval_uplus,
         }
         op_id = root.op
-        operand = self.eval_expression(root.operand)
-
         return operator_dispatch[op_id](operand)
 
     # -------------------------------------------
@@ -1381,9 +1454,17 @@ class Evaluator:
     # -------------------------------------------
 
     def eval_call(self, callee, args, meta_data):
+        if self.func_depth >= self.MAX_CALL_DEPTH:
+            raise EvaluatorError(
+                self.file,
+                f"function call depth exceeds the limit of {self.MAX_CALL_DEPTH}",
+                meta_data.line,
+                meta_data.column_start,
+                meta_data.column_end,
+            )
         saved_stack = self.scope_stack
         saved_loop_depth = self.loop_depth
-        self.scope_stack = [i.copy() for i in callee.closure] + [{}]
+        self.scope_stack = list(callee.closure) + [{}]
         self.loop_depth = 0
         self.func_depth += 1
         try:

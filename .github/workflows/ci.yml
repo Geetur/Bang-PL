@@ -24,6 +24,3 @@ jobs:
           ruff format --check .
       - name: Tests (lexer, parser, semantic, evaluator, regressions)
         run: pytest -q
-      - name: Upload coverage
-        uses: codecov/codecov-action@v5
-        if: always()

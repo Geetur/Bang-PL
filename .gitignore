@@ -30,5 +30,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 *.log
+*.patch
 
 # end

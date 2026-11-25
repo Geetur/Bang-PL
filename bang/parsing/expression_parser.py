@@ -2,6 +2,8 @@
 # and every line construct such as if, elif, fn, converted into its respective
 # node. line-wise, the program is syntactically valid
 
+from math import isfinite
+
 from bang.lexing.lexer_tokens import (
     T_AND_ENUM_VAL,
     T_ASSIGN_ENUM_VAL,
@@ -117,7 +119,57 @@ class ParserError(Exception):
     __repr__ = __str__
 
 
+class TokenSpan:
+    """A constant-time view into a token sequence, including sliced subranges."""
+
+    __slots__ = ("tokens", "start", "stop")
+
+    def __init__(self, tokens, start=0, stop=None):
+        self.tokens = tokens
+        self.start = start
+        self.stop = len(tokens) if stop is None else stop
+
+    def __len__(self):
+        return self.stop - self.start
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            start, stop, step = key.indices(len(self))
+            if step != 1:
+                return [self[index] for index in range(start, stop, step)]
+            return TokenSpan(self.tokens, self.start + start, self.start + max(start, stop))
+        if key < 0:
+            key += len(self)
+        if not 0 <= key < len(self):
+            raise IndexError(key)
+        return self.tokens[self.start + key]
+
+    def __iter__(self):
+        for index in range(self.start, self.stop):
+            yield self.tokens[index]
+
+
+def _numeric_literal(token, convert, node_type):
+    try:
+        if convert is int and len(token.value) > 4300:
+            raise ValueError("integer literal exceeds 4300 digits")
+        value = convert(token.value)
+        if isinstance(value, float) and not isfinite(value):
+            raise ValueError("non-finite literal")
+    except (ValueError, OverflowError) as error:
+        raise ParserError(
+            "",
+            "numeric literal is invalid or too large",
+            token.line,
+            token.column_start,
+            token.column_end,
+        ) from error
+    return node_type(value, token)
+
+
 class ExpressionParser:
+    MAX_EXPRESSION_DEPTH = 64
+
     PRECEDENCE_TABLE = []
     ASSOC_TABLE = []  # 0 = Left, 1 = Right
 
@@ -340,8 +392,8 @@ class ExpressionParser:
     # these are literals that can be instantly determined, unlike
     # arrays which must be determined over n tokens
     LITERAL_MAP = {
-        T_INT_ENUM_VAL: lambda tok: (INTEGER_LITERAL_NODE_CLASS(int(tok.value), tok)),
-        T_FLOAT_ENUM_VAL: lambda tok: FLOAT_LITERAL_NODE_CLASS(float(tok.value), tok),
+        T_INT_ENUM_VAL: lambda tok: _numeric_literal(tok, int, INTEGER_LITERAL_NODE_CLASS),
+        T_FLOAT_ENUM_VAL: lambda tok: _numeric_literal(tok, float, FLOAT_LITERAL_NODE_CLASS),
         T_BOOL_ENUM_VAL: lambda tok: BOOLEAN_LITERAL_NODE_CLASS(
             (True if tok.value == "true" else False), tok
         ),
@@ -395,6 +447,7 @@ class ExpressionParser:
         self.post_split = []
         self.post_SYA = []
         self.illegal_assignment = 0
+        self.expression_depth = 0
 
     # we're going to split the tokens into seperate lines,
     # where each line will be transformed into a singular node
@@ -462,7 +515,36 @@ class ExpressionParser:
                 self.handle_return(line_idx)
                 continue
 
-            # otherwise it's an expression/assignment line
+            # Assignment is a statement, never a side effect of parsing a subexpression.
+            depth = 0
+            assignment = None
+            for index, token in enumerate(line):
+                typ = token.type_enum_id
+                if typ in (
+                    self.T_LPAREN_ENUM_VAL,
+                    self.T_LBRACKET_ENUM_VAL,
+                    self.T_LBRACE_ENUM_VAL,
+                ):
+                    depth += 1
+                elif typ in (
+                    self.T_RPAREN_ENUM_VAL,
+                    self.T_RBRACKET_ENUM_VAL,
+                    self.T_RBRACE_ENUM_VAL,
+                ):
+                    depth -= 1
+                elif self.IS_ASSIGN[typ] and depth == 0:
+                    if assignment is not None:
+                        raise ParserError(
+                            self.file,
+                            "chained assignment is not supported",
+                            token.line,
+                            token.column_start,
+                            token.column_end,
+                        )
+                    assignment = index
+            if assignment is not None:
+                self.handle_assignments(TokenSpan(line), assignment)
+                continue
             expr = self.shunting_yard_algo(line)
             if expr is not None:
                 self.post_SYA.append(expr)
@@ -477,6 +559,14 @@ class ExpressionParser:
         # handling the else keyword seperately for the if and elif
         # since it follows different syntax than the if-elif constructs
         if if_token_id == self.T_ELSE_ENUM_VAL:
+            if len(line) != 1:
+                raise ParserError(
+                    self.file,
+                    "else must appear alone in its statement",
+                    if_token.line,
+                    if_token.column_start,
+                    if_token.column_end,
+                )
             else_node = self.ELSE_NODE_CLASS(meta_data=if_token)
             self.post_SYA.append(else_node)
         else:
@@ -786,22 +876,22 @@ class ExpressionParser:
                 assignment_op_token.column_end,
             )
 
-        if type(left_hand_node) is self.ARRAY_LITERAL_NODE_CLASS:
-            for i in left_hand_node.elements:
-                if type(i.root_expr) not in VALID_LEFT_HANDS:
-                    raise ParserError(
-                        self.file,
-                        f"{type(i.root_expr)} multi-initalization syntax is"
-                        "[list of identifiers][=][list of expressions]",
-                        assignment_op_token.line,
-                        assignment_op_token.column_start,
-                        assignment_op_token.column_end,
-                    )
+        pending = [left_hand_node]
+        while pending:
+            target = pending.pop()
+            if type(target) not in VALID_LEFT_HANDS:
+                raise ParserError(
+                    self.file,
+                    "invalid assignment target",
+                    assignment_op_token.line,
+                    assignment_op_token.column_start,
+                    assignment_op_token.column_end,
+                )
+            if type(target) is self.ARRAY_LITERAL_NODE_CLASS:
+                pending.extend(item.root_expr for item in target.elements)
 
         expected_expression = line[assignment_idx + 1 :]
         expr_node = self.shunting_yard_algo(expected_expression)
-
-        self.illegal_assignment = 1
 
         assignment_node = self.ASSIGNMENT_NODE_CLASS(
             left_hand=left_hand_node,
@@ -811,8 +901,6 @@ class ExpressionParser:
         )
 
         self.post_SYA.append(assignment_node)
-
-        self.illegal_assignment = 2
 
     def handle_index(self, base, line):
         INDEX_NODE_CLASS = self.INDEX_NODE_CLASS
@@ -928,6 +1016,36 @@ class ExpressionParser:
     # to this algo, which will either return a valid expression node
     # , or raise an error because the list wasn't a valid expression
     def shunting_yard_algo(self, line):
+        self.expression_depth += 1
+        try:
+            if self.expression_depth > self.MAX_EXPRESSION_DEPTH:
+                token = line[0] if line else self.tokens[-1]
+                raise ParserError(
+                    self.file,
+                    f"expression nesting exceeds the limit of {self.MAX_EXPRESSION_DEPTH}",
+                    token.line,
+                    token.column_start,
+                    token.column_end,
+                )
+            span = line if isinstance(line, TokenSpan) else TokenSpan(line)
+            return self._shunting_yard_algo(span)
+        except ParserError as error:
+            if not error.text:
+                error.text = self.file
+            raise
+        except RecursionError as error:
+            token = line[0] if line else self.tokens[-1]
+            raise ParserError(
+                self.file,
+                "expression nesting is too deep",
+                token.line,
+                token.column_start,
+                token.column_end,
+            ) from error
+        finally:
+            self.expression_depth -= 1
+
+    def _shunting_yard_algo(self, line):
         if not line:
             anchor = self.tokens[-1] if self.tokens else None
             raise ParserError(
@@ -1014,14 +1132,13 @@ class ExpressionParser:
                 tok_type_id = self.BINARY_TO_UNARY_OP[tok_type_id]
 
             if self.IS_ASSIGN[tok_type_id]:
-                if self.illegal_assignment:
-                    raise ParserError(
-                        self.file, "illegal assignment", tok.line, tok.column_start, tok.column_end
-                    )
-
-                self.handle_assignments(line, tok_idx)
-                tok_idx = len(line)
-                continue
+                raise ParserError(
+                    self.file,
+                    "assignment is only allowed as a statement",
+                    tok.line,
+                    tok.column_start,
+                    tok.column_end,
+                )
 
             # ----------------------------------------------------------------ERROR CHECKING START
 
@@ -1145,40 +1262,39 @@ class ExpressionParser:
 
             tok_idx += 1
 
-        if self.illegal_assignment != 2:
-            if expect_operand:
-                last = line[-1]
+        if expect_operand:
+            last = line[-1]
+            raise ParserError(
+                self.file,
+                "expected an operand after this token",
+                last.line,
+                last.column_start,
+                last.column_end,
+            )
+        while op_stack:
+            top, top_type_id = op_stack[-1]
+            if top_type_id in (self.T_LPAREN_ENUM_VAL, self.T_RPAREN_ENUM_VAL):
+                raise ParserError(
+                    self.file, "Mismatched grouping", top.line, top.column_start, top.column_end
+                )
+            if not output:
                 raise ParserError(
                     self.file,
-                    "expected an operand after this token",
-                    last.line,
-                    last.column_start,
-                    last.column_end,
+                    "operator has no operand to bind to",
+                    top.line,
+                    top.column_start,
+                    top.column_end,
                 )
-            while op_stack:
-                top, top_type_id = op_stack[-1]
-                if top_type_id in (self.T_LPAREN_ENUM_VAL, self.T_RPAREN_ENUM_VAL):
-                    raise ParserError(
-                        self.file, "Mismatched grouping", top.line, top.column_start, top.column_end
-                    )
-                if not output:
-                    raise ParserError(
-                        self.file,
-                        "operator has no operand to bind to",
-                        top.line,
-                        top.column_start,
-                        top.column_end,
-                    )
-                apply_operator()
+            apply_operator()
 
-            if len(output) != 1:
-                last = line[-1]
-                raise ParserError(
-                    self.file,
-                    "expected exactly one expression",
-                    last.line,
-                    last.column_start,
-                    last.column_end,
-                )
-            root = output.pop()
-            return self.EXPRESSION_NODE_CLASS(root_expr=root)
+        if len(output) != 1:
+            last = line[-1]
+            raise ParserError(
+                self.file,
+                "expected exactly one expression",
+                last.line,
+                last.column_start,
+                last.column_end,
+            )
+        root = output.pop()
+        return self.EXPRESSION_NODE_CLASS(root_expr=root)
