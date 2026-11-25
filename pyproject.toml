@@ -60,3 +60,7 @@ ignore = ["SIM102", "SIM210"]
 
 [tool.ruff.format]
 exclude = ["examples/**"]
+
+# Profiling scripts use optional tools and are not correctness tests.
+[tool.pytest.ini_options]
+python_files = ["test_*correctness.py", "test_regressions.py"]

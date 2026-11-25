@@ -56,7 +56,7 @@ class ControlFlowParser:
         cls = self.__class__
         DEPENDANT_NODES = cls.DEPENDANT_NODES
         CONTROL_FLOW_NODES = cls.CONTROL_FLOW_NODES
-        ELIF_NODE_CLASS = cls.END_NODE_CLASS
+        ELIF_NODE_CLASS = cls.ELIF_NODE_CLASS
         END_NODE_CLASS = cls.END_NODE_CLASS
         FUNCTION_NODE_CLASS = cls.FUNCTION_NODE_CLASS
         IF_NODE_CLASS = cls.IF_NODE_CLASS

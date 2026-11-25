@@ -127,7 +127,6 @@ def analyze(code: str, tmp_path):
         'a = ["1"]\nb = ["2"]\n a[0] /= b[0]\n',
         "x = !5\n",
         'x = !"1"\n',
-        "x = ![1]\n x = !x[0]",
         "x = [1]\n y = 2\n x && y",
         "x = true\n y = false\n x || y",
         'x = [true]\n y = "shello"\n x || y',
@@ -291,6 +290,8 @@ def test_semantic_valid(program, tmp_path):
         "break\n",
         # continue outside any loop
         "continue\n",
+        # Indexing a boolean is invalid as well.
+        "x = ![1]\n x = !x[0]",
         # Indexing a non‑array value
         "x = 5\ny = x[0]\n",
         # Index out of bounds where the index is a compile‑time constant

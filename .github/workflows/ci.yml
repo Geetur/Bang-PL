@@ -22,12 +22,8 @@ jobs:
         run: |
           ruff check .
           ruff format --check .
-      - name: Tests (semantic + evaluator)
-        run: |
-            pytest -q \
-            bang/lexing/tests_lexer/test_lexer_correctness.py \
-            bang/semantic/tests_semantic/test_semantic_correctness.py \
-            bang/runtime/tests_evaluator/test_evaluator_correctness.py\
+      - name: Tests (lexer, parser, semantic, evaluator, regressions)
+        run: pytest -q
       - name: Upload coverage
         uses: codecov/codecov-action@v5
         if: always()

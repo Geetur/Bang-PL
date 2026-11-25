@@ -32,7 +32,7 @@ Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized
 * Tiny but expressive **control flow** (`if / elif / else`, `for`, `while`, `break`, `continue`).
 * **First-class functions** with variadic argument lists passed as a single named array (ex. args).
 * **Built-ins**: `print`, `len`, `sum`, `min`, `max` — super easy to extend, essentially just have to write a function defining the behaviour.
-* **Strong static guarantees** before runtime: undefined variables, invalid operators, out-of-scope `break`, etc. are caught by the semantic pass.
+* **Static checks where information is available**: the semantic pass checks bindings, known operand types, and control-flow placement. Dynamic values and uncertain types retain runtime checks.
 
 ## Architecture Overview
 ┌────────┐ ┌──────────────────┐ ┌────────────────┐ ┌──────────────┐ ┌────────────┐
@@ -235,17 +235,21 @@ output:
 
 ## Running the Test-Suite
 ```
-pytest bang\semantic\semantic_tests.py
+python -m pytest -q
 ```
-The suite contains hundreds of assertions split across:
+The default selection runs the lexer, parser, semantic, evaluator, and regression correctness suites. Profiling scripts are excluded because they require optional profiling tools.
 
-* lexer_tests.py
+* `bang/lexing/tests_lexer/test_lexer_correctness.py`
+* `bang/parsing/tests_parser/test_expr_parser_correctness.py`
+* `bang/semantic/tests_semantic/test_semantic_correctness.py`
+* `bang/runtime/tests_evaluator/test_evaluator_correctness.py`
+* `bang/tests/test_regressions.py` — checks exact output, errors, and scope cleanup.
 
-* parser_expression_tests.py
+The parser and regression suites can also run without pytest:
 
-* semantic_tests.py – must not raise SemanticError for valid programs, and must raise for invalid ones.
-
-* evaluator_tests.py – checks runtime behaviour & error handling (EvaluatorError).
+```bash
+python -m unittest bang.parsing.tests_parser.test_expr_parser_correctness bang.tests.test_regressions
+```
 
 ## Extending the Language
 

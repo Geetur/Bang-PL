@@ -654,49 +654,32 @@ class Evaluator:
         for construct in root.block:
             self.eval_construct(construct)
 
+    def _eval_scoped_block(self, block):
+        self.scope_stack.append({})
+        try:
+            self.eval_block(block)
+        finally:
+            self.scope_stack.pop()
+
     def eval_if(self, root):
         if self.eval_expression(root.condition.root_expr):
-            self.scope_stack.append({})
-            self.eval_block(root.body)
-            self.scope_stack.pop()
+            self._eval_scoped_block(root.body)
             return
-        for elif_root in root.elif_branch.block:
-            if self.eval_expression(elif_root.condition.root_expr):
-                self.scope_stack.append({})
-                self.eval_block(elif_root.body)
-                self.scope_stack.pop()
+        for branch in root.elif_branch.block:
+            if self.eval_expression(branch.condition.root_expr):
+                self._eval_scoped_block(branch.body)
                 return
-        for else_root in root.else_branch.block:
-            self.scope_stack.append({})
-            self.eval_block(else_root.body)
-            self.scope_stack.pop()
+        for branch in root.else_branch.block:
+            self._eval_scoped_block(branch.body)
             return
 
     def eval_for(self, root):
-        self.loop_depth += 1
-        self.scope_stack.append({})
-        left_hand_name = root.variable.value
-        right_hand_val = self.eval_expression(root.bound.root_expr)
-
-        if type(right_hand_val) is int:
-            for i in range(0, right_hand_val, -1 if right_hand_val < 0 else 1):
-                self.initalize_var(left_hand_name, i)
-                try:
-                    self.eval_block(root.body)
-                except _ContinueSignal:
-                    continue
-                except _BreakSignal:
-                    break
+        bound = self.eval_expression(root.bound.root_expr)
+        if type(bound) is int:
+            iterator = range(0, bound, -1 if bound < 0 else 1)
         else:
             try:
-                for i in right_hand_val:
-                    self.initalize_var(left_hand_name, i)
-                    try:
-                        self.eval_block(root.body)
-                    except _ContinueSignal:
-                        continue
-                    except _BreakSignal:
-                        break
+                iterator = iter(bound)
             except TypeError:
                 raise EvaluatorError(
                     self.file,
@@ -706,8 +689,20 @@ class Evaluator:
                     root.meta_data.column_end,
                 ) from None
 
-        self.scope_stack.pop()
-        self.loop_depth -= 1
+        self.loop_depth += 1
+        self.scope_stack.append({})
+        try:
+            for value in iterator:
+                self.initalize_var(root.variable.value, value)
+                try:
+                    self.eval_block(root.body)
+                except _ContinueSignal:
+                    continue
+                except _BreakSignal:
+                    break
+        finally:
+            self.scope_stack.pop()
+            self.loop_depth -= 1
 
     def eval_while(self, root):
         self.loop_depth += 1
@@ -784,163 +779,92 @@ class Evaluator:
         )
 
     def eval_assignments(self, root):
-        # probably we are going to want to change these if elif blocks into
-        # functions because they are simply meant to differentiate between different types of
-        # left hands which could be arbitrarily large
+        compound = root.op != self.T_ASSIGN_ENUM_VAL
 
-        T_ASSIGN_ENUM_VAL = self.T_ASSIGN_ENUM_VAL
-        BIN_OP_NODE_CLASS = self.BIN_OP_NODE_CLASS
-        ASSIGNMENT_TO_NORMAL_OPS = self.ASSIGNMENT_TO_NORMAL_OPS
-
-        def eval_assignment_typical(left_hand, right_hand_value):
-            left_hand_name = left_hand.value
-            try:
-                idx = self.search_for_var(left_hand_name, root.meta_data)
-                self.scope_stack[idx][left_hand_name] = right_hand_value
-            except EvaluatorError:
-                self.initalize_var(left_hand_name, right_hand_value)
-
-        def eval_assignment_index(left_hand, right_hand_value):
-            left_hand_base = left_hand.base
-            if type(left_hand_base) is self.IDENTIFIER_NODE_CLASS:
-                base_location = self.search_for_var(left_hand_base.value, root.meta_data)
-                base_frame = self.scope_stack[base_location]
-                target = base_frame[left_hand.base.value]
-            else:
-                target = self.eval_expression(left_hand_base)
-            for idx in left_hand.index[:-1]:
-                try:
-                    target = target[self.eval_expression(idx.root_expr)]
-                except (IndexError, TypeError, KeyError):
-                    raise EvaluatorError(
-                        self.file,
-                        "Index out of bounds",
-                        root.meta_data.line,
-                        root.meta_data.column_start,
-                        root.meta_data.column_end,
-                    ) from None
-            try:
-                final_idx = self.eval_expression(left_hand.index[-1].root_expr)
-                target[final_idx] = right_hand_value
-            except (IndexError, TypeError, KeyError):
-                raise EvaluatorError(
-                    self.file,
-                    "Index out of bounds",
-                    root.meta_data.line,
-                    root.meta_data.column_start,
-                    root.meta_data.column_end,
-                ) from None
-
-        def eval_assignment_field(left_hand, right_hand_value):
-            base = self.eval_expression(left_hand.base)
-            chain = left_hand.field
-
-            for name in chain[:-1]:
-                if type(base) is not self.RUN_TIME_INSTANCE:
-                    raise EvaluatorError(
-                        self.file,
-                        "field access is only performable on instances of classes",
-                        left_hand.meta_data.line,
-                        left_hand.meta_data.column_start,
-                        left_hand.meta_data.column_end,
-                    )
-                if name not in base.fields:
-                    raise EvaluatorError(
-                        self.file,
-                        "field name wasn't included in the "
-                        "definition of the instance's corresponding class",
-                        left_hand.meta_data.line,
-                        left_hand.meta_data.column_start,
-                        left_hand.meta_data.column_end,
-                    )
-                base = base.fields[name]
-
-            final_name = chain[-1]
-
-            if type(base) is not self.RUN_TIME_INSTANCE:
-                raise EvaluatorError(
-                    self.file,
-                    "field access is only performable on instances of classes",
-                    left_hand.meta_data.line,
-                    left_hand.meta_data.column_start,
-                    left_hand.meta_data.column_end,
-                )
-            if final_name not in base.fields:
-                raise EvaluatorError(
-                    self.file,
-                    "field name wasn't included in the definition "
-                    "of the instance's corresponding class",
-                    left_hand.meta_data.line,
-                    left_hand.meta_data.column_start,
-                    left_hand.meta_data.column_end,
-                )
-
-            base.fields[final_name] = right_hand_value
-
-        def eval_assignment_multi(left_hand, right_hand_value):
-            ARRAY_LITERAL_NODE_CLASS = self.ARRAY_LITERAL_NODE_CLASS
-
-            if type(right_hand_value) not in (list, ARRAY_LITERAL_NODE_CLASS):
-                raise EvaluatorError(
-                    self.file,
-                    "multi-variable assignment right hand must be type list",
-                    root.meta_data.line,
-                    root.meta_data.column_start,
-                    root.meta_data.column_end,
-                )
-            if len(left_hand.elements) > len(right_hand_value):
-                raise EvaluatorError(
-                    self.file,
-                    "not enough values to unpack",
-                    root.meta_data.line,
-                    root.meta_data.column_start,
-                    root.meta_data.column_end,
-                )
-
-            # try and optimize this. maybe turn nexted funcs into methods
-
-            for i, n in enumerate(left_hand.elements):
-                left_hand_side = n.root_expr
-                assignee = right_hand_value[i]
-                if (
-                    op_type_id != T_ASSIGN_ENUM_VAL
-                    and type(left_hand_side) is not ARRAY_LITERAL_NODE_CLASS
-                ):
-                    assignee = self.eval_bin_ops(
-                        BIN_OP_NODE_CLASS(
-                            left=left_hand_side,
-                            op=ASSIGNMENT_TO_NORMAL_OPS[op_type_id],
-                            right=assignee,
-                            meta_data=root.meta_data,
-                        )
-                    )
-                DISPATCH_ASSIGNMENT_TO_FUNC[type(left_hand_side)](
-                    left_hand=left_hand_side, right_hand_value=assignee
-                )
-
-        right_hand_value = self.eval_expression(root.right_hand.root_expr)
-        op_type_id = root.op
-        type_root_left_hand = type(root.left_hand)
-        if op_type_id != T_ASSIGN_ENUM_VAL and type_root_left_hand is not ARRAY_LITERAL_NODE_CLASS:
-            right_hand_value = self.eval_expression(
-                BIN_OP_NODE_CLASS(
-                    left=root.left_hand,
-                    op=ASSIGNMENT_TO_NORMAL_OPS[op_type_id],
-                    right=root.right_hand.root_expr,
-                    meta_data=root.meta_data,
-                )
+        def fail(message):
+            raise EvaluatorError(
+                self.file,
+                message,
+                root.meta_data.line,
+                root.meta_data.column_start,
+                root.meta_data.column_end,
             )
 
-        DISPATCH_ASSIGNMENT_TO_FUNC = {
-            self.IDENTIFIER_NODE_CLASS: eval_assignment_typical,
-            self.INDEX_NODE_CLASS: eval_assignment_index,
-            self.ARRAY_LITERAL_NODE_CLASS: eval_assignment_multi,  # nested
-            self.FIELD_ACCESS_NODE_CLASS: eval_assignment_field,
-        }
+        def resolve_target(left_hand, *, create=False):
+            """Resolve a writable container/key pair, evaluating its parts once."""
+            if type(left_hand) is self.IDENTIFIER_NODE_CLASS:
+                name = left_hand.value
+                for scope in reversed(self.scope_stack):
+                    if name in scope:
+                        return scope, name
+                if create:
+                    return self.scope_stack[-1], name
+                fail(f"Variable {name} not found in current scope")
 
-        DISPATCH_ASSIGNMENT_TO_FUNC[type_root_left_hand](
-            left_hand=root.left_hand, right_hand_value=right_hand_value
-        )
+            if type(left_hand) is self.INDEX_NODE_CLASS:
+                target = self.eval_expression(left_hand.base)
+                try:
+                    for index in left_hand.index[:-1]:
+                        target = target[self.eval_expression(index.root_expr)]
+                    return target, self.eval_expression(left_hand.index[-1].root_expr)
+                except (IndexError, TypeError, KeyError):
+                    fail("Index out of bounds")
+
+            if type(left_hand) is self.FIELD_ACCESS_NODE_CLASS:
+                target = self.eval_expression(left_hand.base)
+                for index, name in enumerate(left_hand.field):
+                    if type(target) is not self.RUN_TIME_INSTANCE:
+                        fail("field access is only performable on instances of classes")
+                    if name not in target.fields:
+                        fail("field name was not included in the dataclass definition")
+                    if index == len(left_hand.field) - 1:
+                        return target.fields, name
+                    target = target.fields[name]
+            fail("invalid assignment target")
+
+        def read_target(target, key):
+            try:
+                return target[key]
+            except (IndexError, TypeError, KeyError):
+                fail("Index out of bounds")
+
+        def write_target(target, key, value):
+            try:
+                target[key] = value
+            except (IndexError, TypeError, KeyError):
+                fail("invalid assignment target or index")
+
+        def combine(current, value):
+            operation = self.BIN_OP_NODE_CLASS(
+                left=None,
+                op=self.ASSIGNMENT_TO_NORMAL_OPS[root.op],
+                right=None,
+                meta_data=root.meta_data,
+            )
+            return self._eval_binary_values(operation, current, value)
+
+        def assign(left_hand, value):
+            if type(left_hand) is self.ARRAY_LITERAL_NODE_CLASS:
+                if type(value) is not list:
+                    fail("multi-variable assignment right hand must be type list")
+                if len(left_hand.elements) > len(value):
+                    fail("not enough values to unpack")
+                for element, item in zip(left_hand.elements, value, strict=False):
+                    assign(element.root_expr, item)
+                return
+
+            target, key = resolve_target(left_hand, create=not compound)
+            if compound:
+                value = combine(read_target(target, key), value)
+            write_target(target, key, value)
+
+        if compound and type(root.left_hand) is not self.ARRAY_LITERAL_NODE_CLASS:
+            target, key = resolve_target(root.left_hand)
+            current = read_target(target, key)
+            value = self.eval_expression(root.right_hand.root_expr)
+            write_target(target, key, combine(current, value))
+        else:
+            assign(root.left_hand, self.eval_expression(root.right_hand.root_expr))
 
     # this function handles all expression level contructs such as literals, binary ops,
     # unary ops, and function calls
@@ -1075,6 +999,15 @@ class Evaluator:
     # -------------------------------------------
 
     def eval_bin_ops(self, root):
+        left = self.eval_expression(root.left)
+        if root.op == self.T_AND_ENUM_VAL:
+            return self.eval_expression(root.right) if left else left
+        if root.op == self.T_OR_ENUM_VAL:
+            return left if left else self.eval_expression(root.right)
+        right = self.eval_expression(root.right)
+        return self._eval_binary_values(root, left, right)
+
+    def _eval_binary_values(self, root, left, right):
         T_PLUS_ENUM_VAL = self.T_PLUS_ENUM_VAL
         T_MINUS_ENUM_VAL = self.T_MINUS_ENUM_VAL
         T_ASTERISK_ENUM_VAL = self.T_ASTERISK_ENUM_VAL
@@ -1092,8 +1025,6 @@ class Evaluator:
         T_IN_ENUM_VAL = self.T_IN_ENUM_VAL
 
         op = root.op
-        left = self.eval_expression(root.left)
-        right = self.eval_expression(root.right)
         type_left = type(left)
         type_right = type(right)
 
@@ -1231,43 +1162,26 @@ class Evaluator:
                     # go which we will need to change semantic pass to allow
                     pass
 
+            def list_divide(a, b, kind):
+                if len(a) == len(b):
+                    return [list_div_helper(x, y, kind) for x, y in zip(a, b, strict=False)]
+                if len(a) == 1:
+                    return [list_div_helper(a[0], y, kind) for y in b]
+                if len(b) == 1:
+                    return [list_div_helper(x, b[0], kind) for x in a]
+                raise EvaluatorError(
+                    self.file,
+                    "list division requires equal lengths or a singleton operand",
+                    root.meta_data.line,
+                    root.meta_data.column_start,
+                    root.meta_data.column_end,
+                )
+
             def list_div(a, b):
-                if type(a) is list and type(b) is list:
-                    if len(a) != len(b):
-                        if 1 not in (len(a), len(b)):
-                            raise EvaluatorError(
-                                self.file,
-                                "list element-wise divsion is not supported "
-                                "between lists of different lengths where"
-                                "divisor length is not one",
-                                root.meta_data.line,
-                                root.meta_data.column_start,
-                                root.meta_data.column_end,
-                            )
-                        divisor = b[0] if len(b) == 1 else a[0]
-                        base = a if len(a) != 1 else b
-                        return [list_div_helper(x, divisor, "true") for x in base]
-                    else:
-                        return [list_div_helper(i, j, "true") for i, j in zip(a, b, strict=False)]
+                return list_divide(a, b, "true")
 
             def list_floor_div(a, b):
-                if type(a) is list and type(b) is list:
-                    if len(a) != len(b):
-                        if 1 not in (len(a), len(b)):
-                            raise EvaluatorError(
-                                self.file,
-                                "list element-wise divsion is not supported "
-                                "between lists of different lengths where"
-                                "divisor length is not one",
-                                root.meta_data.line,
-                                root.meta_data.column_start,
-                                root.meta_data.column_end,
-                            )
-                        divisor = b[0] if len(b) == 1 else a[0]
-                        base = a if len(a) != 1 else b
-                        return [list_div_helper(x, divisor, "floor") for x in base]
-                    else:
-                        return [list_div_helper(i, j, "floor") for i, j in zip(a, b, strict=False)]
+                return list_divide(a, b, "floor")
 
             supported_types = {
                 T_PLUS_ENUM_VAL: operator.add,
@@ -1468,15 +1382,18 @@ class Evaluator:
 
     def eval_call(self, callee, args, meta_data):
         saved_stack = self.scope_stack
+        saved_loop_depth = self.loop_depth
         self.scope_stack = [i.copy() for i in callee.closure] + [{}]
+        self.loop_depth = 0
         self.func_depth += 1
         try:
-            self.initalize_var(callee.params_name, args)
+            self.scope_stack[-1][callee.params_name] = args
             try:
                 self.eval_block(callee.body)
             except _ReturnSignal as sig:
                 return sig.value
         finally:
             self.scope_stack = saved_stack
+            self.loop_depth = saved_loop_depth
             self.func_depth -= 1
         return 0

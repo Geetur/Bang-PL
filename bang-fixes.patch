@@ -1,0 +1,1775 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -22,12 +22,8 @@
+         run: |
+           ruff check .
+           ruff format --check .
+-      - name: Tests (semantic + evaluator)
+-        run: |
+-            pytest -q \
+-            bang/lexing/tests_lexer/test_lexer_correctness.py \
+-            bang/semantic/tests_semantic/test_semantic_correctness.py \
+-            bang/runtime/tests_evaluator/test_evaluator_correctness.py\
++      - name: Tests (lexer, parser, semantic, evaluator, regressions)
++        run: pytest -q
+       - name: Upload coverage
+         uses: codecov/codecov-action@v5
+         if: always()
+\ No newline at end of file
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -32,7 +32,7 @@
+ * Tiny but expressive **control flow** (`if / elif / else`, `for`, `while`, `break`, `continue`).
+ * **First-class functions** with variadic argument lists passed as a single named array (ex. args).
+ * **Built-ins**: `print`, `len`, `sum`, `min`, `max` — super easy to extend, essentially just have to write a function defining the behaviour.
+-* **Strong static guarantees** before runtime: undefined variables, invalid operators, out-of-scope `break`, etc. are caught by the semantic pass.
++* **Static checks where information is available**: the semantic pass checks bindings, known operand types, and control-flow placement. Dynamic values and uncertain types retain runtime checks.
+ 
+ ## Architecture Overview
+ ┌────────┐ ┌──────────────────┐ ┌────────────────┐ ┌──────────────┐ ┌────────────┐
+@@ -235,17 +235,21 @@
+ 
+ ## Running the Test-Suite
+ ```
+-pytest bang\semantic\semantic_tests.py
+-```
+-The suite contains hundreds of assertions split across:
+-
+-* lexer_tests.py
+-
+-* parser_expression_tests.py
+-
+-* semantic_tests.py – must not raise SemanticError for valid programs, and must raise for invalid ones.
+-
+-* evaluator_tests.py – checks runtime behaviour & error handling (EvaluatorError).
++python -m pytest -q
++```
++The default selection runs the lexer, parser, semantic, evaluator, and regression correctness suites. Profiling scripts are excluded because they require optional profiling tools.
++
++* `bang/lexing/tests_lexer/test_lexer_correctness.py`
++* `bang/parsing/tests_parser/test_expr_parser_correctness.py`
++* `bang/semantic/tests_semantic/test_semantic_correctness.py`
++* `bang/runtime/tests_evaluator/test_evaluator_correctness.py`
++* `bang/tests/test_regressions.py` — checks exact output, errors, and scope cleanup.
++
++The parser and regression suites can also run without pytest:
++
++```bash
++python -m unittest bang.parsing.tests_parser.test_expr_parser_correctness bang.tests.test_regressions
++```
+ 
+ ## Extending the Language
+ 
+diff --git a/bang/parsing/control_flow_parser.py b/bang/parsing/control_flow_parser.py
+--- a/bang/parsing/control_flow_parser.py
++++ b/bang/parsing/control_flow_parser.py
+@@ -56,7 +56,7 @@
+         cls = self.__class__
+         DEPENDANT_NODES = cls.DEPENDANT_NODES
+         CONTROL_FLOW_NODES = cls.CONTROL_FLOW_NODES
+-        ELIF_NODE_CLASS = cls.END_NODE_CLASS
++        ELIF_NODE_CLASS = cls.ELIF_NODE_CLASS
+         END_NODE_CLASS = cls.END_NODE_CLASS
+         FUNCTION_NODE_CLASS = cls.FUNCTION_NODE_CLASS
+         IF_NODE_CLASS = cls.IF_NODE_CLASS
+diff --git a/bang/parsing/expression_parser.py b/bang/parsing/expression_parser.py
+--- a/bang/parsing/expression_parser.py
++++ b/bang/parsing/expression_parser.py
+@@ -699,6 +699,11 @@
+ 
+             elif tok_type_id in DEPTH_ENDERS:
+                 if depth == 0:
++                    if tok_type_id != DEPTH_CREATORS[line[0].type_enum_id]:
++                        raise ParserError(
++                            self.file, "mismatched brackets", tok.line,
++                            tok.column_start, tok.column_end,
++                        )
+                     if current:
+                         elements.append(self.shunting_yard_algo(current))
+ 
+@@ -757,6 +762,13 @@
+         VALID_LEFT_HANDS = self.VALID_LEFT_HANDS
+         assignment_op_token = line[assignment_idx]
+         left_hand = line[:assignment_idx]
++
++        if not left_hand or assignment_idx == len(line) - 1:
++            raise ParserError(
++                self.file, "assignment requires a target and a value",
++                assignment_op_token.line, assignment_op_token.column_start,
++                assignment_op_token.column_end,
++            )
+ 
+         left_hand_node = self.shunting_yard_algo(left_hand).root_expr
+ 
+@@ -867,6 +879,11 @@
+             # ── close bracket ───────────────────────────────────────────────
+             elif tok_type_id in DEPTH_ENDERS:
+                 if depth == 0:
++                    if tok_type_id != DEPTH_CREATORS[line[0].type_enum_id]:
++                        raise ParserError(
++                            self.file, "mismatched brackets", tok.line,
++                            tok.column_start, tok.column_end,
++                        )
+                     if current:
+                         elements.append(self.shunting_yard_algo(current))
+                     return ARRAY_LITERAL_NODE_CLASS(elements, meta_data=line[0]), tok_idx
+@@ -903,6 +920,14 @@
+     # to this algo, which will either return a valid expression node
+     # , or raise an error because the list wasn't a valid expression
+     def shunting_yard_algo(self, line):
++        if not line:
++            anchor = self.tokens[-1] if self.tokens else None
++            raise ParserError(
++                self.file, "expected an expression",
++                anchor.line if anchor else 1,
++                anchor.column_start if anchor else 1,
++                anchor.column_end if anchor else 1,
++            )
+         output = []
+         op_stack = []
+         expect_operand = True
+@@ -919,6 +944,12 @@
+ 
+         def apply_operator():
+             op_tok, op_tok_type_id = op_stack.pop()
++            arity = 1 if self.IS_UNARY[op_tok_type_id] else 2
++            if len(output) < arity:
++                raise ParserError(
++                    self.file, "operator is missing an operand", op_tok.line,
++                    op_tok.column_start, op_tok.column_end,
++                )
+ 
+             # unary
+             # we probably want to make this and most other things in this
+@@ -1103,6 +1134,12 @@
+             tok_idx += 1
+ 
+         if self.illegal_assignment != 2:
++            if expect_operand:
++                last = line[-1]
++                raise ParserError(
++                    self.file, "expected an operand after this token", last.line,
++                    last.column_start, last.column_end,
++                )
+             while op_stack:
+                 top, top_type_id = op_stack[-1]
+                 if top_type_id in (self.T_LPAREN_ENUM_VAL, self.T_RPAREN_ENUM_VAL):
+@@ -1119,5 +1156,11 @@
+                     )
+                 apply_operator()
+ 
++            if len(output) != 1:
++                last = line[-1]
++                raise ParserError(
++                    self.file, "expected exactly one expression", last.line,
++                    last.column_start, last.column_end,
++                )
+             root = output.pop()
+             return self.EXPRESSION_NODE_CLASS(root_expr=root)
+diff --git a/bang/parsing/tests_parser/test_expr_parser_correctness.py b/bang/parsing/tests_parser/test_expr_parser_correctness.py
+--- a/bang/parsing/tests_parser/test_expr_parser_correctness.py
++++ b/bang/parsing/tests_parser/test_expr_parser_correctness.py
+@@ -1,407 +1,98 @@
+-import random
+-import string
++"""Parser behavior tests; runnable with pytest or the standard unittest runner."""
+ 
+-import pytest
++import tempfile
++import unittest
++from pathlib import Path
+ 
+-from bang.lexing.lexer import Lexer, LexerError, TokenType
++from bang.lexing.lexer import Lexer
++from bang.lexing.lexer_tokens import TokenType
++from bang.parsing.control_flow_parser import ControlFlowParser
++from bang.parsing.expression_parser import ExpressionParser, ParserError
++from bang.parsing.parser_nodes import BinOpNode, CallNode, FieldAccessNode, IndexNode, UnaryOPNode
+ 
+ 
+-def lex_string(source_code: str, tmp_path):
+-    p = tmp_path / "temp.bang"
+-    p.write_text(source_code, encoding="utf-8")
+-    return Lexer(str(p)).tokenizer()
++def parse(code):
++    with tempfile.TemporaryDirectory() as directory:
++        source = Path(directory) / "program.bang"
++        source.write_text(code, encoding="utf-8")
++        lexer = Lexer(source)
++        parser = ExpressionParser(lexer.tokenizer(), lexer.text)
++        parser.split()
++        parser.loading_into_algos()
++        return lexer.text, parser.post_SYA
+ 
+ 
+-def types(tokens):
+-    return [t.type for t in tokens]
++class ParserCorrectnessTests(unittest.TestCase):
++    def test_multiplication_binds_more_tightly_than_addition(self):
++        _, nodes = parse("1 + 2 * 3")
++        root = nodes[0].root_expr
++        self.assertIsInstance(root, BinOpNode)
++        self.assertEqual(root.op, TokenType.T_PLUS)
++        self.assertEqual(root.right.op, TokenType.T_ASTERISK)
++
++    def test_exponentiation_is_right_associative(self):
++        _, nodes = parse("2 ** 3 ** 2")
++        root = nodes[0].root_expr
++        self.assertEqual(root.op, TokenType.T_EXPO)
++        self.assertEqual(root.left.value, 2)
++        self.assertEqual(root.right.op, TokenType.T_EXPO)
++
++    def test_subtraction_is_left_associative(self):
++        _, nodes = parse("9 - 3 - 1")
++        root = nodes[0].root_expr
++        self.assertEqual(root.op, TokenType.T_MINUS)
++        self.assertEqual(root.left.op, TokenType.T_MINUS)
++        self.assertEqual(root.right.value, 1)
++
++    def test_unary_wraps_an_indexed_operand(self):
++        _, nodes = parse("-a[0]")
++        self.assertIsInstance(nodes[0].root_expr, UnaryOPNode)
++        self.assertIsInstance(nodes[0].root_expr.operand, IndexNode)
++
++    def test_call_index_field_chaining(self):
++        _, nodes = parse("f{}[0].x")
++        root = nodes[0].root_expr
++        self.assertIsInstance(root, FieldAccessNode)
++        self.assertIsInstance(root.base, IndexNode)
++        self.assertIsInstance(root.base.base, CallNode)
++
++    def test_nested_calls_and_arrays(self):
++        _, nodes = parse("print{sum{[1,2]}, [3,[4]]}")
++        root = nodes[0].root_expr
++        self.assertEqual(len(root.args), 2)
++        self.assertIsInstance(root.args[0].root_expr, CallNode)
++        self.assertEqual(len(root.args[1].root_expr.elements), 2)
++
++    def test_empty_collections_and_trailing_commas(self):
++        _, nodes = parse("a = []; b = [1,2,]; f{}")
++        self.assertEqual(len(nodes), 3)
++        self.assertEqual(len(nodes[0].right_hand.root_expr.elements), 0)
++        self.assertEqual(len(nodes[1].right_hand.root_expr.elements), 2)
++
++    def test_malformed_expressions_raise_parser_error(self):
++        for code in (
++            "print{1]", "x = [1}", "f{[1}}", "f{1+}", "x = 1 +",
++            "x =", "= 1", "a[]", "()", "1(2)", "*1", "1 + *2",
++            "a[1+2}", "1 + )", "(", "!", "a.", "f{1",
++        ):
++            with self.subTest(code=code), self.assertRaises(ParserError):
++                parse(code)
++
++    def test_elif_and_else_have_separate_ast_branches(self):
++        text, nodes = parse(
++            "if false; print{1}; elif true; print{2}; end; "
++            "else; print{3}; end; end"
++        )
++        root = ControlFlowParser(text, nodes).blockenize()[0]
++        self.assertEqual(len(root.elif_branch.block), 1)
++        self.assertEqual(len(root.else_branch.block), 1)
++
++    def test_unmatched_blocks_raise_parser_error(self):
++        for code in ("end", "if true; x = 1", "else; end"):
++            with self.subTest(code=code), self.assertRaises(ParserError):
++                text, nodes = parse(code)
++                ControlFlowParser(text, nodes).blockenize()
+ 
+ 
+-def assert_tok(tok, ttype, value=None, line=None, col_start=None, col_end=None):
+-    assert tok.type == ttype
+-    if value is not None:
+-        assert tok.value == value
+-    if line is not None:
+-        assert tok.line == line
+-    if col_start is not None:
+-        assert tok.column_start == col_start
+-    if col_end is not None:
+-        assert tok.column_end == col_end
+-
+-
+-# ----------------------------
+-# Basic: EOF & whitespace
+-# ----------------------------
+-
+-def test_always_ends_with_eof(tmp_path):
+-    toks = lex_string("", tmp_path)
+-    assert len(toks) == 1
+-    assert_tok(toks[0], TokenType.T_EOF, value="")
+-
+-
+-def test_ignores_whitespace(tmp_path):
+-    toks = lex_string("   \n\t 42 \n\n   ", tmp_path)
+-    assert types(toks) == [TokenType.T_INT, TokenType.T_EOF]
+-    assert toks[0].value == 42
+-
+-
+-# ----------------------------
+-# Numbers
+-# ----------------------------
+-
+-@pytest.mark.parametrize(
+-    "src, expected",
+-    [
+-        ("0", 0),
+-        ("7", 7),
+-        ("42", 42),
+-        ("00012", 12),
+-        ("1234567890", 1234567890),
+-    ],
+-)
+-def test_integer_token_values(tmp_path, src, expected):
+-    toks = lex_string(src, tmp_path)
+-    assert types(toks) == [TokenType.T_INT, TokenType.T_EOF]
+-    assert toks[0].value == expected
+-
+-
+-@pytest.mark.parametrize(
+-    "src, expected",
+-    [
+-        ("3.14", 3.14),
+-        (".5", 0.5),
+-        ("2.", 2.0),
+-        ("0.0", 0.0),
+-        ("10.000", 10.0),
+-    ],
+-)
+-def test_float_token_values(tmp_path, src, expected):
+-    toks = lex_string(src, tmp_path)
+-    assert types(toks) == [TokenType.T_FLOAT, TokenType.T_EOF]
+-    assert toks[0].value == pytest.approx(expected)
+-
+-
+-@pytest.mark.parametrize("src", ["1.2.3", "0..1", ".1."])
+-def test_multiple_decimal_error(tmp_path, src):
+-    with pytest.raises(LexerError):
+-        lex_string(src, tmp_path)
+-
+-
+-# ----------------------------
+-# Identifiers / keywords / literals
+-# ----------------------------
+-
+-@pytest.mark.parametrize(
+-    "src, expected_type, expected_value",
+-    [
+-        ("abc", TokenType.T_IDENT, "abc"),
+-        ("a1", TokenType.T_IDENT, "a1"),
+-        ("_x", TokenType.T_IDENT, "_x"),
+-        ("_", TokenType.T_IDENT, "_"),
+-        ("true", TokenType.T_TRUE, "true"),
+-        ("false", TokenType.T_FALSE, "false"),
+-        ("none", TokenType.T_NONE, "none"),
+-        ("if", TokenType.T_IF, "if"),
+-        ("elif", TokenType.T_ELIF, "elif"),
+-        ("else", TokenType.T_ELSE, "else"),
+-        ("for", TokenType.T_FOR, "for"),
+-        ("while", TokenType.T_WHILE, "while"),
+-        ("break", TokenType.T_BREAK, "break"),
+-        ("continue", TokenType.T_CONTINUE, "continue"),
+-        ("return", TokenType.T_RETURN, "return"),
+-        ("end", TokenType.T_END, "end"),
+-        ("fn", TokenType.T_FN, "fn"),
+-        ("data", TokenType.T_DATA, "data"),
+-        # Operator keyword
+-        ("in", TokenType.T_IN, "in"),
+-        # Keyword prefix should remain identifier
+-        ("endif", TokenType.T_IDENT, "endif"),
+-        ("inline", TokenType.T_IDENT, "inline"),
+-        ("forx", TokenType.T_IDENT, "forx"),
+-        ("truee", TokenType.T_IDENT, "truee"),
+-    ],
+-)
+-def test_identifier_keywords_and_literals(tmp_path, src, expected_type, expected_value):
+-    toks = lex_string(src, tmp_path)
+-    assert types(toks) == [expected_type, TokenType.T_EOF]
+-    assert toks[0].value == expected_value
+-
+-
+-# ----------------------------
+-# Strings
+-# ----------------------------
+-
+-def test_string_token_basic(tmp_path):
+-    toks = lex_string('"hello"', tmp_path)
+-    assert types(toks) == [TokenType.T_STR, TokenType.T_EOF]
+-    assert toks[0].value == "hello"
+-
+-
+-def test_string_can_contain_hash_without_comment(tmp_path):
+-    toks = lex_string('"# not a comment"', tmp_path)
+-    assert types(toks) == [TokenType.T_STR, TokenType.T_EOF]
+-    assert toks[0].value == "# not a comment"
+-
+-
+-def test_unterminated_string_error(tmp_path):
+-    with pytest.raises(LexerError):
+-        lex_string('"hello', tmp_path)
+-
+-
+-# ----------------------------
+-# Operators & punctuation
+-# ----------------------------
+-
+-@pytest.mark.parametrize(
+-    "src, expected_types",
+-    [
+-        ("+", [TokenType.T_PLUS]),
+-        ("-", [TokenType.T_MINUS]),
+-        ("*", [TokenType.T_STAR]),
+-        ("/", [TokenType.T_FSLASH]),
+-        ("//", [TokenType.T_DSLASH]),
+-        ("**", [TokenType.T_DOUBLESTAR]),
+-        ("=", [TokenType.T_EQ]),
+-        ("==", [TokenType.T_DOUBLEEQ]),
+-        ("!=", [TokenType.T_NOTEQUAL]),
+-        (">", [TokenType.T_GT]),
+-        ("<", [TokenType.T_LT]),
+-        (">=", [TokenType.T_GTE]),
+-        ("<=", [TokenType.T_LTE]),
+-        ("&&", [TokenType.T_AND]),
+-        ("||", [TokenType.T_OR]),
+-        ("!", [TokenType.T_BANG]),
+-        ("(", [TokenType.T_LPAREN]),
+-        (")", [TokenType.T_RPAREN]),
+-        ("[", [TokenType.T_LBRACKET]),
+-        ("]", [TokenType.T_RBRACKET]),
+-        ("{", [TokenType.T_LBRACE]),
+-        ("}", [TokenType.T_RBRACE]),
+-        (",", [TokenType.T_COMMA]),
+-        (".", [TokenType.T_DOT]),
+-        (";", [TokenType.T_SEMI]),
+-        ("+=", [TokenType.T_PLUS_ASSIGN]),
+-        ("-=", [TokenType.T_MINUS_ASSIGN]),
+-        ("*=", [TokenType.T_STAR_ASSIGN]),
+-        ("/=", [TokenType.T_FSLASH_ASSIGN]),
+-    ],
+-)
+-def test_operators_and_punctuation(tmp_path, src, expected_types):
+-    toks = lex_string(src, tmp_path)
+-    assert types(toks) == expected_types + [TokenType.T_EOF]
+-
+-
+-def test_operator_longest_match_examples(tmp_path):
+-    # "===" -> "==" then "="
+-    toks = lex_string("===", tmp_path)
+-    assert types(toks) == [TokenType.T_DOUBLEEQ, TokenType.T_EQ, TokenType.T_EOF]
+-
+-    # "****" -> "**" then "**"
+-    toks = lex_string("****", tmp_path)
+-    assert types(toks) == [TokenType.T_DOUBLESTAR, TokenType.T_DOUBLESTAR, TokenType.T_EOF]
+-
+-
+-# ----------------------------
+-# Comments
+-# ----------------------------
+-
+-def test_comment_only_line(tmp_path):
+-    toks = lex_string("# hello\n42", tmp_path)
+-    assert types(toks) == [TokenType.T_INT, TokenType.T_EOF]
+-    assert toks[0].value == 42
+-    assert toks[0].line == 2
+-
+-
+-def test_comment_after_code(tmp_path):
+-    toks = lex_string("x = 1 # comment here\ny = 2", tmp_path)
+-    assert types(toks) == [
+-        TokenType.T_IDENT, TokenType.T_EQ, TokenType.T_INT,
+-        TokenType.T_IDENT, TokenType.T_EQ, TokenType.T_INT,
+-        TokenType.T_EOF,
+-    ]
+-    assert toks[0].value == "x"
+-    assert toks[2].value == 1
+-    assert toks[3].value == "y"
+-    assert toks[5].value == 2
+-
+-
+-# ----------------------------
+-# Line/column metadata sanity checks
+-# ----------------------------
+-
+-def test_metadata_single_line_positions(tmp_path):
+-    # 12345
+-    # x = 42
+-    toks = lex_string("x = 42", tmp_path)
+-    assert_tok(toks[0], TokenType.T_IDENT, value="x", line=1, col_start=1, col_end=1)
+-    assert_tok(toks[1], TokenType.T_EQ, value="=", line=1, col_start=3, col_end=3)
+-    assert_tok(toks[2], TokenType.T_INT, value=42, line=1, col_start=5, col_end=6)
+-
+-
+-def test_metadata_multi_line_positions(tmp_path):
+-    src = "x=1\ny = 2\n  z=3"
+-    toks = lex_string(src, tmp_path)
+-    # x=1
+-    assert_tok(toks[0], TokenType.T_IDENT, "x", line=1, col_start=1, col_end=1)
+-    assert_tok(toks[1], TokenType.T_EQ, "=", line=1, col_start=2, col_end=2)
+-    assert_tok(toks[2], TokenType.T_INT, 1, line=1, col_start=3, col_end=3)
+-    # y = 2
+-    assert_tok(toks[3], TokenType.T_IDENT, "y", line=2, col_start=1, col_end=1)
+-    assert_tok(toks[4], TokenType.T_EQ, "=", line=2, col_start=3, col_end=3)
+-    assert_tok(toks[5], TokenType.T_INT, 2, line=2, col_start=5, col_end=5)
+-    # "  z=3"
+-    assert_tok(toks[6], TokenType.T_IDENT, "z", line=3, col_start=3, col_end=3)
+-    assert_tok(toks[7], TokenType.T_EQ, "=", line=3, col_start=4, col_end=4)
+-    assert_tok(toks[8], TokenType.T_INT, 3, line=3, col_start=5, col_end=5)
+-
+-
+-def test_string_metadata_includes_quotes_in_span(tmp_path):
+-    toks = lex_string('"ab"', tmp_path)
+-    # string token spans columns 1..4 (includes both quotes)
+-    assert_tok(toks[0], TokenType.T_STR, "ab", line=1, col_start=1, col_end=4)
+-
+-
+-# ----------------------------
+-# Invalid characters & error location sanity
+-# ----------------------------
+-
+-def test_invalid_character_raises(tmp_path):
+-    with pytest.raises(LexerError):
+-        lex_string("@", tmp_path)
+-
+-
+-def test_invalid_character_in_middle(tmp_path):
+-    with pytest.raises(LexerError):
+-        lex_string("x = 1 @ y", tmp_path)
+-
+-
+-# ----------------------------
+-# Mixed programs / integration-ish lexer checks
+-# ----------------------------
+-
+-def test_simple_expression_stream(tmp_path):
+-    toks = lex_string("a+=1; b = a**2 // 3", tmp_path)
+-    assert types(toks) == [
+-        TokenType.T_IDENT, TokenType.T_PLUS_ASSIGN, TokenType.T_INT, TokenType.T_SEMI,
+-        TokenType.T_IDENT, TokenType.T_EQ, TokenType.T_IDENT, TokenType.T_DOUBLESTAR,
+-        TokenType.T_INT, TokenType.T_DSLASH, TokenType.T_INT,
+-        TokenType.T_EOF,
+-    ]
+-
+-
+-def test_in_operator_in_context(tmp_path):
+-    toks = lex_string("0 in [1,2,3]", tmp_path)
+-    assert types(toks) == [
+-        TokenType.T_INT, TokenType.T_IN, TokenType.T_LBRACKET,
+-        TokenType.T_INT, TokenType.T_COMMA, TokenType.T_INT, TokenType.T_COMMA, TokenType.T_INT,
+-        TokenType.T_RBRACKET,
+-        TokenType.T_EOF,
+-    ]
+-
+-
+-# ----------------------------
+-# Deterministic fuzz-like coverage
+-# ----------------------------
+-
+-def test_many_valid_random_streams(tmp_path):
+-    # We intentionally generate only "safe" pieces that should always lex.
+-    rng = random.Random(1337)
+-
+-    keywords = [
+-        "if", "elif", "else", "for", "while", "break", "continue", "return", "end", "fn", "data",
+-        "true", "false", "none", "in",
+-    ]
+-    # Keep operators here to those you support (and that are unambiguous in lexer)
+-    ops = [
+-        "+", "-", "*", "/", "//", "**", "=", "==", "!=", ">", "<", ">=", "<=", "&&", "||", "!", ",", ".", ";",
+-        "(", ")", "[", "]", "{", "}",
+-        "+=", "-=", "*=", "/=",
+-    ]
+-
+-    def rand_ident():
+-        first = rng.choice(string.ascii_letters + "_")
+-        rest = "".join(rng.choice(string.ascii_letters + string.digits + "_") for _ in range(rng.randint(0, 10)))
+-        s = first + rest
+-        # avoid producing exact keywords too often unless chosen explicitly
+-        if s in keywords:
+-            s = s + "_x"
+-        return s
+-
+-    def rand_number():
+-        if rng.random() < 0.7:
+-            return str(rng.randint(0, 10_000))
+-        # float forms (avoid multiple dots)
+-        if rng.random() < 0.5:
+-            return f"{rng.randint(0, 999)}.{rng.randint(0, 999)}"
+-        return f".{rng.randint(0, 999)}"
+-
+-    def expected_type(piece: str):
+-        if piece == "true":
+-            return TokenType.T_TRUE
+-        if piece == "false":
+-            return TokenType.T_FALSE
+-        if piece == "none":
+-            return TokenType.T_NONE
+-        if piece in ("if", "elif", "else", "for", "while", "break", "continue", "return", "end", "fn", "data"):
+-            return getattr(TokenType, f"T_{piece.upper()}")
+-        if piece == "in":
+-            return TokenType.T_IN
+-        if piece in ops:
+-            # map operator lexeme to TokenType by explicit dict
+-            op_map = {
+-                "+": TokenType.T_PLUS,
+-                "-": TokenType.T_MINUS,
+-                "*": TokenType.T_STAR,
+-                "/": TokenType.T_FSLASH,
+-                "//": TokenType.T_DSLASH,
+-                "**": TokenType.T_DOUBLESTAR,
+-                "=": TokenType.T_EQ,
+-                "==": TokenType.T_DOUBLEEQ,
+-                "!=": TokenType.T_NOTEQUAL,
+-                ">": TokenType.T_GT,
+-                "<": TokenType.T_LT,
+-                ">=": TokenType.T_GTE,
+-                "<=": TokenType.T_LTE,
+-                "&&": TokenType.T_AND,
+-                "||": TokenType.T_OR,
+-                "!": TokenType.T_BANG,
+-                "(": TokenType.T_LPAREN,
+-                ")": TokenType.T_RPAREN,
+-                "[": TokenType.T_LBRACKET,
+-                "]": TokenType.T_RBRACKET,
+-                "{": TokenType.T_LBRACE,
+-                "}": TokenType.T_RBRACE,
+-                ",": TokenType.T_COMMA,
+-                ".": TokenType.T_DOT,
+-                ";": TokenType.T_SEMI,
+-                "+=": TokenType.T_PLUS_ASSIGN,
+-                "-=": TokenType.T_MINUS_ASSIGN,
+-                "*=": TokenType.T_STAR_ASSIGN,
+-                "/=": TokenType.T_FSLASH_ASSIGN,
+-            }
+-            return op_map[piece]
+-        # numbers
+-        if piece.startswith(".") or "." in piece:
+-            return TokenType.T_FLOAT
+-        if piece.isdigit():
+-            return TokenType.T_INT
+-        return TokenType.T_IDENT
+-
+-    for _ in range(150):
+-        pieces = []
+-        for _ in range(rng.randint(5, 60)):
+-            r = rng.random()
+-            if r < 0.25:
+-                pieces.append(rng.choice(keywords))
+-            elif r < 0.55:
+-                pieces.append(rng.choice(ops))
+-            elif r < 0.75:
+-                pieces.append(rand_number())
+-            else:
+-                pieces.append(rand_ident())
+-
+-        src = " ".join(pieces)
+-        toks = lex_string(src, tmp_path)
+-
+-        expected = [expected_type(p) for p in pieces] + [TokenType.T_EOF]
+-        got = types(toks)
+-        assert got == expected, f"\nSRC:\n{src}\n\nEXPECTED:\n{expected}\n\nGOT:\n{got}\n"
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/bang/runtime/evaluator.py b/bang/runtime/evaluator.py
+--- a/bang/runtime/evaluator.py
++++ b/bang/runtime/evaluator.py
+@@ -654,60 +654,52 @@
+         for construct in root.block:
+             self.eval_construct(construct)
+ 
++    def _eval_scoped_block(self, block):
++        self.scope_stack.append({})
++        try:
++            self.eval_block(block)
++        finally:
++            self.scope_stack.pop()
++
+     def eval_if(self, root):
+         if self.eval_expression(root.condition.root_expr):
+-            self.scope_stack.append({})
+-            self.eval_block(root.body)
+-            self.scope_stack.pop()
++            self._eval_scoped_block(root.body)
+             return
+-        for elif_root in root.elif_branch.block:
+-            if self.eval_expression(elif_root.condition.root_expr):
+-                self.scope_stack.append({})
+-                self.eval_block(elif_root.body)
+-                self.scope_stack.pop()
++        for branch in root.elif_branch.block:
++            if self.eval_expression(branch.condition.root_expr):
++                self._eval_scoped_block(branch.body)
+                 return
+-        for else_root in root.else_branch.block:
+-            self.scope_stack.append({})
+-            self.eval_block(else_root.body)
+-            self.scope_stack.pop()
++        for branch in root.else_branch.block:
++            self._eval_scoped_block(branch.body)
+             return
+ 
+     def eval_for(self, root):
++        bound = self.eval_expression(root.bound.root_expr)
++        if type(bound) is int:
++            iterator = range(0, bound, -1 if bound < 0 else 1)
++        else:
++            try:
++                iterator = iter(bound)
++            except TypeError:
++                raise EvaluatorError(
++                    self.file, "bound not iterable", root.meta_data.line,
++                    root.meta_data.column_start, root.meta_data.column_end,
++                ) from None
++
+         self.loop_depth += 1
+         self.scope_stack.append({})
+-        left_hand_name = root.variable.value
+-        right_hand_val = self.eval_expression(root.bound.root_expr)
+-
+-        if type(right_hand_val) is int:
+-            for i in range(0, right_hand_val, -1 if right_hand_val < 0 else 1):
+-                self.initalize_var(left_hand_name, i)
++        try:
++            for value in iterator:
++                self.initalize_var(root.variable.value, value)
+                 try:
+                     self.eval_block(root.body)
+                 except _ContinueSignal:
+                     continue
+                 except _BreakSignal:
+                     break
+-        else:
+-            try:
+-                for i in right_hand_val:
+-                    self.initalize_var(left_hand_name, i)
+-                    try:
+-                        self.eval_block(root.body)
+-                    except _ContinueSignal:
+-                        continue
+-                    except _BreakSignal:
+-                        break
+-            except TypeError:
+-                raise EvaluatorError(
+-                    self.file,
+-                    "bound not iterable",
+-                    root.meta_data.line,
+-                    root.meta_data.column_start,
+-                    root.meta_data.column_end,
+-                ) from None
+-
+-        self.scope_stack.pop()
+-        self.loop_depth -= 1
++        finally:
++            self.scope_stack.pop()
++            self.loop_depth -= 1
+ 
+     def eval_while(self, root):
+         self.loop_depth += 1
+@@ -784,163 +776,87 @@
+         )
+ 
+     def eval_assignments(self, root):
+-        # probably we are going to want to change these if elif blocks into
+-        # functions because they are simply meant to differentiate between different types of
+-        # left hands which could be arbitrarily large
+-
+-        T_ASSIGN_ENUM_VAL = self.T_ASSIGN_ENUM_VAL
+-        BIN_OP_NODE_CLASS = self.BIN_OP_NODE_CLASS
+-        ASSIGNMENT_TO_NORMAL_OPS = self.ASSIGNMENT_TO_NORMAL_OPS
+-
+-        def eval_assignment_typical(left_hand, right_hand_value):
+-            left_hand_name = left_hand.value
++        compound = root.op != self.T_ASSIGN_ENUM_VAL
++
++        def fail(message):
++            raise EvaluatorError(
++                self.file, message, root.meta_data.line,
++                root.meta_data.column_start, root.meta_data.column_end,
++            )
++
++        def resolve_target(left_hand, *, create=False):
++            """Resolve a writable container/key pair, evaluating its parts once."""
++            if type(left_hand) is self.IDENTIFIER_NODE_CLASS:
++                name = left_hand.value
++                for scope in reversed(self.scope_stack):
++                    if name in scope:
++                        return scope, name
++                if create:
++                    return self.scope_stack[-1], name
++                fail(f"Variable {name} not found in current scope")
++
++            if type(left_hand) is self.INDEX_NODE_CLASS:
++                target = self.eval_expression(left_hand.base)
++                try:
++                    for index in left_hand.index[:-1]:
++                        target = target[self.eval_expression(index.root_expr)]
++                    return target, self.eval_expression(left_hand.index[-1].root_expr)
++                except (IndexError, TypeError, KeyError):
++                    fail("Index out of bounds")
++
++            if type(left_hand) is self.FIELD_ACCESS_NODE_CLASS:
++                target = self.eval_expression(left_hand.base)
++                for index, name in enumerate(left_hand.field):
++                    if type(target) is not self.RUN_TIME_INSTANCE:
++                        fail("field access is only performable on instances of classes")
++                    if name not in target.fields:
++                        fail("field name was not included in the dataclass definition")
++                    if index == len(left_hand.field) - 1:
++                        return target.fields, name
++                    target = target.fields[name]
++            fail("invalid assignment target")
++
++        def read_target(target, key):
+             try:
+-                idx = self.search_for_var(left_hand_name, root.meta_data)
+-                self.scope_stack[idx][left_hand_name] = right_hand_value
+-            except EvaluatorError:
+-                self.initalize_var(left_hand_name, right_hand_value)
+-
+-        def eval_assignment_index(left_hand, right_hand_value):
+-            left_hand_base = left_hand.base
+-            if type(left_hand_base) is self.IDENTIFIER_NODE_CLASS:
+-                base_location = self.search_for_var(left_hand_base.value, root.meta_data)
+-                base_frame = self.scope_stack[base_location]
+-                target = base_frame[left_hand.base.value]
+-            else:
+-                target = self.eval_expression(left_hand_base)
+-            for idx in left_hand.index[:-1]:
+-                try:
+-                    target = target[self.eval_expression(idx.root_expr)]
+-                except (IndexError, TypeError, KeyError):
+-                    raise EvaluatorError(
+-                        self.file,
+-                        "Index out of bounds",
+-                        root.meta_data.line,
+-                        root.meta_data.column_start,
+-                        root.meta_data.column_end,
+-                    ) from None
++                return target[key]
++            except (IndexError, TypeError, KeyError):
++                fail("Index out of bounds")
++
++        def write_target(target, key, value):
+             try:
+-                final_idx = self.eval_expression(left_hand.index[-1].root_expr)
+-                target[final_idx] = right_hand_value
++                target[key] = value
+             except (IndexError, TypeError, KeyError):
+-                raise EvaluatorError(
+-                    self.file,
+-                    "Index out of bounds",
+-                    root.meta_data.line,
+-                    root.meta_data.column_start,
+-                    root.meta_data.column_end,
+-                ) from None
+-
+-        def eval_assignment_field(left_hand, right_hand_value):
+-            base = self.eval_expression(left_hand.base)
+-            chain = left_hand.field
+-
+-            for name in chain[:-1]:
+-                if type(base) is not self.RUN_TIME_INSTANCE:
+-                    raise EvaluatorError(
+-                        self.file,
+-                        "field access is only performable on instances of classes",
+-                        left_hand.meta_data.line,
+-                        left_hand.meta_data.column_start,
+-                        left_hand.meta_data.column_end,
+-                    )
+-                if name not in base.fields:
+-                    raise EvaluatorError(
+-                        self.file,
+-                        "field name wasn't included in the "
+-                        "definition of the instance's corresponding class",
+-                        left_hand.meta_data.line,
+-                        left_hand.meta_data.column_start,
+-                        left_hand.meta_data.column_end,
+-                    )
+-                base = base.fields[name]
+-
+-            final_name = chain[-1]
+-
+-            if type(base) is not self.RUN_TIME_INSTANCE:
+-                raise EvaluatorError(
+-                    self.file,
+-                    "field access is only performable on instances of classes",
+-                    left_hand.meta_data.line,
+-                    left_hand.meta_data.column_start,
+-                    left_hand.meta_data.column_end,
+-                )
+-            if final_name not in base.fields:
+-                raise EvaluatorError(
+-                    self.file,
+-                    "field name wasn't included in the definition "
+-                    "of the instance's corresponding class",
+-                    left_hand.meta_data.line,
+-                    left_hand.meta_data.column_start,
+-                    left_hand.meta_data.column_end,
+-                )
+-
+-            base.fields[final_name] = right_hand_value
+-
+-        def eval_assignment_multi(left_hand, right_hand_value):
+-            ARRAY_LITERAL_NODE_CLASS = self.ARRAY_LITERAL_NODE_CLASS
+-
+-            if type(right_hand_value) not in (list, ARRAY_LITERAL_NODE_CLASS):
+-                raise EvaluatorError(
+-                    self.file,
+-                    "multi-variable assignment right hand must be type list",
+-                    root.meta_data.line,
+-                    root.meta_data.column_start,
+-                    root.meta_data.column_end,
+-                )
+-            if len(left_hand.elements) > len(right_hand_value):
+-                raise EvaluatorError(
+-                    self.file,
+-                    "not enough values to unpack",
+-                    root.meta_data.line,
+-                    root.meta_data.column_start,
+-                    root.meta_data.column_end,
+-                )
+-
+-            # try and optimize this. maybe turn nexted funcs into methods
+-
+-            for i, n in enumerate(left_hand.elements):
+-                left_hand_side = n.root_expr
+-                assignee = right_hand_value[i]
+-                if (
+-                    op_type_id != T_ASSIGN_ENUM_VAL
+-                    and type(left_hand_side) is not ARRAY_LITERAL_NODE_CLASS
+-                ):
+-                    assignee = self.eval_bin_ops(
+-                        BIN_OP_NODE_CLASS(
+-                            left=left_hand_side,
+-                            op=ASSIGNMENT_TO_NORMAL_OPS[op_type_id],
+-                            right=assignee,
+-                            meta_data=root.meta_data,
+-                        )
+-                    )
+-                DISPATCH_ASSIGNMENT_TO_FUNC[type(left_hand_side)](
+-                    left_hand=left_hand_side, right_hand_value=assignee
+-                )
+-
+-        right_hand_value = self.eval_expression(root.right_hand.root_expr)
+-        op_type_id = root.op
+-        type_root_left_hand = type(root.left_hand)
+-        if op_type_id != T_ASSIGN_ENUM_VAL and type_root_left_hand is not ARRAY_LITERAL_NODE_CLASS:
+-            right_hand_value = self.eval_expression(
+-                BIN_OP_NODE_CLASS(
+-                    left=root.left_hand,
+-                    op=ASSIGNMENT_TO_NORMAL_OPS[op_type_id],
+-                    right=root.right_hand.root_expr,
+-                    meta_data=root.meta_data,
+-                )
++                fail("invalid assignment target or index")
++
++        def combine(current, value):
++            operation = self.BIN_OP_NODE_CLASS(
++                left=None, op=self.ASSIGNMENT_TO_NORMAL_OPS[root.op],
++                right=None, meta_data=root.meta_data,
+             )
+-
+-        DISPATCH_ASSIGNMENT_TO_FUNC = {
+-            self.IDENTIFIER_NODE_CLASS: eval_assignment_typical,
+-            self.INDEX_NODE_CLASS: eval_assignment_index,
+-            self.ARRAY_LITERAL_NODE_CLASS: eval_assignment_multi,  # nested
+-            self.FIELD_ACCESS_NODE_CLASS: eval_assignment_field,
+-        }
+-
+-        DISPATCH_ASSIGNMENT_TO_FUNC[type_root_left_hand](
+-            left_hand=root.left_hand, right_hand_value=right_hand_value
+-        )
++            return self._eval_binary_values(operation, current, value)
++
++        def assign(left_hand, value):
++            if type(left_hand) is self.ARRAY_LITERAL_NODE_CLASS:
++                if type(value) is not list:
++                    fail("multi-variable assignment right hand must be type list")
++                if len(left_hand.elements) > len(value):
++                    fail("not enough values to unpack")
++                for element, item in zip(left_hand.elements, value, strict=False):
++                    assign(element.root_expr, item)
++                return
++
++            target, key = resolve_target(left_hand, create=not compound)
++            if compound:
++                value = combine(read_target(target, key), value)
++            write_target(target, key, value)
++
++        if compound and type(root.left_hand) is not self.ARRAY_LITERAL_NODE_CLASS:
++            target, key = resolve_target(root.left_hand)
++            current = read_target(target, key)
++            value = self.eval_expression(root.right_hand.root_expr)
++            write_target(target, key, combine(current, value))
++        else:
++            assign(root.left_hand, self.eval_expression(root.right_hand.root_expr))
+ 
+     # this function handles all expression level contructs such as literals, binary ops,
+     # unary ops, and function calls
+@@ -1075,6 +991,15 @@
+     # -------------------------------------------
+ 
+     def eval_bin_ops(self, root):
++        left = self.eval_expression(root.left)
++        if root.op == self.T_AND_ENUM_VAL:
++            return self.eval_expression(root.right) if left else left
++        if root.op == self.T_OR_ENUM_VAL:
++            return left if left else self.eval_expression(root.right)
++        right = self.eval_expression(root.right)
++        return self._eval_binary_values(root, left, right)
++
++    def _eval_binary_values(self, root, left, right):
+         T_PLUS_ENUM_VAL = self.T_PLUS_ENUM_VAL
+         T_MINUS_ENUM_VAL = self.T_MINUS_ENUM_VAL
+         T_ASTERISK_ENUM_VAL = self.T_ASTERISK_ENUM_VAL
+@@ -1092,8 +1017,6 @@
+         T_IN_ENUM_VAL = self.T_IN_ENUM_VAL
+ 
+         op = root.op
+-        left = self.eval_expression(root.left)
+-        right = self.eval_expression(root.right)
+         type_left = type(left)
+         type_right = type(right)
+ 
+@@ -1231,43 +1154,24 @@
+                     # go which we will need to change semantic pass to allow
+                     pass
+ 
++            def list_divide(a, b, kind):
++                if len(a) == len(b):
++                    return [list_div_helper(x, y, kind) for x, y in zip(a, b, strict=False)]
++                if len(a) == 1:
++                    return [list_div_helper(a[0], y, kind) for y in b]
++                if len(b) == 1:
++                    return [list_div_helper(x, b[0], kind) for x in a]
++                raise EvaluatorError(
++                    self.file, "list division requires equal lengths or a singleton operand",
++                    root.meta_data.line, root.meta_data.column_start,
++                    root.meta_data.column_end,
++                )
++
+             def list_div(a, b):
+-                if type(a) is list and type(b) is list:
+-                    if len(a) != len(b):
+-                        if 1 not in (len(a), len(b)):
+-                            raise EvaluatorError(
+-                                self.file,
+-                                "list element-wise divsion is not supported "
+-                                "between lists of different lengths where"
+-                                "divisor length is not one",
+-                                root.meta_data.line,
+-                                root.meta_data.column_start,
+-                                root.meta_data.column_end,
+-                            )
+-                        divisor = b[0] if len(b) == 1 else a[0]
+-                        base = a if len(a) != 1 else b
+-                        return [list_div_helper(x, divisor, "true") for x in base]
+-                    else:
+-                        return [list_div_helper(i, j, "true") for i, j in zip(a, b, strict=False)]
++                return list_divide(a, b, "true")
+ 
+             def list_floor_div(a, b):
+-                if type(a) is list and type(b) is list:
+-                    if len(a) != len(b):
+-                        if 1 not in (len(a), len(b)):
+-                            raise EvaluatorError(
+-                                self.file,
+-                                "list element-wise divsion is not supported "
+-                                "between lists of different lengths where"
+-                                "divisor length is not one",
+-                                root.meta_data.line,
+-                                root.meta_data.column_start,
+-                                root.meta_data.column_end,
+-                            )
+-                        divisor = b[0] if len(b) == 1 else a[0]
+-                        base = a if len(a) != 1 else b
+-                        return [list_div_helper(x, divisor, "floor") for x in base]
+-                    else:
+-                        return [list_div_helper(i, j, "floor") for i, j in zip(a, b, strict=False)]
++                return list_divide(a, b, "floor")
+ 
+             supported_types = {
+                 T_PLUS_ENUM_VAL: operator.add,
+@@ -1468,15 +1372,18 @@
+ 
+     def eval_call(self, callee, args, meta_data):
+         saved_stack = self.scope_stack
++        saved_loop_depth = self.loop_depth
+         self.scope_stack = [i.copy() for i in callee.closure] + [{}]
++        self.loop_depth = 0
+         self.func_depth += 1
+         try:
+-            self.initalize_var(callee.params_name, args)
++            self.scope_stack[-1][callee.params_name] = args
+             try:
+                 self.eval_block(callee.body)
+             except _ReturnSignal as sig:
+                 return sig.value
+         finally:
+             self.scope_stack = saved_stack
++            self.loop_depth = saved_loop_depth
+             self.func_depth -= 1
+         return 0
+diff --git a/bang/semantic/semantic_analysis.py b/bang/semantic/semantic_analysis.py
+--- a/bang/semantic/semantic_analysis.py
++++ b/bang/semantic/semantic_analysis.py
+@@ -1,9 +1,7 @@
+-# ONLY APPLIES TO STATICALLY KNOWABLE THINGS
+-# after this pass we are every variable is guaranteed to be defined before use;
+-# every break, continue, return, is guaranteed to bee associated with a loop/function;
+-# all statically known indexes are guaranteed to be numbers;
+-# all bin ops and unary ops are guaranteed to be valid if statically known
+-# the majority of errors that can be statically determined are determined.
++# Best-effort checks for bindings, known types, and control-flow placement.
++# Dynamic values and facts that differ across paths are checked at runtime.
++
++from copy import deepcopy
+ 
+ from bang.lexing.lexer_tokens import (
+     T_AND_ENUM_VAL,
+@@ -363,19 +361,19 @@
+         return handler(root)
+ 
+     def walk_function(self, root):
+-        function_name = root.name
+-        args_name = root.arg_list_name
+-        # its really important to initalize the function outside of its bodys scope
+-        #
+-        self.initalize_var(function_name, self.FUNCTION_TYPE_CLASS(value=root.body))
+-
++        self.initalize_var(root.name, self.FUNCTION_TYPE_CLASS(value=root.body))
++        saved_scopes = self.scope_stack
++        saved_loop_depth = self.loop_depth
++        self.scope_stack = deepcopy(saved_scopes) + [{}]
++        self.scope_stack[-1][root.arg_list_name] = self.DYNAMIC_TYPE_CLASS()
++        self.loop_depth = 0
+         self.func_depth += 1
+-        self.scope_stack.append({})
+-        self.initalize_var(args_name, self.DYNAMIC_TYPE_CLASS())
+-
+-        self.walk_block(root.body)
+-        self.scope_stack.pop()
+-        self.func_depth -= 1
++        try:
++            self.walk_block(root.body)
++        finally:
++            self.scope_stack = saved_scopes
++            self.loop_depth = saved_loop_depth
++            self.func_depth -= 1
+ 
+     def walk_dataclass(self, root):
+         dataclass_name = root.name
+@@ -390,51 +388,110 @@
+         for construct in root.block:
+             self.walk_construct(construct)
+ 
++    def _widen_loop_bindings(self, root):
++        """Assignments may have run on a previous iteration of this loop."""
++        written = set()
++
++        def target_names(target):
++            typ = type(target)
++            if typ is self.IDENTIFIER_NODE_CLASS:
++                written.add(target.value)
++            elif typ is self.ARRAY_LITERAL_NODE_CLASS:
++                for element in target.elements:
++                    target_names(element.root_expr)
++            elif typ in (self.INDEX_NODE_CLASS, self.FIELD_ACCESS_NODE_CLASS):
++                target_names(target.base)
++
++        def visit(node):
++            typ = type(node)
++            if typ is self.ASSIGNMENT_NODE_CLASS:
++                target_names(node.left_hand)
++                return
++            if typ in (self.FUNCTION_NODE_CLASS, self.DATA_CLASS_NODE_CLASS):
++                written.add(node.name)
++                return
++            if typ is self.FOR_NODE_CLASS:
++                written.add(node.variable.value)
++            for name in ("body", "elif_branch", "else_branch"):
++                block = getattr(node, name, None)
++                if block is not None:
++                    for child in block.block:
++                        visit(child)
++
++        visit(root)
++        for name in written:
++            for scope in reversed(self.scope_stack):
++                if name in scope:
++                    scope[name] = self.DYNAMIC_TYPE_CLASS()
++                    break
++
++    def _walk_scoped_path(self, root, *, loop_variable=None):
++        """Check one possible path without changing another path's input."""
++        saved_scopes = self.scope_stack
++        self.scope_stack = deepcopy(saved_scopes)
++        try:
++            if type(root) in (self.FOR_NODE_CLASS, self.WHILE_NODE_CLASS):
++                self._widen_loop_bindings(root)
++            if hasattr(root, "condition"):
++                self.walk_expression(root.condition.root_expr)
++            self.scope_stack.append({})
++            if loop_variable is not None:
++                self.initalize_var(loop_variable, self.DYNAMIC_TYPE_CLASS())
++            self.walk_block(root.body)
++            self.scope_stack.pop()
++            return self.scope_stack
++        finally:
++            self.scope_stack = saved_scopes
++
++    def _merge_control_paths(self, paths):
++        """Keep only facts valid both before and after every possible path."""
++        value_types = (
++            self.NUMBER_TYPE_CLASS, self.BOOL_TYPE_CLASS, self.STRING_TYPE_CLASS,
++            self.NONE_TYPE_CLASS, self.ARRAY_TYPE_CLASS, self.SET_TYPE_CLASS,
++            self.DICT_TYPE_CLASS, self.FUNCTION_TYPE_CLASS,
++        )
++        for depth, scope in enumerate(self.scope_stack):
++            for name, before in list(scope.items()):
++                options = [before] + [path[depth][name] for path in paths]
++                typ = type(before)
++                if all(type(value) is typ for value in options) and typ in value_types:
++                    # A stable type does not imply a stable value or array shape.
++                    scope[name] = typ(value=None)
++                elif typ is self.DATA_CLASS_TYPE_CLASS and all(
++                    type(value) is typ and value.fields == before.fields for value in options
++                ):
++                    scope[name] = before
++                else:
++                    scope[name] = self.DYNAMIC_TYPE_CLASS()
++
+     def walk_if(self, root):
+-        self.walk_expression(root.condition.root_expr)
+-        self.scope_stack.append({})
+-        self.walk_block(root.body)
+-        self.scope_stack.pop()
+-
+-        for elif_root in root.elif_branch.block:
+-            self.walk_elif(elif_root)
+-        for else_root in root.else_branch.block:
+-            self.walk_else(else_root)
++        branches = [root] + root.elif_branch.block + root.else_branch.block
++        paths = [self._walk_scoped_path(branch) for branch in branches]
++        self._merge_control_paths(paths)
+ 
+     def walk_elif(self, root):
+-        self.walk_expression(root.condition.root_expr)
+-        self.scope_stack.append({})
+-        self.walk_block(root.body)
+-        self.scope_stack.pop()
++        self._merge_control_paths([self._walk_scoped_path(root)])
+ 
+     def walk_else(self, root):
+-        self.scope_stack.append({})
+-        self.walk_block(root.body)
+-        self.scope_stack.pop()
++        self._merge_control_paths([self._walk_scoped_path(root)])
+ 
+     def walk_for(self, root):
++        # The bound is an expression too: validate it before binding the loop variable.
++        self.walk_expression(root.bound.root_expr)
+         self.loop_depth += 1
+-        self.scope_stack.append({})
+-        left_hand_name = root.variable.value
+-        right_hand_type = self.DYNAMIC_TYPE_CLASS()
+-        if type(right_hand_type) in (self.NONE_TYPE_CLASS,):
+-            raise SemanticError(
+-                self.file,
+-                "For loop bound must be an array, identifier, or number",
+-                root.meta_data.line,
+-                root.meta_data.column_start,
+-                root.meta_data.column_end,
+-            )
+-        self.initalize_var(left_hand_name, right_hand_type)
+-        self.walk_block(root.body)
+-        self.scope_stack.pop()
+-        self.loop_depth -= 1
++        try:
++            path = self._walk_scoped_path(root, loop_variable=root.variable.value)
++        finally:
++            self.loop_depth -= 1
++        self._merge_control_paths([path])
+ 
+     def walk_while(self, root):
+         self.loop_depth += 1
+-        self.walk_expression(root.condition.root_expr)
+-        self.walk_block(root.body)
+-        self.loop_depth -= 1
++        try:
++            path = self._walk_scoped_path(root)
++        finally:
++            self.loop_depth -= 1
++        self._merge_control_paths([path])
+ 
+     def walk_break(self, root):
+         if self.loop_depth == 0:
+@@ -679,47 +736,31 @@
+             parent_instance_type.fields[final_field] = right_hand
+ 
+         def walk_assignment_multi(left_hand, op_type_id, right_hand):
+-            type_right_hand = type(right_hand)
+-            right_hand_value = right_hand.value
+-            left_hand_elements = left_hand.elements
+-            len_left_hand_elements = len(left_hand_elements)
+-            if type_right_hand is not DYNAMIC_TYPE_CLASS:
+-                if type_right_hand is not ARRAY_TYPE_CLASS:
+-                    raise SemanticError(
+-                        self.file,
+-                        "multi-initialization requires right hand"
+-                        " to be dynamic type or static array type",
+-                        root.meta_data.line,
+-                        root.meta_data.column_start,
+-                        root.meta_data.column_end,
+-                    )
+-                if len_left_hand_elements > len(right_hand_value):
+-                    raise SemanticError(
+-                        self.file,
+-                        "multi-initialization requires right hand length "
+-                        "to be equal to or greater than left hand length",
+-                        root.meta_data.line,
+-                        root.meta_data.column_start,
+-                        root.meta_data.column_end,
+-                    )
+-
+-                rhs_types = (
+-                    right_hand_value
+-                    if type_right_hand is ARRAY_TYPE_CLASS
+-                    else [DYNAMIC_TYPE_CLASS()] * len_left_hand_elements
+-                )
+-
+-                dispatch = {
+-                    IDENTIFIER_NODE_CLASS: walk_assignment_typical,
+-                    INDEX_NODE_CLASS: walk_assignment_index,
+-                    ARRAY_LITERAL_NODE_CLASS: walk_assignment_multi,  # nested destructuring
+-                    FIELD_ACCESS_NODE_CLASS: walk_assignment_field_access,
+-                }
+-
+-                for i, n in enumerate(left_hand_elements):
+-                    left_hand_node = n.root_expr
+-                    rhs_type = rhs_types[i] if i < len(rhs_types) else DYNAMIC_TYPE_CLASS
+-                    dispatch[type(left_hand_node)](left_hand_node, op_type_id, rhs_type)
++            typ = type(right_hand)
++            elements = left_hand.elements
++            if typ not in (DYNAMIC_TYPE_CLASS, ARRAY_TYPE_CLASS):
++                raise SemanticError(
++                    self.file, "multi-initialization requires an array or a dynamic value",
++                    root.meta_data.line, root.meta_data.column_start,
++                    root.meta_data.column_end,
++                )
++
++            rhs_types = right_hand.value if typ is ARRAY_TYPE_CLASS else None
++            if rhs_types is not None and len(elements) > len(rhs_types):
++                raise SemanticError(
++                    self.file, "not enough values to unpack", root.meta_data.line,
++                    root.meta_data.column_start, root.meta_data.column_end,
++                )
++            dispatch = {
++                IDENTIFIER_NODE_CLASS: walk_assignment_typical,
++                INDEX_NODE_CLASS: walk_assignment_index,
++                ARRAY_LITERAL_NODE_CLASS: walk_assignment_multi,
++                FIELD_ACCESS_NODE_CLASS: walk_assignment_field_access,
++            }
++            for index, element in enumerate(elements):
++                rhs_type = rhs_types[index] if rhs_types is not None else DYNAMIC_TYPE_CLASS()
++                target = element.root_expr
++                dispatch[type(target)](target, op_type_id, rhs_type)
+ 
+         find_assignment_type = {
+             IDENTIFIER_NODE_CLASS: walk_assignment_typical,
+@@ -756,6 +797,15 @@
+ 
+             if type_left is DYNAMIC_TYPE_CLASS or type_right is DYNAMIC_TYPE_CLASS:
+                 return DYNAMIC_TYPE_CLASS()
++            if root_type_id in (self.T_AND_ENUM_VAL, self.T_OR_ENUM_VAL):
++                # These return a selected operand, rather than always a boolean.
++                return DYNAMIC_TYPE_CLASS()
++            if (
++                root_type_id == self.T_SLASH_ENUM_VAL
++                and type_left is self.STRING_TYPE_CLASS
++                and type_right is self.STRING_TYPE_CLASS
++            ):
++                return self.ARRAY_TYPE_CLASS(value=None)
+ 
+             if root_type_id == self.T_IN_ENUM_VAL:
+                 if type_right in (
+@@ -848,84 +898,44 @@
+ 
+         elif type_root is self.INDEX_NODE_CLASS:
+             base = self.walk_expression(root.base)
+-            type_base = type(base)
+-            base_value = base.value
+-            if type_base is DYNAMIC_TYPE_CLASS:
+-                return DYNAMIC_TYPE_CLASS()
+-            # notice the if base.value
+-            # remember that if it dosent have a value its not staically knowable
+-            # so we only throw an error ifs its knowable and an error
+-            # things that are errors after evaluation will be runtime errors
+-
+-            # pretty sure from here down there is some
+-            # redundant code but it is only redundant, and working
+-            if base_value:
++            for index_expr in root.index:
++                index = self.walk_expression(index_expr.root_expr)
++                type_base = type(base)
++                if type_base is DYNAMIC_TYPE_CLASS:
++                    continue
+                 if type_base not in (
+-                    self.ARRAY_TYPE_CLASS,
+-                    self.STRING_TYPE_CLASS,
+-                    self.DICT_TYPE_CLASS,
++                    self.ARRAY_TYPE_CLASS, self.STRING_TYPE_CLASS, self.DICT_TYPE_CLASS,
+                 ):
+                     raise SemanticError(
+-                        self.file,
+-                        f"object of {type_base} not indexable",
+-                        root.meta_data.line,
+-                        root.meta_data.column_start,
++                        self.file, "object is not indexable", root.meta_data.line,
++                        root.meta_data.column_start, root.meta_data.column_end,
++                    )
++                if type_base is self.DICT_TYPE_CLASS:
++                    base = DYNAMIC_TYPE_CLASS()
++                    continue
++                if type(index) not in (
++                    self.NUMBER_TYPE_CLASS, self.BOOL_TYPE_CLASS, DYNAMIC_TYPE_CLASS,
++                ):
++                    raise SemanticError(
++                        self.file, "array and string indexes must be numbers",
++                        root.meta_data.line, root.meta_data.column_start,
+                         root.meta_data.column_end,
+                     )
+-
+-            indexes = []
+-
+-            for idx in root.index:
+-                idx_type = self.walk_expression(idx.root_expr)
+-                if type_base in (self.ARRAY_TYPE_CLASS, self.STRING_TYPE_CLASS):
+-                    if type(idx_type) not in (
+-                        self.NUMBER_TYPE_CLASS,
+-                        self.BOOL_TYPE_CLASS,
+-                        DYNAMIC_TYPE_CLASS,
+-                    ):
+-                        raise SemanticError(
+-                            self.file,
+-                            f"Index must be number when base is type {type(base)}",
+-                            root.meta_data.line,
+-                            root.meta_data.column_start,
+-                            root.meta_data.column_end,
+-                        )
+-                indexes.append(idx_type)
+-
+-            # if the base is unknowable statically than their is no point
+-            # to run over static indexes because we dont know the bounds of the base
+-            if not base_value or type_base is self.DICT_TYPE_CLASS:
+-                return DYNAMIC_TYPE_CLASS()
+-
+-            for _pos, idx in enumerate(indexes):
+-                idx_value = idx.value
+-                if type_base not in (self.ARRAY_TYPE_CLASS, self.STRING_TYPE_CLASS):
+-                    raise SemanticError(
+-                        self.file,
+-                        "Index out of bounds",
+-                        root.meta_data.line,
+-                        root.meta_data.column_start,
+-                        root.meta_data.column_end,
+-                    )
+-                element_list = base_value
+-
+-                # if the value is statically unknowable we cant continue iterating
+-                # through the indexes because we dont know where to nest into
+-                if idx_value is not None:
+-                    try:
+-                        base = element_list[idx_value]
+-                    except (IndexError, TypeError, KeyError):
+-                        raise SemanticError(
+-                            self.file,
+-                            "Index out of bounds",
+-                            root.meta_data.line,
+-                            root.meta_data.column_start,
+-                            root.meta_data.column_end,
+-                        ) from None
+-
+-                else:
+-                    return DYNAMIC_TYPE_CLASS()
+-
++                if base.value is None or index.value is None:
++                    base = DYNAMIC_TYPE_CLASS()
++                    continue
++                try:
++                    element = base.value[index.value]
++                except (IndexError, TypeError, KeyError):
++                    raise SemanticError(
++                        self.file, "Index out of bounds", root.meta_data.line,
++                        root.meta_data.column_start, root.meta_data.column_end,
++                    ) from None
++                base = (
++                    self.STRING_TYPE_CLASS(element)
++                    if type_base is self.STRING_TYPE_CLASS
++                    else element
++                )
+             return base
+ 
+         elif type_root is self.IDENTIFIER_NODE_CLASS:
+@@ -1029,7 +1039,10 @@
+             type_root_name = type(root_name)
+             len_root_args = len(root_args)
+ 
++            for arg in root_args:
++                self.walk_expression(arg.root_expr)
+             if type_root_name is not self.IDENTIFIER_NODE_CLASS:
++                self.walk_expression(root_name)
+                 return DYNAMIC_TYPE_CLASS()
+ 
+             callee_type = self.search_for_var(root_name)
+@@ -1087,10 +1100,6 @@
+             ):
+                 return built_in_to_walk[root_name_value](root)
+ 
+-            # Analyse each argument expression normally.
+-            for arg in root_args:
+-                self.walk_expression(arg.root_expr)
+-
+             return DYNAMIC_TYPE_CLASS()
+ 
+         elif type(root) is self.FIELD_ACCESS_NODE_CLASS:
+diff --git a/bang/semantic/tests_semantic/test_semantic_correctness.py b/bang/semantic/tests_semantic/test_semantic_correctness.py
+--- a/bang/semantic/tests_semantic/test_semantic_correctness.py
++++ b/bang/semantic/tests_semantic/test_semantic_correctness.py
+@@ -127,7 +127,6 @@
+         'a = ["1"]\nb = ["2"]\n a[0] /= b[0]\n',
+         "x = !5\n",
+         'x = !"1"\n',
+-        "x = ![1]\n x = !x[0]",
+         "x = [1]\n y = 2\n x && y",
+         "x = true\n y = false\n x || y",
+         'x = [true]\n y = "shello"\n x || y',
+@@ -291,6 +290,8 @@
+         "break\n",
+         # continue outside any loop
+         "continue\n",
++        # Indexing a boolean is invalid as well.
++        "x = ![1]\n x = !x[0]",
+         # Indexing a non‑array value
+         "x = 5\ny = x[0]\n",
+         # Index out of bounds where the index is a compile‑time constant
+diff --git a/bang/tests/test_regressions.py b/bang/tests/test_regressions.py
+new file mode 100644
+--- /dev/null
++++ b/bang/tests/test_regressions.py
+@@ -0,0 +1,202 @@
++"""End-to-end regressions that assert output, errors, and scope cleanup."""
++
++import contextlib
++import io
++import tempfile
++import unittest
++from pathlib import Path
++
++from bang.lexing.lexer import Lexer
++from bang.parsing.control_flow_parser import ControlFlowParser
++from bang.parsing.expression_parser import ExpressionParser
++from bang.runtime.evaluator import Evaluator, EvaluatorError
++from bang.semantic.semantic_analysis import SemanticAnalysis, SemanticError
++
++
++def compile_program(code, *, analyze=True):
++    with tempfile.TemporaryDirectory() as directory:
++        source = Path(directory) / "program.bang"
++        source.write_text(code, encoding="utf-8")
++        lexer = Lexer(source)
++        parser = ExpressionParser(lexer.tokenizer(), lexer.text)
++        parser.split()
++        parser.loading_into_algos()
++        roots = ControlFlowParser(lexer.text, parser.post_SYA).blockenize()
++        if analyze:
++            SemanticAnalysis(lexer.text, roots).walk_program()
++        return Evaluator(lexer.text, roots)
++
++
++class RegressionTests(unittest.TestCase):
++    def assert_output(self, code, expected):
++        evaluator = compile_program(code)
++        output = io.StringIO()
++        with contextlib.redirect_stdout(output):
++            evaluator.eval_program()
++        self.assertEqual(output.getvalue(), expected)
++        self.assertEqual(len(evaluator.scope_stack), 1)
++        self.assertEqual(evaluator.loop_depth, 0)
++        return evaluator
++
++    def test_false_elif_is_skipped(self):
++        self.assert_output("if false; print{1}; elif false; print{2}; end; end", "")
++
++    def test_else_runs_after_false_elif(self):
++        self.assert_output(
++            "if false; print{1}; elif false; print{2}; end; else; print{3}; end; end",
++            "3\n",
++        )
++
++    def test_first_true_elif_is_selected(self):
++        self.assert_output(
++            "if false; print{0}; elif false; print{1}; end; "
++            "elif true; print{2}; end; else; print{3}; end; end", "2\n",
++        )
++
++    def test_and_short_circuits(self):
++        self.assert_output("print{false && (1 / 0)}", "0\n")
++
++    def test_or_short_circuits(self):
++        self.assert_output("print{true || (1 / 0)}", "1\n")
++
++    def test_logic_preserves_operand_values(self):
++        self.assert_output('x = "hello" || "world"; print{x + "!", [] || [2]}',
++                           "hello! [2]\n")
++
++    def test_compound_rhs_runs_once(self):
++        self.assert_output(
++            "fn tick args; print{7}; return 1; end; x = 0; x += tick{}; print{x}",
++            "7\n1\n",
++        )
++
++    def test_compound_index_and_rhs_run_once_in_order(self):
++        self.assert_output(
++            'fn where args; print{"index"}; return 0; end; '
++            'fn value args; print{"rhs"}; return 3; end; '
++            'xs = [1]; xs[where{}] += value{}; print{xs}',
++            "index\nrhs\n[4]\n",
++        )
++
++    def test_compound_field_base_runs_once(self):
++        self.assert_output(
++            'data Box [value]; b = Box{1}; '
++            'fn get args; print{"target"}; return b; end; '
++            'fn value args; print{"rhs"}; return 2; end; '
++            'get{}.value += value{}; print{b.value}',
++            "target\nrhs\n3\n",
++        )
++
++    def test_nested_compound_destructuring_rhs_runs_once(self):
++        self.assert_output(
++            'fn values args; print{"rhs"}; return [3,[4]]; end; '
++            '[a,[b]] = [1,[2]]; [a,[b]] += values{}; print{a,b}',
++            "rhs\n4 6\n",
++        )
++
++    def test_function_result_can_be_destructured(self):
++        self.assert_output(
++            "fn pair args; return [1,2]; end; [a,b] = pair{}; print{a,b}", "1 2\n",
++        )
++
++    def test_nested_dynamic_destructuring(self):
++        self.assert_output(
++            "fn pair args; return [1,[2]]; end; [a,[b]] = pair{}; print{a,b}",
++            "1 2\n",
++        )
++
++    def test_unknown_array_shape_can_be_destructured(self):
++        self.assert_output("[a,b] = [1] + [2]; print{a,b}", "1 2\n")
++
++    def test_dynamic_unpack_checks_length_at_runtime(self):
++        with self.assertRaises(EvaluatorError):
++            compile_program("fn pair args; return [1]; end; [a,b] = pair{}").eval_program()
++
++    def test_branch_type_changes_do_not_poison_following_code(self):
++        self.assert_output('x = 1; if false; x = "s"; end; print{x + 1}', "2\n")
++
++    def test_branches_start_from_independent_type_environments(self):
++        self.assert_output(
++            'x = 1; if false; x = "s"; elif false; print{x + 1}; end; '
++            'else; print{x + 1}; end; end; print{x + 1}', "2\n2\n",
++        )
++
++    def test_function_definition_does_not_assign_outer_types(self):
++        self.assert_output('x = 1; fn f args; x = "s"; end; print{x + 1}', "2\n")
++
++    def test_while_local_does_not_escape(self):
++        with self.assertRaises(SemanticError):
++            compile_program("while false; x = 1; end; print{x}")
++
++    def test_while_updates_existing_outer_binding(self):
++        self.assert_output("x = 0; while x < 2; x += 1; end; print{x}", "2\n")
++
++    def test_while_type_change_is_conservative(self):
++        self.assert_output('x = 1; while false; x = "s"; end; print{x + 1}', "2\n")
++
++    def test_loop_can_carry_a_record_initialized_on_an_earlier_iteration(self):
++        self.assert_output(
++            "data Node [value,next]; head = none; tail = none; for i 3; "
++            "node = Node{i}; if head == none; [head,tail] = [node,node]; "
++            "else; tail.next = node; tail = node; end; end; end; print{head.next.value}",
++            "1\n",
++        )
++
++    def test_for_bound_is_checked(self):
++        with self.assertRaises(SemanticError):
++            compile_program("for i missing; end")
++
++    def test_dynamic_callee_arguments_are_checked(self):
++        with self.assertRaises(SemanticError):
++            compile_program("fn f args; return len; end; f{}{missing}")
++
++    def test_function_cannot_break_its_callers_loop(self):
++        with self.assertRaises(SemanticError):
++            compile_program("for i 1; fn f args; break; end; f{}; end")
++
++    def test_runtime_also_rejects_cross_function_break(self):
++        evaluator = compile_program("for i 1; fn f args; break; end; f{}; end", analyze=False)
++        with self.assertRaises(EvaluatorError):
++            evaluator.eval_program()
++        self.assertEqual(evaluator.loop_depth, 0)
++        self.assertEqual(len(evaluator.scope_stack), 1)
++
++    def test_continue_unwinds_if_scope(self):
++        self.assert_output(
++            "i = 0; total = 0; while i < 3; i += 1; "
++            "if i == 1; local = 9; continue; end; total += i; end; print{total}",
++            "5\n",
++        )
++
++    def test_return_unwinds_loop_and_if_scopes(self):
++        self.assert_output(
++            "fn f args; for i 3; if i == 1; return i; end; end; return 9; end; print{f{}}",
++            "1\n",
++        )
++
++    def test_true_division_broadcasts_in_operand_order(self):
++        self.assert_output("print{[2] / [4,8], [4,8] / [2]}",
++                           "[0.5, 0.25] [2.0, 4.0]\n")
++
++    def test_floor_division_broadcasts_in_operand_order(self):
++        self.assert_output("print{[9] // [2,4], [9,8] // [2]}", "[4, 2] [4, 4]\n")
++
++    def test_broadcast_zero_numerator_is_valid(self):
++        self.assert_output("print{[0] / [4,8]}", "[0.0, 0.0]\n")
++
++    def test_broadcast_zero_denominator_is_rejected(self):
++        with self.assertRaises(EvaluatorError):
++            compile_program("print{[2] / [4,0]}").eval_program()
++
++    def test_division_rejects_incompatible_shapes(self):
++        with self.assertRaises(EvaluatorError):
++            compile_program("print{[1,2] / [3,4,5]}").eval_program()
++
++    def test_nested_index_has_the_selected_elements_type(self):
++        self.assert_output("a = [[1,2],[3,4]]; print{a[0][1] + 1}", "3\n")
++
++    def test_string_division_has_array_result_type(self):
++        self.assert_output('x = "a b" / " "; print{x + ["c"]}', "['a', 'b', 'c']\n")
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/pyproject.toml b/pyproject.toml
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -59,4 +59,8 @@
+ 
+ 
+ [tool.ruff.format]
+-exclude = ["examples/**"]
+\ No newline at end of file
++exclude = ["examples/**"]
++
++# Profiling scripts use optional tools and are not correctness tests.
++[tool.pytest.ini_options]
++python_files = ["test_*correctness.py", "test_regressions.py"]

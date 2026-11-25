@@ -699,6 +699,14 @@ class ExpressionParser:
 
             elif tok_type_id in DEPTH_ENDERS:
                 if depth == 0:
+                    if tok_type_id != DEPTH_CREATORS[line[0].type_enum_id]:
+                        raise ParserError(
+                            self.file,
+                            "mismatched brackets",
+                            tok.line,
+                            tok.column_start,
+                            tok.column_end,
+                        )
                     if current:
                         elements.append(self.shunting_yard_algo(current))
 
@@ -757,6 +765,15 @@ class ExpressionParser:
         VALID_LEFT_HANDS = self.VALID_LEFT_HANDS
         assignment_op_token = line[assignment_idx]
         left_hand = line[:assignment_idx]
+
+        if not left_hand or assignment_idx == len(line) - 1:
+            raise ParserError(
+                self.file,
+                "assignment requires a target and a value",
+                assignment_op_token.line,
+                assignment_op_token.column_start,
+                assignment_op_token.column_end,
+            )
 
         left_hand_node = self.shunting_yard_algo(left_hand).root_expr
 
@@ -867,6 +884,14 @@ class ExpressionParser:
             # ── close bracket ───────────────────────────────────────────────
             elif tok_type_id in DEPTH_ENDERS:
                 if depth == 0:
+                    if tok_type_id != DEPTH_CREATORS[line[0].type_enum_id]:
+                        raise ParserError(
+                            self.file,
+                            "mismatched brackets",
+                            tok.line,
+                            tok.column_start,
+                            tok.column_end,
+                        )
                     if current:
                         elements.append(self.shunting_yard_algo(current))
                     return ARRAY_LITERAL_NODE_CLASS(elements, meta_data=line[0]), tok_idx
@@ -903,6 +928,15 @@ class ExpressionParser:
     # to this algo, which will either return a valid expression node
     # , or raise an error because the list wasn't a valid expression
     def shunting_yard_algo(self, line):
+        if not line:
+            anchor = self.tokens[-1] if self.tokens else None
+            raise ParserError(
+                self.file,
+                "expected an expression",
+                anchor.line if anchor else 1,
+                anchor.column_start if anchor else 1,
+                anchor.column_end if anchor else 1,
+            )
         output = []
         op_stack = []
         expect_operand = True
@@ -919,6 +953,15 @@ class ExpressionParser:
 
         def apply_operator():
             op_tok, op_tok_type_id = op_stack.pop()
+            arity = 1 if self.IS_UNARY[op_tok_type_id] else 2
+            if len(output) < arity:
+                raise ParserError(
+                    self.file,
+                    "operator is missing an operand",
+                    op_tok.line,
+                    op_tok.column_start,
+                    op_tok.column_end,
+                )
 
             # unary
             # we probably want to make this and most other things in this
@@ -1103,6 +1146,15 @@ class ExpressionParser:
             tok_idx += 1
 
         if self.illegal_assignment != 2:
+            if expect_operand:
+                last = line[-1]
+                raise ParserError(
+                    self.file,
+                    "expected an operand after this token",
+                    last.line,
+                    last.column_start,
+                    last.column_end,
+                )
             while op_stack:
                 top, top_type_id = op_stack[-1]
                 if top_type_id in (self.T_LPAREN_ENUM_VAL, self.T_RPAREN_ENUM_VAL):
@@ -1119,5 +1171,14 @@ class ExpressionParser:
                     )
                 apply_operator()
 
+            if len(output) != 1:
+                last = line[-1]
+                raise ParserError(
+                    self.file,
+                    "expected exactly one expression",
+                    last.line,
+                    last.column_start,
+                    last.column_end,
+                )
             root = output.pop()
             return self.EXPRESSION_NODE_CLASS(root_expr=root)

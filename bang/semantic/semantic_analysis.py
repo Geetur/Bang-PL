@@ -1,9 +1,7 @@
-# ONLY APPLIES TO STATICALLY KNOWABLE THINGS
-# after this pass we are every variable is guaranteed to be defined before use;
-# every break, continue, return, is guaranteed to bee associated with a loop/function;
-# all statically known indexes are guaranteed to be numbers;
-# all bin ops and unary ops are guaranteed to be valid if statically known
-# the majority of errors that can be statically determined are determined.
+# Best-effort checks for bindings, known types, and control-flow placement.
+# Dynamic values and facts that differ across paths are checked at runtime.
+
+from copy import deepcopy
 
 from bang.lexing.lexer_tokens import (
     T_AND_ENUM_VAL,
@@ -363,19 +361,19 @@ class SemanticAnalysis:
         return handler(root)
 
     def walk_function(self, root):
-        function_name = root.name
-        args_name = root.arg_list_name
-        # its really important to initalize the function outside of its bodys scope
-        #
-        self.initalize_var(function_name, self.FUNCTION_TYPE_CLASS(value=root.body))
-
+        self.initalize_var(root.name, self.FUNCTION_TYPE_CLASS(value=root.body))
+        saved_scopes = self.scope_stack
+        saved_loop_depth = self.loop_depth
+        self.scope_stack = deepcopy(saved_scopes) + [{}]
+        self.scope_stack[-1][root.arg_list_name] = self.DYNAMIC_TYPE_CLASS()
+        self.loop_depth = 0
         self.func_depth += 1
-        self.scope_stack.append({})
-        self.initalize_var(args_name, self.DYNAMIC_TYPE_CLASS())
-
-        self.walk_block(root.body)
-        self.scope_stack.pop()
-        self.func_depth -= 1
+        try:
+            self.walk_block(root.body)
+        finally:
+            self.scope_stack = saved_scopes
+            self.loop_depth = saved_loop_depth
+            self.func_depth -= 1
 
     def walk_dataclass(self, root):
         dataclass_name = root.name
@@ -390,51 +388,115 @@ class SemanticAnalysis:
         for construct in root.block:
             self.walk_construct(construct)
 
-    def walk_if(self, root):
-        self.walk_expression(root.condition.root_expr)
-        self.scope_stack.append({})
-        self.walk_block(root.body)
-        self.scope_stack.pop()
+    def _widen_loop_bindings(self, root):
+        """Assignments may have run on a previous iteration of this loop."""
+        written = set()
 
-        for elif_root in root.elif_branch.block:
-            self.walk_elif(elif_root)
-        for else_root in root.else_branch.block:
-            self.walk_else(else_root)
+        def target_names(target):
+            typ = type(target)
+            if typ is self.IDENTIFIER_NODE_CLASS:
+                written.add(target.value)
+            elif typ is self.ARRAY_LITERAL_NODE_CLASS:
+                for element in target.elements:
+                    target_names(element.root_expr)
+            elif typ in (self.INDEX_NODE_CLASS, self.FIELD_ACCESS_NODE_CLASS):
+                target_names(target.base)
+
+        def visit(node):
+            typ = type(node)
+            if typ is self.ASSIGNMENT_NODE_CLASS:
+                target_names(node.left_hand)
+                return
+            if typ in (self.FUNCTION_NODE_CLASS, self.DATA_CLASS_NODE_CLASS):
+                written.add(node.name)
+                return
+            if typ is self.FOR_NODE_CLASS:
+                written.add(node.variable.value)
+            for name in ("body", "elif_branch", "else_branch"):
+                block = getattr(node, name, None)
+                if block is not None:
+                    for child in block.block:
+                        visit(child)
+
+        visit(root)
+        for name in written:
+            for scope in reversed(self.scope_stack):
+                if name in scope:
+                    scope[name] = self.DYNAMIC_TYPE_CLASS()
+                    break
+
+    def _walk_scoped_path(self, root, *, loop_variable=None):
+        """Check one possible path without changing another path's input."""
+        saved_scopes = self.scope_stack
+        self.scope_stack = deepcopy(saved_scopes)
+        try:
+            if type(root) in (self.FOR_NODE_CLASS, self.WHILE_NODE_CLASS):
+                self._widen_loop_bindings(root)
+            if hasattr(root, "condition"):
+                self.walk_expression(root.condition.root_expr)
+            self.scope_stack.append({})
+            if loop_variable is not None:
+                self.initalize_var(loop_variable, self.DYNAMIC_TYPE_CLASS())
+            self.walk_block(root.body)
+            self.scope_stack.pop()
+            return self.scope_stack
+        finally:
+            self.scope_stack = saved_scopes
+
+    def _merge_control_paths(self, paths):
+        """Keep only facts valid both before and after every possible path."""
+        value_types = (
+            self.NUMBER_TYPE_CLASS,
+            self.BOOL_TYPE_CLASS,
+            self.STRING_TYPE_CLASS,
+            self.NONE_TYPE_CLASS,
+            self.ARRAY_TYPE_CLASS,
+            self.SET_TYPE_CLASS,
+            self.DICT_TYPE_CLASS,
+            self.FUNCTION_TYPE_CLASS,
+        )
+        for depth, scope in enumerate(self.scope_stack):
+            for name, before in list(scope.items()):
+                options = [before] + [path[depth][name] for path in paths]
+                typ = type(before)
+                if all(type(value) is typ for value in options) and typ in value_types:
+                    # A stable type does not imply a stable value or array shape.
+                    scope[name] = typ(value=None)
+                elif typ is self.DATA_CLASS_TYPE_CLASS and all(
+                    type(value) is typ and value.fields == before.fields for value in options
+                ):
+                    scope[name] = before
+                else:
+                    scope[name] = self.DYNAMIC_TYPE_CLASS()
+
+    def walk_if(self, root):
+        branches = [root] + root.elif_branch.block + root.else_branch.block
+        paths = [self._walk_scoped_path(branch) for branch in branches]
+        self._merge_control_paths(paths)
 
     def walk_elif(self, root):
-        self.walk_expression(root.condition.root_expr)
-        self.scope_stack.append({})
-        self.walk_block(root.body)
-        self.scope_stack.pop()
+        self._merge_control_paths([self._walk_scoped_path(root)])
 
     def walk_else(self, root):
-        self.scope_stack.append({})
-        self.walk_block(root.body)
-        self.scope_stack.pop()
+        self._merge_control_paths([self._walk_scoped_path(root)])
 
     def walk_for(self, root):
+        # The bound is an expression too: validate it before binding the loop variable.
+        self.walk_expression(root.bound.root_expr)
         self.loop_depth += 1
-        self.scope_stack.append({})
-        left_hand_name = root.variable.value
-        right_hand_type = self.DYNAMIC_TYPE_CLASS()
-        if type(right_hand_type) in (self.NONE_TYPE_CLASS,):
-            raise SemanticError(
-                self.file,
-                "For loop bound must be an array, identifier, or number",
-                root.meta_data.line,
-                root.meta_data.column_start,
-                root.meta_data.column_end,
-            )
-        self.initalize_var(left_hand_name, right_hand_type)
-        self.walk_block(root.body)
-        self.scope_stack.pop()
-        self.loop_depth -= 1
+        try:
+            path = self._walk_scoped_path(root, loop_variable=root.variable.value)
+        finally:
+            self.loop_depth -= 1
+        self._merge_control_paths([path])
 
     def walk_while(self, root):
         self.loop_depth += 1
-        self.walk_expression(root.condition.root_expr)
-        self.walk_block(root.body)
-        self.loop_depth -= 1
+        try:
+            path = self._walk_scoped_path(root)
+        finally:
+            self.loop_depth -= 1
+        self._merge_control_paths([path])
 
     def walk_break(self, root):
         if self.loop_depth == 0:
@@ -679,47 +741,36 @@ class SemanticAnalysis:
             parent_instance_type.fields[final_field] = right_hand
 
         def walk_assignment_multi(left_hand, op_type_id, right_hand):
-            type_right_hand = type(right_hand)
-            right_hand_value = right_hand.value
-            left_hand_elements = left_hand.elements
-            len_left_hand_elements = len(left_hand_elements)
-            if type_right_hand is not DYNAMIC_TYPE_CLASS:
-                if type_right_hand is not ARRAY_TYPE_CLASS:
-                    raise SemanticError(
-                        self.file,
-                        "multi-initialization requires right hand"
-                        " to be dynamic type or static array type",
-                        root.meta_data.line,
-                        root.meta_data.column_start,
-                        root.meta_data.column_end,
-                    )
-                if len_left_hand_elements > len(right_hand_value):
-                    raise SemanticError(
-                        self.file,
-                        "multi-initialization requires right hand length "
-                        "to be equal to or greater than left hand length",
-                        root.meta_data.line,
-                        root.meta_data.column_start,
-                        root.meta_data.column_end,
-                    )
-
-                rhs_types = (
-                    right_hand_value
-                    if type_right_hand is ARRAY_TYPE_CLASS
-                    else [DYNAMIC_TYPE_CLASS()] * len_left_hand_elements
+            typ = type(right_hand)
+            elements = left_hand.elements
+            if typ not in (DYNAMIC_TYPE_CLASS, ARRAY_TYPE_CLASS):
+                raise SemanticError(
+                    self.file,
+                    "multi-initialization requires an array or a dynamic value",
+                    root.meta_data.line,
+                    root.meta_data.column_start,
+                    root.meta_data.column_end,
                 )
 
-                dispatch = {
-                    IDENTIFIER_NODE_CLASS: walk_assignment_typical,
-                    INDEX_NODE_CLASS: walk_assignment_index,
-                    ARRAY_LITERAL_NODE_CLASS: walk_assignment_multi,  # nested destructuring
-                    FIELD_ACCESS_NODE_CLASS: walk_assignment_field_access,
-                }
-
-                for i, n in enumerate(left_hand_elements):
-                    left_hand_node = n.root_expr
-                    rhs_type = rhs_types[i] if i < len(rhs_types) else DYNAMIC_TYPE_CLASS
-                    dispatch[type(left_hand_node)](left_hand_node, op_type_id, rhs_type)
+            rhs_types = right_hand.value if typ is ARRAY_TYPE_CLASS else None
+            if rhs_types is not None and len(elements) > len(rhs_types):
+                raise SemanticError(
+                    self.file,
+                    "not enough values to unpack",
+                    root.meta_data.line,
+                    root.meta_data.column_start,
+                    root.meta_data.column_end,
+                )
+            dispatch = {
+                IDENTIFIER_NODE_CLASS: walk_assignment_typical,
+                INDEX_NODE_CLASS: walk_assignment_index,
+                ARRAY_LITERAL_NODE_CLASS: walk_assignment_multi,
+                FIELD_ACCESS_NODE_CLASS: walk_assignment_field_access,
+            }
+            for index, element in enumerate(elements):
+                rhs_type = rhs_types[index] if rhs_types is not None else DYNAMIC_TYPE_CLASS()
+                target = element.root_expr
+                dispatch[type(target)](target, op_type_id, rhs_type)
 
         find_assignment_type = {
             IDENTIFIER_NODE_CLASS: walk_assignment_typical,
@@ -756,6 +807,15 @@ class SemanticAnalysis:
 
             if type_left is DYNAMIC_TYPE_CLASS or type_right is DYNAMIC_TYPE_CLASS:
                 return DYNAMIC_TYPE_CLASS()
+            if root_type_id in (self.T_AND_ENUM_VAL, self.T_OR_ENUM_VAL):
+                # These return a selected operand, rather than always a boolean.
+                return DYNAMIC_TYPE_CLASS()
+            if (
+                root_type_id == self.T_SLASH_ENUM_VAL
+                and type_left is self.STRING_TYPE_CLASS
+                and type_right is self.STRING_TYPE_CLASS
+            ):
+                return self.ARRAY_TYPE_CLASS(value=None)
 
             if root_type_id == self.T_IN_ENUM_VAL:
                 if type_right in (
@@ -848,18 +908,11 @@ class SemanticAnalysis:
 
         elif type_root is self.INDEX_NODE_CLASS:
             base = self.walk_expression(root.base)
-            type_base = type(base)
-            base_value = base.value
-            if type_base is DYNAMIC_TYPE_CLASS:
-                return DYNAMIC_TYPE_CLASS()
-            # notice the if base.value
-            # remember that if it dosent have a value its not staically knowable
-            # so we only throw an error ifs its knowable and an error
-            # things that are errors after evaluation will be runtime errors
-
-            # pretty sure from here down there is some
-            # redundant code but it is only redundant, and working
-            if base_value:
+            for index_expr in root.index:
+                index = self.walk_expression(index_expr.root_expr)
+                type_base = type(base)
+                if type_base is DYNAMIC_TYPE_CLASS:
+                    continue
                 if type_base not in (
                     self.ARRAY_TYPE_CLASS,
                     self.STRING_TYPE_CLASS,
@@ -867,65 +920,44 @@ class SemanticAnalysis:
                 ):
                     raise SemanticError(
                         self.file,
-                        f"object of {type_base} not indexable",
+                        "object is not indexable",
                         root.meta_data.line,
                         root.meta_data.column_start,
                         root.meta_data.column_end,
                     )
-
-            indexes = []
-
-            for idx in root.index:
-                idx_type = self.walk_expression(idx.root_expr)
-                if type_base in (self.ARRAY_TYPE_CLASS, self.STRING_TYPE_CLASS):
-                    if type(idx_type) not in (
-                        self.NUMBER_TYPE_CLASS,
-                        self.BOOL_TYPE_CLASS,
-                        DYNAMIC_TYPE_CLASS,
-                    ):
-                        raise SemanticError(
-                            self.file,
-                            f"Index must be number when base is type {type(base)}",
-                            root.meta_data.line,
-                            root.meta_data.column_start,
-                            root.meta_data.column_end,
-                        )
-                indexes.append(idx_type)
-
-            # if the base is unknowable statically than their is no point
-            # to run over static indexes because we dont know the bounds of the base
-            if not base_value or type_base is self.DICT_TYPE_CLASS:
-                return DYNAMIC_TYPE_CLASS()
-
-            for _pos, idx in enumerate(indexes):
-                idx_value = idx.value
-                if type_base not in (self.ARRAY_TYPE_CLASS, self.STRING_TYPE_CLASS):
+                if type_base is self.DICT_TYPE_CLASS:
+                    base = DYNAMIC_TYPE_CLASS()
+                    continue
+                if type(index) not in (
+                    self.NUMBER_TYPE_CLASS,
+                    self.BOOL_TYPE_CLASS,
+                    DYNAMIC_TYPE_CLASS,
+                ):
+                    raise SemanticError(
+                        self.file,
+                        "array and string indexes must be numbers",
+                        root.meta_data.line,
+                        root.meta_data.column_start,
+                        root.meta_data.column_end,
+                    )
+                if base.value is None or index.value is None:
+                    base = DYNAMIC_TYPE_CLASS()
+                    continue
+                try:
+                    element = base.value[index.value]
+                except (IndexError, TypeError, KeyError):
                     raise SemanticError(
                         self.file,
                         "Index out of bounds",
                         root.meta_data.line,
                         root.meta_data.column_start,
                         root.meta_data.column_end,
-                    )
-                element_list = base_value
-
-                # if the value is statically unknowable we cant continue iterating
-                # through the indexes because we dont know where to nest into
-                if idx_value is not None:
-                    try:
-                        base = element_list[idx_value]
-                    except (IndexError, TypeError, KeyError):
-                        raise SemanticError(
-                            self.file,
-                            "Index out of bounds",
-                            root.meta_data.line,
-                            root.meta_data.column_start,
-                            root.meta_data.column_end,
-                        ) from None
-
-                else:
-                    return DYNAMIC_TYPE_CLASS()
-
+                    ) from None
+                base = (
+                    self.STRING_TYPE_CLASS(element)
+                    if type_base is self.STRING_TYPE_CLASS
+                    else element
+                )
             return base
 
         elif type_root is self.IDENTIFIER_NODE_CLASS:
@@ -1029,7 +1061,10 @@ class SemanticAnalysis:
             type_root_name = type(root_name)
             len_root_args = len(root_args)
 
+            for arg in root_args:
+                self.walk_expression(arg.root_expr)
             if type_root_name is not self.IDENTIFIER_NODE_CLASS:
+                self.walk_expression(root_name)
                 return DYNAMIC_TYPE_CLASS()
 
             callee_type = self.search_for_var(root_name)
@@ -1086,10 +1121,6 @@ class SemanticAnalysis:
                 self.DICT_TYPE_CLASS,
             ):
                 return built_in_to_walk[root_name_value](root)
-
-            # Analyse each argument expression normally.
-            for arg in root_args:
-                self.walk_expression(arg.root_expr)
 
             return DYNAMIC_TYPE_CLASS()
 
