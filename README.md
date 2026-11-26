@@ -2,335 +2,404 @@
 
 > **Built for prototyping. No ceremony.**
 
-This repository is a **from-scratch reference implementation** of **Bang**, a small scripting language you can read, hack, and extend in a single afternoon. The codebase walks a Bang program through every classic compiler/interpreter stage—**lexing → expression parsing → control-flow parsing → static (semantic) analysis → evaluation**—all in ~3 kLOC of tidy, commented Python.
+**Bang** is a small scripting language built around expressive array operations, flexible function calls, and a readable Python interpreter. It supports destructuring, first-class functions, persistent closures, and records, with separate stages for **lexing → expression parsing → control-flow parsing → semantic analysis → evaluation**.
 
-![alt text](Bang.png)
+This repository contains the language's from-scratch reference implementation, examples, and correctness tests. Each stage is accessible on its own, making Bang a practical codebase for exploring how an interpreter works and extending it with new behavior.
+
+![Bang programming language](Bang.png)
+
 ---
 
 ## Table of Contents
-1. [Motivation](#motivation)  
-2. [Key Language Features](#key-language-features)  
-3. [Architecture Overview](#architecture-overview)  
-4. [File / Module Guide](#file--module-guide)  
-5. [Getting Started](#getting-started)  
-6. [Running Bang Code](#running-bang-code)  
-7. [Running the Test-Suite](#running-the-test-suite)  
-8. [Extending the Language](#extending-the-language)  
-9. [Project Roadmap](#project-roadmap)  
-10. [Contributing](#contributing)  
-11. [License](#license)  
+
+1. [Motivation](#motivation)
+2. [Key Language Features](#key-language-features)
+3. [Architecture Overview](#architecture-overview)
+4. [File / Module Guide](#file--module-guide)
+5. [Getting Started](#getting-started)
+6. [Running Bang Code](#running-bang-code)
+7. [Examples!](#examples)
+8. [Stabilized Behavior](#stabilized-behavior)
+9. [Function Arguments](#function-arguments)
+10. [Running the Test-Suite](#running-the-test-suite)
+11. [Extending the Language](#extending-the-language)
+12. [Project Roadmap](#project-roadmap)
+13. [Contributing](#contributing)
+14. [License](#license)
 
 ---
 
 ## Motivation
-Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized language** that proves mastery over parsing, static analysis, runtime design, and project architecture—without the 50 kLOC overhead of a “real” compiler. Every stage is separately implemented and individually testable, so you can observe _exactly_ how code is transformed step by step. 
+
+Bang explores how much useful behavior can fit into a small, approachable language. Arrays are central: you can combine them, operate on corresponding elements, destructure results, and pass a variable number of arguments as an array.
+
+The interpreter is also part of the project. Parsing, checking, and execution live in separate modules, so you can follow a program from source text to runtime values and understand where each language rule is implemented.
 
 ## Key Language Features
-* **Array-first syntax** with intuitive overloading:  
-  `[1,2,3] + [4]`, `[1,2,3] / [5]`, `[1,2,3] / [4,5,6]`, `[1,2,3] * 2`, and `[a,b,c] = [1, 2, 3]`  to append, element-wise divise, duplicate, and multi-initialize respectivley.
-* Familiar operators `+ - * / // **`, Boolean logic `&&`, `||`, unary `!`, and compound assignments `+=`, `-=`, …
-* Tiny but expressive **control flow** (`if / elif / else`, `for`, `while`, `break`, `continue`).
-* **First-class functions** with a variadic argument array or declared parameters, per-call defaults and named arguments.
-* **Built-ins**: `print`, `len`, `sum`, `min`, `max` — super easy to extend, essentially just have to write a function defining the behaviour.
-* **Static checks where information is available**: the semantic pass checks bindings, known operand types, and control-flow placement. Dynamic values and uncertain types retain runtime checks.
+
+* **Array-centric operators:** concatenate with `+`, remove matching elements with `-`, and perform element-wise `*`, `/`, and `//`, including singleton broadcasting. `[1,2] * 2` repeats each element and produces `[1,1,2,2]`.
+* **Destructuring and compound assignment:** `[a,b] = [1,2]`, nested targets, and `+=`, `-=`, `*=`, `/=`.
+* **Familiar expressions and control flow:** arithmetic, comparisons, membership with `in`, short-circuit `&&` and `||`, unary `!`, and `if`, `elif`, `else`, `for`, `while`, `break`, and `continue`.
+* **Flexible function interfaces:** a variadic argument array, that array combined with named options, or a fixed list of declared parameters. Defaults evaluate per call.
+* **First-class functions and persistent closures:** return functions, store them in containers or records, and preserve captured state across calls.
+* **Records, sets, and dictionaries:** define record types with `data`, access fields with `.`, and construct sets and dictionaries with `set{...}` and `dict{...}`.
+* **A compact builtin library:** `print`, `len`, `sum`, `min`, `max`, `sort`, `range`, `set`, and `dict`.
+* **Checks at both stages:** semantic analysis validates bindings, known type information, and control-flow placement; runtime checks handle values that remain dynamic.
 
 ## Architecture Overview
-┌────────┐ ┌──────────────────┐ ┌────────────────┐ ┌──────────────┐ ┌────────────┐
-│ Source │ → │ Lexer (tokens) │ → │ Expression-SYA │ → │ Blockenizer │ → │ Semantics │ → Evaluator
-└────────┘ └──────────────────┘ └────────────────┘ └──────────────┘ └────────────┘
-^ ^ ^ ^
-│ each pass guarantees invariants & raises rich error objects
+
+A `.bang` file passes through five stages:
+
+```mermaid
+flowchart LR
+    L["Lexer"] -->|Tokens| E["Expression parser"]
+    E -->|Statement ASTs| C["Control-flow parser"]
+    C -->|Nested AST| S["Semantic checker"]
+    S -->|Checked program| R["Evaluator"]
+```
+
+The expression parser uses shunting-yard parsing to resolve precedence and build expression trees. The control-flow parser organizes statements into blocks. Semantic analysis checks what can be established before execution, and the evaluator executes the resulting program with runtime validation.
+
+## File / Module Guide
 
 | Path | Responsibility |
 |------|----------------|
-| `lexer.py` | Tokenises `.bang` files. |
-| `expression_parser.py` | Builds per-line ASTs, resolves unary/binary ambiguity, handles function calls. |
-| `control_flow_parser.py` | Converts flat node list into nested blocks (`if`, `for`, etc.). |
-| `parser_nodes.py` | All immutable AST node dataclasses (shared). |
-| `semantic_analysis.py` | Static checker; defines lightweight _type objects_. |
-| `evaluator.py` | Runtime evaluator with built-in functions and array semantics. |
-| `evaluator_nodes.py` | Runtime-only constructs (currently just `RuntimeFunction`). |
-| `*_tests.py` | Pytest suites exercising semantics & runtime. |
+| `bang/lexing/lexer.py` | Reads UTF-8 source and produces tokens with source locations. |
+| `bang/lexing/lexer_tokens.py` | Defines token types, keywords, and symbols. |
+| `bang/parsing/expression_parser.py` | Parses expressions, assignments, function declarations, and calls. |
+| `bang/parsing/control_flow_parser.py` | Organizes statements into nested control-flow and function blocks. |
+| `bang/parsing/parser_nodes.py` | Defines the AST nodes shared by later stages. |
+| `bang/calling.py` | Shares argument-binding rules between the checker and evaluator. |
+| `bang/semantic/semantic_analysis.py` | Checks bindings, available type facts, and control-flow placement. |
+| `bang/semantic/semantic_nodes.py` | Defines the checker's type and value facts. |
+| `bang/runtime/evaluator.py` | Executes programs and implements builtins and operator behavior. |
+| `bang/runtime/evaluator_nodes.py` | Represents runtime functions, record constructors, and instances. |
+| `bang/cli.py` | Implements the `bang` command and diagnostic exit handling. |
+| `bang/tests/test_regressions.py` | Checks behavior across stages, including output, errors, and scope cleanup. |
 
 ## Getting Started
-```bash
 
-# 1. Clone
+**Python 3.10 or newer** is required. The interpreter uses the Python standard library; development tools are optional extras.
+
+```bash
+# 1. Clone the repository
 git clone https://github.com/Geetur/Bang-PL.git
 cd Bang-PL
 
-# 2. (Optional) Create a virtualenv
-
-# Unix/macOS
+# 2. Create a virtual environment
 python -m venv .venv
-source .venv/bin/activate
-
-# Windows (PowerShell)
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-
-# 3. Install Bang and dev dependencies (as defined in pyproject.toml)
-#    This installs the `bang` console script plus ruff, pre-commit, and pytest
-pip install -e .[dev]
-
-# 4. Set up Git hooks (configured in .pre-commit-config.yaml)
-#    Installs pre-commit hooks for linting via ruff
-pre-commit install
-
-# After this step you should have a bang console‑script on your PATH. If not, fall back to python ‑m bang.
 ```
-Python 3.10+ is required (pattern-matching FTW).
+
+Activate the environment on **Linux/macOS**:
+
+```bash
+source .venv/bin/activate
+```
+
+Or on **Windows PowerShell**:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+Install Bang in editable mode:
+
+```bash
+python -m pip install -e .
+```
+
+For development, install the test and lint tools and enable the Git hooks:
+
+```bash
+python -m pip install -e ".[dev]"
+pre-commit install
+```
+
+Editable installation makes source changes available without reinstalling the package.
 
 ## Running Bang Code
-If you followed the getting started (installed -e .) you can write:
+
+Run a source file with the installed command:
+
+```bash
+bang examples/input2.bang
 ```
-# this is an example! use whatever file path you want!
-bang examples\input2.bang
+
+You can also run Bang directly from the repository root:
+
+```bash
+python -m bang examples/input2.bang
 ```
-in your terminal to run whatever bang program you want.
 
-if not, write:
+To inspect the tokens or AST before execution:
 
+```bash
+bang examples/input2.bang --tokens
+bang examples/input2.bang --ast
 ```
-python -m bang examples\input2.bang
-```
-which will work regardless if you installed -e . or not!
 
+Calls use **curly braces** (`print{"Hello"}`); parentheses group expressions. Statements are separated by newlines or semicolons, and `#` starts a comment. Use `print{...}` to display a returned value.
 
-## Examples! 
+## Examples!
 
-# 1. the first program
+### 1. Hello, Bang!
+
 Input:
-```
+
+```bang
 print{"Hello, Bang!"}
-# I wonder what it does!
 ```
 
 Output:
-```
+
+```text
 Hello, Bang!
 ```
 
-# 2. solution to two sum
-   
-```
+### 2. Finding pairs that sum to a target
+
+A set tracks values already visited, so each matching pair is found during one pass through the array.
+
+Input:
+
+```bang
 fn two_sum args
+    [target, values] = args
+    [pairs, seen] = [[], set{}]
 
-    [target, input] = [args[0], args[1]]
-    [ans, seen] = [[], set{}]
-    for i input
-        if target - i in seen
-            ans += [[target - i, i]] 
-            end
-        seen += set{i} 
+    for value values
+        complement = target - value
+        if complement in seen
+            pairs += [[complement, value]]
         end
-    return ans 
+        seen += set{value}
     end
 
-print{two_sum{8, [1,2,3,4,5,6,7,]}}
+    return pairs
+end
+
+print{two_sum{8, [1,2,3,4,5,6,7]}}
 ```
+
 Output:
-```
-[[1,7], [2,6], [3,5]]
-```
-# 3. printing n fibonacci numbers
-```
-# printing n fibonacci numbers
 
-fn fib awesome
-    ret = []
-    [n, a, b] = [awesome[0], 0, 1]
-    ret += [a, b]
-    for i n-2
-        c = a + b ; [a,b] = [b, c]
-        ret += [c]
+```text
+[[3, 5], [2, 6], [1, 7]]
+```
+
+### 3. Printing n Fibonacci numbers
+
+Input:
+
+```bang
+fn fib args
+    n = args[0]
+    values = []
+    [a, b] = [0, 1]
+
+    if n <= 0
+        return values
     end
-    return ret
+
+    for i n
+        values += [a]
+        [a, b] = [b, a + b]
+    end
+
+    return values
 end
-fib{9}
 
+print{fib{9}}
 ```
-output:
-```
-[0,1,1,2,3,5,8,13,21]
-```
-# 4. linked list initalization
-```
-data Node [val, next];
 
-# Build from array -> head
+Output:
+
+```text
+[0, 1, 1, 2, 3, 5, 8, 13, 21]
+```
+
+### 4. Building a linked list
+
+Records hold a value and a reference to the next node. A temporary head node keeps the construction loop simple; omitted fields default to `none`.
+
+Input:
+
+```bang
+data Node [val, next]
+
 fn from_array args
-    arr = args[0]
-    [head, tail, i] = [none, none, 0]
-    while i < len{arr}
-        n = Node{arr[i]}
-        if head == none 
-            [head, tail] = [n, n]
-        else 
-            tail.next = n; tail = n
-            end
-        end
-        i += 1
+    dummy = Node{}
+    tail = dummy
+
+    for value args[0]
+        tail.next = Node{value}
+        tail = tail.next
     end
-    return head
+
+    return dummy.next
 end
 
-arr = [1,2,3,4,5,6,7]
-linked_list_head = from_array{arr}
-print{linked_list_head.val}
+head = from_array{[1,2,3,4,5,6,7]}
+print{head.val}
+```
 
-```
-output:
-```
+Output:
+
+```text
 1
 ```
-# 5. recursive factorial
-```
-fn fact args
-    n = args[0]
-    acc = args[1]  # accumulator defaults to 1 at top call
+
+### 5. Recursive factorial
+
+Declared parameters let the accumulator default to one on the initial call.
+
+Input:
+
+```bang
+fn fact {n, acc = 1}
     if n <= 1
         return acc
     end
     return fact{n - 1, acc * n}
 end
 
-print{fact{6, 1}} 
-
+print{fact{6}}
 ```
 
-output: 
-```
+Output:
+
+```text
 720
 ```
 
-# 6. storing functions in things, and calling them
-```
+### 6. Storing and returning callable values
 
+Constructors and functions can be returned, stored, indexed, and called through the resulting value.
 
-fn bar args 
-return dict
+Input:
+
+```bang
+fn dictionary_builder args
+    return dict
 end
 
-# bar{} = dict; so you are calling dict{1,2}
-print{bar{}{1,2}}
+print{dictionary_builder{}{1,2}}
 
-func_dic = dict{"hello", dict}
-to_call = func_dic["hello"]
-print{to_call{1,2, 4, 5}}
+constructors = dict{"mapping", dict}
+build_mapping = constructors["mapping"]
+print{build_mapping{1,2,4,5}}
 
-fn foo args 
-return [[[len]]]
+fn nested_functions args
+    return [[[len]]]
 end
 
-x = foo{}[0][0][0]{"123456hi"}
-print{x}
+print{nested_functions{}[0][0][0]{"123456hi"}}
 ```
-output:
-```
+
+Output:
+
+```text
 {1: 2}
-{1:2, 4:5}
+{1: 2, 4: 5}
 8
 ```
 
-## Stabilized behavior
+## Stabilized Behavior
 
-See [LANGUAGE_SEMANTICS.md](LANGUAGE_SEMANTICS.md) for operator rules, persistent closures, evaluation order, records, and diagnostic limits.
+[LANGUAGE_SEMANTICS.md](LANGUAGE_SEMANTICS.md) documents operator rules, evaluation order, closures, records, and diagnostic limits.
 
-## Function arguments
+A few rules are useful to know up front:
 
-Use the existing variadic interface when you want to work with the whole argument array:
+* Boolean literals participate numerically: `true == 1`, `false == 0`, and `none == 0`. Predicate results may display as `True` or `False`.
+* Array multiplication by an integer repeats each element; multiplication by a singleton array broadcasts an element-wise operation.
+* Captured assignments persist across function calls. Arrays and records retain their normal reference behavior when passed to functions.
+* Source files use UTF-8. The checker uses the facts it can establish; dynamic values remain subject to runtime checks.
 
-```text
+## Function Arguments
+
+**Variadic argument array.** Use this form to receive all positional arguments in one array. The array parameter can have any valid identifier name.
+
+```bang
 fn collect args
     return args
 end
-print{collect{1, 2, 3}}
+
+print{collect{1, 2, 3}} # [1, 2, 3]
 ```
 
-Use declared parameters for an explicit interface:
+**Argument array with named options.** Positional values stay in the array, while declared options bind separately by name.
 
-```text
-fn scale {input, factor = 2}
-    return input * [factor]
+```bang
+fn total args {absolute = false}
+    value = sum{args}
+    if absolute && value < 0
+        value = -value
+    end
+    return value
 end
-arr = [1, 2, 3]
-print{scale{arr}}                    # [2, 4, 6]
-print{scale{arr, factor = 3}}        # [3, 6, 9]
-print{scale{factor = 4, input = arr}} # [4, 8, 12]
+
+print{total{1, -3}}                  # -2
+print{total{1, -3, absolute = true}} # 2
 ```
 
-Combine a positional argument array with named options:
+Options do not consume positional values. Their defaults can reference the argument array, such as `count = len{args}`.
 
-```text
-fn f args {frozen = false, count = len{args}}
-    return [args, frozen, count]
-end
-print{f{1, 2}}                # [[1, 2], 0, 2]
-print{f{1, 2, frozen = true}} # [[1, 2], 1, 2]
-```
-
-In this combined form, every positional value enters `args`. Declared options
-bind only by name. A parameter such as `frozen` has the meaning assigned by the
-function body; it does not automatically freeze or copy values.
-
-Defaults run only for omitted arguments, once per call. They can reference earlier
-parameters and captured variables. A literal array default is fresh on each call.
-An array passed as one argument remains one value; arguments are never implicitly
-spread. Named arguments are supported by the declared-parameter interface.
 
 ## Running the Test-Suite
-```
+
+Install the development extras, then run:
+
+```bash
 python -m pytest -q
 ```
-The default selection runs the lexer, parser, semantic, evaluator, and regression correctness suites. Profiling scripts are excluded because they require optional profiling tools.
+
+The default selection runs the lexer, parser, semantic, evaluator, and regression correctness suites:
 
 * `bang/lexing/tests_lexer/test_lexer_correctness.py`
 * `bang/parsing/tests_parser/test_expr_parser_correctness.py`
 * `bang/semantic/tests_semantic/test_semantic_correctness.py`
 * `bang/runtime/tests_evaluator/test_evaluator_correctness.py`
-* `bang/tests/test_regressions.py` — checks exact output, errors, and scope cleanup.
+* `bang/tests/test_regressions.py`
 
-The parser and regression suites can also run without pytest:
+Profiling scripts are excluded from the default run because they use optional profiling tools. The parser and regression suites also run with the standard library:
 
 ```bash
-python -m unittest bang.parsing.tests_parser.test_expr_parser_correctness bang.tests.test_regressions 
+python -m unittest bang.parsing.tests_parser.test_expr_parser_correctness bang.tests.test_regressions
 ```
 
 ## Extending the Language
 
-* Add tokens in lexer.py & grammar tweaks in expression_parser.py.
+* **Add a builtin:** implement its behavior in `bang/runtime/evaluator.py` and register its name in both the runtime and semantic builtin tables.
+* **Extend the syntax:** update `bang/docs/grammar_v2.ebnf`, the relevant lexer/parser logic, and the AST nodes as needed.
+* **Keep checking and execution consistent:** update semantic rules and runtime validation together. Shared argument-binding rules live in `bang/calling.py`.
+* **Add focused coverage:** extend the existing correctness or regression suites with examples of the intended behavior and invalid inputs.
 
-* Implement runtime semantics in evaluator.py.
-
-* Add green- & red-path tests—then refactor fearlessly.
-
-* I really tried to make anything possible in bang, if you simply add a built-in function in the evaluator to support the behaviour.
-
-Tip: Each phase is cleanly decoupled; you can unit-test a new feature in isolation before wiring up the next stage.
+Each stage can be inspected independently, while the regression suite checks that the stages agree on observable behavior.
 
 ## Project Roadmap
 
-* Add way more built-in functions (this is really easy you should try it)
-
-* Interpret in C++ or similar for faster runtimes
-
-* REPL with auto-completion
+* Expand the standard library with useful builtins and consistent named options.
+* Explore a C++ or other native implementation of the evaluator.
+* Add a REPL with auto-completion.
 
 ## Contributing
 
-PRs and issue reports are welcome! Please run pytest and ruff (included in the dev dependencies) (or your formatter of choice) before opening a pull-request.
+PRs and issue reports are welcome. For a bug report, include a minimal `.bang` program, the expected result, and the actual output or diagnostic.
 
-* Fork the repo
+Before opening a pull request, run the same checks used by CI:
 
-* Create your feature branch: git checkout -b feat/my-cool-thing
+```bash
+ruff check .
+ruff format --check .
+python -m pytest -q
+```
 
-* Commit your changes: git commit -m "feat: my cool thing"
-
-* Push to the branch: git push origin feat/my-cool-thing
-
-* Open a PR 🥳
+* Fork the repository.
+* Create a branch: `git checkout -b feat/my-cool-thing`.
+* Make your changes and add focused cases to the existing suites.
+* Commit and push your branch.
+* Open a PR with a short description of the change and how it was checked.
 
 ## License
-MIT © 2025 Jeter Pontes
-See LICENSE for full text.
+
+MIT © 2026 Jeter Pontes. See [LICENSE](LICENSE) for the full license.
