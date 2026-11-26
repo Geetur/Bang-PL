@@ -1,13 +1,14 @@
 from dataclasses import dataclass
 
-from bang.parsing.parser_nodes import BlockNode
+from bang.parsing.parser_nodes import BlockNode, ParameterNode
 
 
 @dataclass(slots=True, eq=False)
 class runtime_function:
     body: BlockNode
-    params_name: str
+    params_name: str | None
     closure: list
+    parameters: tuple[ParameterNode, ...] | None = None
 
     def __deepcopy__(self, memo):
         return self

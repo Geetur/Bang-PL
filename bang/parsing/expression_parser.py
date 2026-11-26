@@ -78,6 +78,7 @@ from bang.parsing.parser_nodes import (
     INDEX_NODE_CLASS,
     INTEGER_LITERAL_NODE_CLASS,
     NONE_LITERAL_NODE_CLASS,
+    ParameterNode,
     RETURN_NODE_CLASS,
     STRING_LITERAL_NODE_CLASS,
     UNARY_OP_NODE_CLASS,
@@ -667,41 +668,87 @@ class ExpressionParser:
 
         self.post_SYA.append(single_node_class)
 
+    def _syntax_error(self, message, token):
+        raise ParserError(self.file, message, token.line, token.column_start, token.column_end)
+
+    def _braced_items(self, line, *, allow_empty=False):
+        """Split a brace list while retaining nested token spans and source order."""
+        pieces = []
+        creators = []
+        start = 1
+        for position in range(1, len(line)):
+            token = line[position]
+            typ = token.type_enum_id
+            if typ in self.DEPTH_CREATORS:
+                creators.append(token)
+            elif typ in self.DEPTH_ENDERS:
+                if creators:
+                    if typ != self.DEPTH_CREATORS[creators[-1].type_enum_id]:
+                        self._syntax_error("mismatched brackets", token)
+                    creators.pop()
+                else:
+                    if typ != self.T_RBRACE_ENUM_VAL:
+                        self._syntax_error("mismatched brackets", token)
+                    if position > start:
+                        pieces.append(line[start:position])
+                    return pieces, position
+            elif typ == self.T_COMMA_ENUM_VAL and not creators:
+                if position == start:
+                    if not allow_empty:
+                        self._syntax_error("empty parameter declaration", token)
+                else:
+                    pieces.append(line[start:position])
+                start = position + 1
+        self._syntax_error("unterminated argument list", line[0])
+
     def handle_function_def(self, line_idx):
         line = self.post_split[line_idx]
-
-        single_token = line[0]
-        if len(line) != 3:
-            raise ParserError(
-                self.file,
-                "function declaration syntax is [fn][identifier][identifier]",
-                single_token.line,
-                single_token.column_start,
-                single_token.column_end,
+        message = "expected 'fn name args', 'fn name {parameters}', or 'fn name args {options}'"
+        if len(line) < 3 or line[1].type_enum_id != self.T_IDENT_ENUM_VAL:
+            self._syntax_error(message, line[0])
+        if len(line) == 3 and line[2].type_enum_id == self.T_IDENT_ENUM_VAL:
+            node = self.FUNCTION_NODE_CLASS(
+                name=line[1].value, arg_list_name=line[2].value, meta_data=line[0]
             )
-
-        expected_func_name = line[1]
-        expected_args_name = line[2]
-
-        if (
-            # not worth localizing
-            expected_args_name.type_enum_id != self.T_IDENT_ENUM_VAL
-            or expected_func_name.type_enum_id != self.T_IDENT_ENUM_VAL
-        ):
-            raise ParserError(
-                self.file,
-                "function declaration syntax is [fn][identifier][identifier]",
-                single_token.line,
-                single_token.column_start,
-                single_token.column_end,
+        else:
+            variadic_name = None
+            start = 2
+            if line[2].type_enum_id == self.T_IDENT_ENUM_VAL:
+                variadic_name = line[2].value
+                start = 3
+            if start >= len(line) or line[start].type_enum_id != self.T_LBRACE_ENUM_VAL:
+                self._syntax_error(message, line[0])
+            pieces, consumed = self._braced_items(TokenSpan(line, start))
+            end = consumed + start + 1
+            if end != len(line):
+                self._syntax_error("unexpected token after parameter list", line[end])
+            parameters = []
+            seen = set() if variadic_name is None else {variadic_name}
+            optional = False
+            for piece in pieces:
+                token = piece[0]
+                if token.type_enum_id != self.T_IDENT_ENUM_VAL:
+                    self._syntax_error("parameter names must be identifiers", token)
+                if token.value in seen:
+                    self._syntax_error(f"duplicate parameter '{token.value}'", token)
+                seen.add(token.value)
+                if len(piece) == 1:
+                    if optional:
+                        self._syntax_error("required parameters must precede defaults", token)
+                    default = None
+                elif len(piece) >= 3 and piece[1].type_enum_id == self.T_ASSIGN_ENUM_VAL:
+                    default = self.shunting_yard_algo(piece[2:])
+                    optional = True
+                else:
+                    self._syntax_error("expected a parameter name or name = expression", token)
+                parameters.append(ParameterNode(token.value, default, token))
+            node = self.FUNCTION_NODE_CLASS(
+                name=line[1].value,
+                arg_list_name=variadic_name,
+                meta_data=line[0],
+                parameters=tuple(parameters),
             )
-
-        function_node = self.FUNCTION_NODE_CLASS(
-            name=expected_func_name.value,
-            arg_list_name=expected_args_name.value,
-            meta_data=single_token,
-        )
-        self.post_SYA.append(function_node)
+        self.post_SYA.append(node)
 
     def handle_dataclass_def(self, line_idx):
         IDENTIFIER_NODE_CLASS = self.IDENTIFIER_NODE_CLASS
@@ -757,79 +804,42 @@ class ExpressionParser:
         self.post_SYA.append(dataclass_node)
 
     def handle_function_call(self, line, function_name):
-        CALL_NODE_CLASS = self.CALL_NODE_CLASS
-        DEPTH_ENDERS = self.DEPTH_ENDERS
-        DEPTH_CREATORS = self.DEPTH_CREATORS
-        T_COMMA_ENUM_VAL = self.T_COMMA_ENUM_VAL
-        elements = []
-        current = []
-        depth = 0
-        tok_idx = 1
-        creators = []
-
-        if type(function_name) in self.LITERAL_MAP or type(function_name) in (
-            self.ARRAY_LITERAL_NODE_CLASS,
+        if type(function_name) in self.LITERAL_MAP or (
+            type(function_name) is self.ARRAY_LITERAL_NODE_CLASS
         ):
-            raise ParserError(
-                self.file,
-                "function call syntax is [function name][args]",
-                function_name.meta_data.line,
-                function_name.meta_data.column_start,
-                function_name.meta_data.column_end,
-            )
-        while tok_idx < len(line):
-            tok = line[tok_idx]
-            tok_type_id = tok.type_enum_id
-
-            if tok_type_id in DEPTH_CREATORS:
-                # entering one more level of nested braces
-                depth += 1
-                current.append(tok)
-                creators.append(tok)
-
-            elif tok_type_id in DEPTH_ENDERS:
-                if depth == 0:
-                    if tok_type_id != DEPTH_CREATORS[line[0].type_enum_id]:
-                        raise ParserError(
-                            self.file,
-                            "mismatched brackets",
-                            tok.line,
-                            tok.column_start,
-                            tok.column_end,
-                        )
-                    if current:
-                        elements.append(self.shunting_yard_algo(current))
-
-                    return CALL_NODE_CLASS(
-                        name=function_name, args=elements, meta_data=function_name.meta_data
-                    ), tok_idx
-
-                if not creators or tok_type_id != DEPTH_CREATORS[creators[-1].type_enum_id]:
-                    raise ParserError(
-                        self.file, "mismatched brackets", tok.line, tok.column_start, tok.column_end
-                    )
-                depth -= 1
-                current.append(tok)
-                creators.pop()
-
-            elif depth == 0 and tok_type_id == T_COMMA_ENUM_VAL:
-                if current:
-                    elements.append(self.shunting_yard_algo(current))
-                current = []
-
+            self._syntax_error("function call syntax is name{arguments}", function_name.meta_data)
+        pieces, consumed = self._braced_items(line, allow_empty=True)
+        arguments = []
+        labels = []
+        seen = set()
+        named = False
+        for piece in pieces:
+            if (
+                len(piece) >= 2
+                and piece[0].type_enum_id == self.T_IDENT_ENUM_VAL
+                and piece[1].type_enum_id == self.T_ASSIGN_ENUM_VAL
+            ):
+                label = piece[0].value
+                if label in seen:
+                    self._syntax_error(f"duplicate named argument '{label}'", piece[0])
+                seen.add(label)
+                named = True
+                expression = piece[2:]
             else:
-                current.append(tok)
-
-            tok_idx += 1
-        # if creators dosent exist and we reach this point it means the
-        # first bracket which we dont track in creators wasn't closed
-        raise ParserError(
-            self.file,
-            f"Unterminated {creators[0].value if creators else line[0].value}",
-            line[0].line,
-            line[0].column_start,
-            line[0].column_end,
-        )
+                if named:
+                    self._syntax_error(
+                        "positional arguments must precede named arguments", piece[0]
+                    )
+                label = None
+                expression = piece
+            arguments.append(self.shunting_yard_algo(expression))
+            labels.append(label)
+        return self.CALL_NODE_CLASS(
+            name=function_name,
+            args=arguments,
+            meta_data=function_name.meta_data,
+            keyword_names=tuple(labels) if named else (),
+        ), consumed
 
     def handle_return(self, line_idx):
         line = self.post_split[line_idx]

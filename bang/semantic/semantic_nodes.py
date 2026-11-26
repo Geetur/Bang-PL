@@ -45,6 +45,8 @@ class IdentifierType:
 @dataclass(frozen=True, slots=True, eq=False)
 class FunctionType:
     value: Any = None
+    parameters: tuple[tuple[str, bool], ...] | None = None
+    variadic_name: str | None = None
 
     def __deepcopy__(self, memo):
         return self

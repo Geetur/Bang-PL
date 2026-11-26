@@ -11,6 +11,7 @@ import operator
 from copy import deepcopy
 from math import isfinite
 
+from bang.calling import bind_arguments
 from bang.lexing.lexer_tokens import (
     T_AND_ENUM_VAL,
     T_ASSIGN_ENUM_VAL,
@@ -92,6 +93,9 @@ from bang.runtime.evaluator_nodes import (
     RUN_TIME_FUNCTION,
     RUN_TIME_INSTANCE,
 )
+
+
+_MISSING = object()
 
 
 class EvaluatorError(Exception):
@@ -383,7 +387,7 @@ class Evaluator:
 
             expected_type = type(args[0])
             base = args[0]
-            for i in args:
+            for i in args[1:]:
                 if type(i) is not expected_type and not (
                     isinstance(base, (int, float)) and isinstance(i, (int, float))
                 ):
@@ -426,7 +430,7 @@ class Evaluator:
 
             expected_type = type(args[0])
             base = args[0]
-            for i in args:
+            for i in args[1:]:
                 if type(i) is not expected_type and not (
                     isinstance(base, (int, float)) and isinstance(i, (int, float))
                 ):
@@ -450,14 +454,6 @@ class Evaluator:
             return base
 
         def _built_in_sort(args, meta_data):
-            if len(args) == 1:
-                if type(args[0]) is list:
-                    args = args[0]
-                elif type(args[0]) is set:
-                    args = list(args[0])
-                else:
-                    return args[0]
-
             if not args:
                 raise EvaluatorError(
                     self.file,
@@ -466,6 +462,13 @@ class Evaluator:
                     meta_data.column_start,
                     meta_data.column_end,
                 )
+            if len(args) == 1:
+                if type(args[0]) is list:
+                    args = args[0]
+                elif type(args[0]) is set:
+                    args = list(args[0])
+                else:
+                    return args[0]
 
             try:
                 return sorted(args)
@@ -662,7 +665,9 @@ class Evaluator:
 
         self.initalize_var(
             function_name,
-            self.RUN_TIME_FUNCTION(body=root.body, params_name=args_name, closure=closure),
+            self.RUN_TIME_FUNCTION(
+                body=root.body, params_name=args_name, closure=closure, parameters=root.parameters
+            ),
         )
 
     def eval_block(self, root):
@@ -797,6 +802,14 @@ class Evaluator:
     def search_for_var(self, name, potential_error):
         for idx, scope in enumerate(reversed(self.scope_stack)):
             if name in scope:
+                if scope[name] is _MISSING:
+                    raise EvaluatorError(
+                        self.file,
+                        f"parameter '{name}' read before binding",
+                        potential_error.line,
+                        potential_error.column_start,
+                        potential_error.column_end,
+                    )
                 # converts reversed index to normal index
                 return len(self.scope_stack) - idx - 1
         raise EvaluatorError(
@@ -1013,10 +1026,22 @@ class Evaluator:
                 args = values[-count:] if count else []
                 if count:
                     del values[-count:]
-                values.append(self._invoke_callable(task[2], args, node.meta_data))
+                values.append(
+                    self._invoke_callable(task[2], args, node.meta_data, node.keyword_names)
+                )
         return values.pop()
 
-    def _invoke_callable(self, callee, args, metadata):
+    def _invoke_callable(self, callee, args, metadata, keyword_names=()):
+        if type(callee) is self.RUN_TIME_FUNCTION:
+            return self.eval_call(callee, args, metadata, keyword_names)
+        if keyword_names:
+            raise EvaluatorError(
+                self.file,
+                "named arguments require a function with declared parameters",
+                metadata.line,
+                metadata.column_start,
+                metadata.column_end,
+            )
         if type(callee) is self.RUN_TIME_DATACLASS:
             if len(args) > len(callee.fields):
                 raise EvaluatorError(
@@ -1031,8 +1056,6 @@ class Evaluator:
                 for index, name in enumerate(callee.fields)
             }
             return self.RUN_TIME_INSTANCE(of=callee, fields=fields)
-        if type(callee) is self.RUN_TIME_FUNCTION:
-            return self.eval_call(callee, args, metadata)
         if callable(callee) and callee in self.built_in_function_objects:
             try:
                 result = self._checked_real_result(callee(args, metadata))
@@ -1470,7 +1493,7 @@ class Evaluator:
     # UNARY OPERATIONS END
     # -------------------------------------------
 
-    def eval_call(self, callee, args, meta_data):
+    def eval_call(self, callee, args, meta_data, keyword_names=()):
         if self.func_depth >= self.MAX_CALL_DEPTH:
             raise EvaluatorError(
                 self.file,
@@ -1479,13 +1502,47 @@ class Evaluator:
                 meta_data.column_start,
                 meta_data.column_end,
             )
+        parameters = callee.parameters
+        if parameters is None:
+            if keyword_names:
+                raise EvaluatorError(
+                    self.file,
+                    "variadic functions accept positional arguments only",
+                    meta_data.line,
+                    meta_data.column_start,
+                    meta_data.column_end,
+                )
+            frame = {callee.params_name: args}
+        else:
+            signature = tuple((p.name, p.default is not None) for p in parameters)
+            try:
+                supplied = bind_arguments(
+                    signature, args, keyword_names, variadic_name=callee.params_name
+                )
+            except ValueError as error:
+                raise EvaluatorError(
+                    self.file,
+                    str(error),
+                    meta_data.line,
+                    meta_data.column_start,
+                    meta_data.column_end,
+                ) from error
+            frame = {p.name: _MISSING for p in parameters}
+            if callee.params_name is not None:
+                frame[callee.params_name] = supplied[callee.params_name]
         saved_stack = self.scope_stack
         saved_loop_depth = self.loop_depth
-        self.scope_stack = list(callee.closure) + [{}]
+        self.scope_stack = list(callee.closure) + [frame]
         self.loop_depth = 0
         self.func_depth += 1
         try:
-            self.scope_stack[-1][callee.params_name] = args
+            if parameters is not None:
+                for parameter in parameters:
+                    frame[parameter.name] = (
+                        supplied[parameter.name]
+                        if parameter.name in supplied
+                        else self.eval_expression(parameter.default.root_expr)
+                    )
             try:
                 self.eval_block(callee.body)
             except _ReturnSignal as sig:

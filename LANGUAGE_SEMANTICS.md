@@ -22,10 +22,15 @@ These rules describe the current implementation. They make the corrected behavio
 - Destructuring evaluates the RHS once and writes targets from left to right. Nested targets are supported. The RHS must supply at least as many values as the targets at each level; extra values are ignored, preserving the existing behavior.
 - Compound destructuring applies the corresponding operator to each target and RHS item.
 - Array `+=` computes and reassigns a concatenated array. Other variables referencing the earlier array keep that earlier array.
-- Assignment is a statement. Assignment inside a call, condition, array or return expression, and chained assignment, is rejected rather than hoisted into a different statement.
+- Assignment is a statement. Assignment expressions and chained assignment are rejected. Inside a call, `name = expression` is a named argument label and never assigns a caller variable.
 
 ## Functions and scopes
 
+- Function interfaces compose explicitly. `fn f args` receives positional arguments as one array. `fn f args {frozen = false}` keeps every positional value in `args` and binds the declared options only by name: `f{1,2,frozen=true}` gives `args=[1,2]` and `frozen=true`. Defaults can reference the argument array. The array name cannot also be an option name or be supplied as a named argument.
+- `fn f {input, frozen = false}` remains available for a fixed signature: it accepts positional or named bindings for its individual parameters. `fn f {}` accepts no arguments. Builtins, record constructors and the plain `fn f args` form remain positional-only.
+- Declared parameter names must be unique. Required parameters precede defaulted parameters. Positional arguments precede named arguments. Unknown names, duplicate bindings, missing required arguments and excess positional arguments produce Bang diagnostics, including through aliases, fields, indexes and returned functions.
+- Supplied argument expressions evaluate left to right in source order, after the callee. Omitted defaults evaluate once per invocation in parameter order, before the body. Defaults see the function's captured scopes and earlier parameters. They cannot refer to themselves or later parameters. Every declared parameter shadows captured bindings of the same name.
+- Defaults apply only when an argument is omitted. Explicit zero, `false` and `none` remain supplied values. Mutable default expressions such as `[]` create a fresh value each time they are evaluated; a default expression referencing an existing captured array retains that array's normal reference behavior.
 - A function captures references to the scope dictionaries visible at its definition. Assigning an existing captured binding persists across calls. Mutating captured containers also persists. Separate factory calls retain separate local scope dictionaries.
 - Each invocation has a new parameter frame. Its named argument-array parameter shadows any captured binding of the same name.
 - Assignment updates the nearest existing binding, otherwise creates a binding in the current scope. This preserves Bang's existing assignment lookup rule.

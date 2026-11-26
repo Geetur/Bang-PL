@@ -273,6 +273,139 @@ class RegressionTests(unittest.TestCase):
             '[1e+308] 0.0 0 [0.0] []\n',
         )
 
+    def test_variadic_and_declared_function_interfaces_coexist(self):
+        self.assert_output(
+            'fn legacy args; return args; end; '
+            'fn f {input,frozen=false}; return [input,frozen]; end; '
+            'fn empty {}; return 7; end; '
+            'print{legacy{},legacy{1,2},f{[1,2]},f{3,true},'
+            'f{4,frozen=true},f{frozen=true,input=5},empty{}}',
+            '[] [1, 2] [[1, 2], 0] [3, 1] [4, 1] [5, 1] 7\n',
+        )
+        self.assert_output(
+            'fn f args {frozen=false}; return [args,frozen]; end; '
+            'print{f{1,2},f{1,2,frozen=true},f{1,2,true},f{},f{frozen=true}}',
+            '[[1, 2], 0] [[1, 2], 1] [[1, 2, 1], 0] [[], 0] [[], 1]\n',
+        )
+
+    def test_declared_parameters_work_through_first_class_function_values(self):
+        for callee in ('f', 'alias', '[f][0]', 'box.callback', 'get{}'):
+            with self.subTest(callee=callee):
+                self.assert_output(
+                    'fn f {x,y=2}; return x+y; end; alias=f; '
+                    'data Box [callback]; box=Box{f}; fn get args; return f; end; '
+                    'print{'+callee+'{y=4,x=3}}', '7\n',
+                )
+                self.assert_output(
+                    'fn f args {offset=2}; return sum{args}+offset; end; alias=f; '
+                    'data Box [callback]; box=Box{f}; fn get args; return f; end; '
+                    'print{'+callee+'{1,2,offset=4}}', '7\n',
+                )
+        self.assert_output(
+            'fn make {start=0}; fn next {step=1}; start+=step; return start; end; '
+            'return next; end; a=make{}; b=make{start=10}; '
+            'print{a{},a{step=2},b{},b{2}}', '1 3 11 13\n',
+        )
+
+    def test_defaults_are_fresh_lazy_and_use_lexical_parameter_scope(self):
+        cases = [
+            ('fn f {a=[0]}; a[0]+=1; return a; end; print{f{},f{}}', '[1] [1]\n'),
+            ('x=1; fn f {a=x}; return a; end; x=2; print{f{}}', '2\n'),
+            ('fn f {a,b=a+1,c=b+1}; return [a,b,c]; end; print{f{4},f{4,c=9}}',
+             '[4, 5, 6] [4, 5, 9]\n'),
+            ('x=8; fn f {x=2}; x+=1; return x; end; print{f{},x}', '3 8\n'),
+            ('n=0; fn tick args; n+=1; return n; end; fn f {x=tick{}}; return x; end; '
+             'print{f{0},f{false},f{none},n,f{},n}', '0 0 0 0 1 1\n'),
+            ('fn f items {count=len{items},state=[0]}; state[0]+=1; '
+             'return [items,count,state[0]]; end; print{f{1,2},f{3,count=0}}',
+             '[[1, 2], 2, 1] [[3], 0, 1]\n'),
+            ('args=[99]; frozen=8; fn f args {frozen=false}; args[0]+=1; '
+             'frozen=2; return [args,frozen]; end; print{f{1},args,frozen}',
+             '[[2], 2] [99] 8\n'),
+        ]
+        for code, expected in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+
+    def test_keyword_values_and_defaults_preserve_evaluation_order(self):
+        self.assert_output(
+            'fn mark args; print{args[0]}; return args[1]; end; '
+            'fn f {a=mark{"default-a",1},b=mark{"default-b",2},c=mark{"default-c",3}}; '
+            'return [a,b,c]; end; print{f{c=mark{"c",30},b=mark{"b",20}}}',
+            'c\nb\ndefault-a\n[1, 20, 30]\n',
+        )
+        self.assert_output(
+            'fn original {x}; return x+1; end; fn other {x}; return x+10; end; '
+            'f=original; fn change args; f=other; return 1; end; print{f{x=change{}}}',
+            '2\n',
+        )
+        self.assert_output(
+            'x=7; fn f {x}; return x; end; print{f{x=9},x}', '9 7\n',
+        )
+        self.assert_output(
+            'fn mark args; print{args[0]}; return args[1]; end; '
+            'fn f args {a=mark{"default",len{args}},b=0}; return [args,a,b]; end; '
+            'print{f{mark{"first",1},mark{"second",2},b=mark{"option",3}}}',
+            'first\nsecond\noption\ndefault\n[[1, 2], 2, 3]\n',
+        )
+
+    def test_invalid_argument_bindings_have_static_and_runtime_checks(self):
+        cases = [
+            'fn f {x}; return x; end; f{}',
+            'fn f {}; end; f{1}',
+            'fn f {x}; end; f{other=1}',
+            'fn f {x}; end; f{1,x=2}',
+            'fn f args; end; f{x=1}',
+            'len{x=[1]}',
+            'data P [x]; P{x=1}',
+            'fn f args {frozen=false}; end; f{1,2,other=true}',
+            'fn f args {frozen}; end; f{1,2,true}',
+            'fn f args {frozen=false}; end; f{args=[1,2]}',
+        ]
+        for code in cases:
+            with self.subTest(code=code):
+                with self.assertRaises(SemanticError):
+                    compile_program(code)
+                evaluator = compile_program(code, analyze=False)
+                with self.assertRaises(EvaluatorError):
+                    evaluator.eval_program()
+                self.assertEqual(len(evaluator.scope_stack), 1)
+                self.assertEqual(evaluator.func_depth, 0)
+        for code in ('fn f {a=b,b=1}; end', 'x=9; fn f {a=x,x=1}; end'):
+            with self.subTest(code=code), self.assertRaises(SemanticError):
+                compile_program(code)
+
+    def test_default_failures_restore_call_state(self):
+        for code in (
+            'fn f {x=1/0}; return x; end; f{}',
+            'fn f {x=f{}}; return x; end; f{}',
+            'fn f args {x=1/0}; end; f{1,2}',
+        ):
+            with self.subTest(code=code):
+                evaluator = compile_program(code)
+                with self.assertRaises(EvaluatorError):
+                    evaluator.eval_program()
+                self.assertEqual(len(evaluator.scope_stack), 1)
+                self.assertEqual(evaluator.loop_depth, 0)
+                self.assertEqual(evaluator.func_depth, 0)
+        evaluator = compile_program('x=9; fn f {a=x,x=1}; end; f{}', analyze=False)
+        with self.assertRaisesRegex(EvaluatorError, 'read before binding'):
+            evaluator.eval_program()
+        self.assertEqual(len(evaluator.scope_stack), 1)
+
+    def test_collection_boundary_regressions(self):
+        cases = [
+            ('a=["hi",1]; d=dict{"a",a}; [d["a"][1],b]=a; print{b+"!"}', 'hi!\n'),
+            ('a=["hi",1]; fn get args; a[1]="hi"; return a; end; '
+             '[get{}[0],b]=a; print{b+"!"}', 'hi!\n'),
+            ('print{len{dict{set{1,1,2}}},len{dict{set{true,1,2}}}}', '1 1\n'),
+            ('print{sort{[]},sort{set{}}}', '[] []\n'),
+            ('data P [x]; p=P{1}; print{min{[p]}==p,max{[p]}==p}', 'True True\n'),
+        ]
+        for code, expected in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+
 
 if __name__ == "__main__":
     unittest.main()

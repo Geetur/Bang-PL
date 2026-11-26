@@ -3,6 +3,7 @@
 
 from copy import deepcopy
 
+from bang.calling import bind_arguments
 from bang.lexing.lexer_tokens import (
     T_AND_ENUM_VAL,
     T_ASSIGN_ENUM_VAL,
@@ -370,16 +371,35 @@ class SemanticAnalysis:
         return handler(root)
 
     def walk_function(self, root):
-        self.initalize_var(root.name, self.FUNCTION_TYPE_CLASS(value=None))
+        parameters = root.parameters
+        signature = (
+            None
+            if parameters is None
+            else tuple((p.name, p.default is not None) for p in parameters)
+        )
+        self.initalize_var(
+            root.name,
+            self.FUNCTION_TYPE_CLASS(parameters=signature, variadic_name=root.arg_list_name),
+        )
         saved_scopes = self.scope_stack
         saved_loop_depth = self.loop_depth
+        parameter_names = set() if parameters is None else {p.name for p in parameters}
+        if root.arg_list_name is not None:
+            parameter_names.add(root.arg_list_name)
         self.scope_stack = [
-            {name: self.DYNAMIC_TYPE_CLASS() for name in scope} for scope in saved_scopes
+            {name: self.DYNAMIC_TYPE_CLASS() for name in scope if name not in parameter_names}
+            for scope in saved_scopes
         ] + [{}]
-        self.scope_stack[-1][root.arg_list_name] = self.DYNAMIC_TYPE_CLASS()
         self.loop_depth = 0
         self.func_depth += 1
         try:
+            if root.arg_list_name is not None:
+                self.scope_stack[-1][root.arg_list_name] = self.DYNAMIC_TYPE_CLASS()
+            if parameters is not None:
+                for parameter in parameters:
+                    if parameter.default is not None:
+                        self.walk_expression(parameter.default.root_expr)
+                    self.scope_stack[-1][parameter.name] = self.DYNAMIC_TYPE_CLASS()
             self.walk_block(root.body)
         finally:
             self.scope_stack = saved_scopes
@@ -740,6 +760,7 @@ class SemanticAnalysis:
                 if items is not None and len(items) < len(target.elements):
                     self._error("not enough values to unpack", root)
                 for index, element in enumerate(target.elements):
+                    items = value.value if typ is self.ARRAY_TYPE_CLASS else None
                     item = items[index] if items is not None else self.DYNAMIC_TYPE_CLASS()
                     assign(element.root_expr, item)
                 return
@@ -785,6 +806,20 @@ class SemanticAnalysis:
 
     def _infer_call_type(self, root, callee, arguments):
         typ = type(callee)
+        keywords = root.keyword_names
+        if keywords and typ not in (self.DYNAMIC_TYPE_CLASS, self.FUNCTION_TYPE_CLASS):
+            self._error("named arguments require a function with declared parameters", root)
+        if typ is self.FUNCTION_TYPE_CLASS:
+            if callee.parameters is None:
+                if keywords:
+                    self._error("variadic functions accept positional arguments only", root)
+            else:
+                try:
+                    bind_arguments(
+                        callee.parameters, arguments, keywords, variadic_name=callee.variadic_name
+                    )
+                except ValueError as error:
+                    self._error(str(error), root)
         if typ is self.DATA_CLASS_TYPE_CLASS:
             if len(arguments) > len(callee.fields):
                 self._error("more arguments than dataclass parameters", root)
@@ -807,6 +842,22 @@ class SemanticAnalysis:
                     if items is None:
                         result_type = self.SET_TYPE_CLASS if name == "set" else self.DICT_TYPE_CLASS
                         return result_type(None)
+                    if type(item) is self.SET_TYPE_CLASS:
+                        unique = {}
+                        scalar_types = (
+                            self.NUMBER_TYPE_CLASS,
+                            self.BOOL_TYPE_CLASS,
+                            self.NONE_TYPE_CLASS,
+                            self.STRING_TYPE_CLASS,
+                        )
+                        for element in items:
+                            if type(element) not in scalar_types or element.value is None:
+                                result_type = (
+                                    self.SET_TYPE_CLASS if name == "set" else self.DICT_TYPE_CLASS
+                                )
+                                return result_type(None)
+                            unique.setdefault(element.value, element)
+                        items = list(unique.values())
             if name == "dict" and len(items) % 2:
                 self._error("dict requires a value for every key", root)
             checked = items if name == "set" else items[::2]
@@ -908,4 +959,3 @@ class SemanticAnalysis:
                     del values[-count:]
                 values.append(self._infer_call_type(node, task[2], arguments))
         return values.pop()
-

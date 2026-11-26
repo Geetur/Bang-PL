@@ -97,8 +97,15 @@ EndStmt        ::= KW_END ;
 # 2) Headers (open blocks)
 # ---------------------------------------------------------------------
 
-# Function header: "fn <name> <arglist_name>"
-FunctionHeader ::= KW_FN IDENT IDENT ;
+# The identifier form receives a variadic argument array. The brace form binds
+# declared parameters. Required parameters precede defaults; names are unique.
+FunctionHeader ::= KW_FN IDENT ( IDENT [ ParameterOptions ] | ParameterOptions ) ;
+ParameterOptions ::= LBRACE [ ParameterList ] RBRACE ;
+ParameterList  ::= Parameter { COMMA Parameter } [ COMMA ] ;
+Parameter      ::= IDENT [ ASSIGN Expression ] ;
+# With an argument-array name, every positional value enters that array and
+# parameters in braces bind only named options. Without it they bind positionally
+# or by name. The array name cannot be repeated in the declared parameter list.
 
 IfHeader       ::= KW_IF Expression ;
 ElifHeader     ::= KW_ELIF Expression ;
@@ -184,7 +191,12 @@ PostfixExpr    ::= Primary { FieldSuffix | IndexSuffix | CallSuffix } ;
 
 FieldSuffix    ::= DOT IDENT ;
 IndexSuffix    ::= LBRACKET Expression RBRACKET ;   # one top-level expr; use multiple [] for multi-index
-CallSuffix     ::= LBRACE [ ArgList ] RBRACE ;
+CallSuffix     ::= LBRACE [ CallArgList ] RBRACE ;
+CallArgList    ::= CallArgument { COMMA CallArgument } [ COMMA ] ;
+CallArgument   ::= [ IDENT ASSIGN ] Expression ;
+
+# Positional arguments precede named arguments. Names label arguments without
+# assigning caller variables. Named arguments require a declared-parameter function.
 
 ArgList        ::= Expression { COMMA Expression } ;
 

@@ -93,6 +93,29 @@ class ParserCorrectnessTests(unittest.TestCase):
                 text, nodes = parse(code)
                 ControlFlowParser(text, nodes).blockenize()
 
+    def test_parameter_declarations_and_keyword_argument_ast(self):
+        _, nodes = parse('fn f {input, frozen=false, xs=[1,2],}; end; f{arr,frozen=true}')
+        self.assertIsNone(nodes[0].arg_list_name)
+        self.assertEqual([p.name for p in nodes[0].parameters], ['input', 'frozen', 'xs'])
+        self.assertIsNone(nodes[0].parameters[0].default)
+        self.assertEqual(nodes[2].root_expr.keyword_names, (None, 'frozen'))
+        self.assertEqual(len(nodes[2].root_expr.args), 2)
+        _, nodes = parse('fn f args {frozen=false}; end')
+        self.assertEqual(nodes[0].arg_list_name, 'args')
+        self.assertEqual([p.name for p in nodes[0].parameters], ['frozen'])
+
+    def test_malformed_signatures_and_keyword_calls_are_rejected(self):
+        for code in (
+            'fn f {x,x}; end', 'fn f {x=1,y}; end', 'fn f {,x}; end',
+            'fn f {x,,y}; end', 'fn f {1}; end', 'fn f {x=}; end',
+            'fn f {x=1} extra; end', 'fn f {x=[1,2)}; end',
+            'f{x=1,x=2}', 'f{x=1,2}', 'f{x=}', 'f{x.y=1}',
+            'f{x=(y=1)}', 'f{x=[y=1]}', 'a = x = 1',
+            'fn f args {args=1}; end', 'fn f args extra; end',
+        ):
+            with self.subTest(code=code), self.assertRaises(ParserError):
+                parse(code)
+
 
 if __name__ == "__main__":
     unittest.main()

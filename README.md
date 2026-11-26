@@ -30,7 +30,7 @@ Bang was born as a teaching/portfolio project: a **fully-featured yet bite-sized
   `[1,2,3] + [4]`, `[1,2,3] / [5]`, `[1,2,3] / [4,5,6]`, `[1,2,3] * 2`, and `[a,b,c] = [1, 2, 3]`  to append, element-wise divise, duplicate, and multi-initialize respectivley.
 * Familiar operators `+ - * / // **`, Boolean logic `&&`, `||`, unary `!`, and compound assignments `+=`, `-=`, …
 * Tiny but expressive **control flow** (`if / elif / else`, `for`, `while`, `break`, `continue`).
-* **First-class functions** with variadic argument lists passed as a single named array (ex. args).
+* **First-class functions** with a variadic argument array or declared parameters, per-call defaults and named arguments.
 * **Built-ins**: `print`, `len`, `sum`, `min`, `max` — super easy to extend, essentially just have to write a function defining the behaviour.
 * **Static checks where information is available**: the semantic pass checks bindings, known operand types, and control-flow placement. Dynamic values and uncertain types retain runtime checks.
 
@@ -236,6 +236,48 @@ output:
 ## Stabilized behavior
 
 See [LANGUAGE_SEMANTICS.md](LANGUAGE_SEMANTICS.md) for operator rules, persistent closures, evaluation order, records, and diagnostic limits.
+
+## Function arguments
+
+Use the existing variadic interface when you want to work with the whole argument array:
+
+```text
+fn collect args
+    return args
+end
+print{collect{1, 2, 3}}
+```
+
+Use declared parameters for an explicit interface:
+
+```text
+fn scale {input, factor = 2}
+    return input * [factor]
+end
+arr = [1, 2, 3]
+print{scale{arr}}                    # [2, 4, 6]
+print{scale{arr, factor = 3}}        # [3, 6, 9]
+print{scale{factor = 4, input = arr}} # [4, 8, 12]
+```
+
+Combine a positional argument array with named options:
+
+```text
+fn f args {frozen = false, count = len{args}}
+    return [args, frozen, count]
+end
+print{f{1, 2}}                # [[1, 2], 0, 2]
+print{f{1, 2, frozen = true}} # [[1, 2], 1, 2]
+```
+
+In this combined form, every positional value enters `args`. Declared options
+bind only by name. A parameter such as `frozen` has the meaning assigned by the
+function body; it does not automatically freeze or copy values.
+
+Defaults run only for omitted arguments, once per call. They can reference earlier
+parameters and captured variables. A literal array default is fresh on each call.
+An array passed as one argument remains one value; arguments are never implicitly
+spread. Named arguments are supported by the declared-parameter interface.
 
 ## Running the Test-Suite
 ```

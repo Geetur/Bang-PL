@@ -260,18 +260,27 @@ class ReturnNode:
 
 
 @dataclass(slots=True)
-class FunctionNode:
-    name: IdentifierNode
+class ParameterNode:
+    name: str
+    default: ExpressionNode | None
     meta_data: Lexeme
-    arg_list_name: IdentifierNode
+
+
+@dataclass(slots=True)
+class FunctionNode:
+    name: str
+    meta_data: Lexeme
+    arg_list_name: str | None
     return_expr: ReturnNode | None = None
     body: BlockNode = field(default_factory=BlockNode)
+    parameters: tuple[ParameterNode, ...] | None = None
 
     def __repr__(self) -> str:
         return f"""
             FunctionNode(\n
             name={self.name!r},\n
             arg_list={self.arg_list_name!r}\n
+            parameters={self.parameters!r}\n
             body={self.body!r}\n
             return={self.return_expr!r},\n
             """
@@ -282,12 +291,14 @@ class CallNode:
     name: IdentifierNode
     args: list[Any]
     meta_data: Lexeme
+    keyword_names: tuple[str | None, ...] = ()
 
     def __repr__(self) -> str:
         return f"""
             CallNode(\n
             name={self.name!r},\n
             arg_list={self.args!r}\n
+            keywords={self.keyword_names!r}\n
             """
 
 
