@@ -72,13 +72,10 @@ fn minPathSum args
                     continue
                 elif i == 0
                     grid[i][j] += grid[i][j - 1]
-                    end
                 elif j == 0
                     grid[i][j] += grid[i - 1][j]
-                    end
                 else
                     grid[i][j] += min{grid[i][j - 1], grid[i - 1][j]}
-                    end
                 end
             end
         end
@@ -122,7 +119,6 @@ fn minMoves2 args
                 c += mid - i
             else
                 c += i - mid
-                end
             end
         end
         return c

@@ -17,12 +17,10 @@ elif a || arr
     while a
         i -= 1
     end
-end
 else
     for i 10
         arr *= [1]
     end
-end
 end
 
 count = --0
@@ -66,7 +64,6 @@ x = 1
 else    
 x = 2
 end
-end
 
 
 a = "hello"
@@ -106,13 +103,10 @@ fn two_sum args
         return a+b
     elif !a && !b
         return a ** b
-        end
     elif a && b && a == b
         return a // b
-        end
     else
         return a - b
-        end
     end
 end
 a = 1

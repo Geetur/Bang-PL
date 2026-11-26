@@ -57,9 +57,22 @@ print{c{}, c{}}   # 1 2
 
 - A constructor is a value and can be returned, indexed, aliased, or stored in a field. Every constructor call checks arity at runtime; omitted fields default to zero and extra arguments are rejected.
 - Instances retain their original declaration/schema even if the variable naming that constructor is reassigned or redeclared.
-- An if may have multiple elif branches and at most one final else. Each dependent branch uses its existing `end`, followed by the owning if's final `end`. An else header contains only `else`.
+- An `if` may have multiple `elif` branches and at most one final `else`. The entire chain has one closing `end`. An `elif` or `else` header switches the active branch of the current open `if`; it does not open another block. An `else` header contains only `else`, and no `elif` may follow it. Branch bodies may be empty.
+- Each nested `if`, `for`, `while`, or `fn` still needs its own `end`. An `elif` or `else` attaches to the innermost open block only if that block is an `if`; close an inner loop or function before continuing the surrounding conditional. Missing endings identify the innermost unfinished block's header.
+- Only the first matching branch executes. Later conditions and bodies are skipped. Branch-local bindings do not escape the branch; assignments to existing enclosing bindings retain their existing behavior.
 - Integer for-bounds iterate from zero toward the bound, excluding the bound. Predicate booleans work like the corresponding integer bounds.
 - For-loops traverse the original collection. Changing dictionary keys during traversal produces a Bang diagnostic if the iterator is advanced again. Updating existing values is allowed; breaking immediately after adding a key is also allowed.
+
+```bang
+score = 85
+if score >= 90
+    print{"A"}
+elif score >= 80
+    print{"B"}
+else
+    print{"C"}
+end
+```
 
 ## Checking and diagnostics
 

@@ -99,7 +99,7 @@ def analyze(code: str, tmp_path):
         "for i 5\n    if true\n        break\n    end\n    continue\nend\n",
         'for i "5"\n x=1\n end',
         # if / else branches
-        "if true\n    x = 1\nelse\n    x = 2\nend\nend\n",
+        'if true\n    x = 1\nelse\n    x = 2\nend\n',
         # Valid compound assignment (variable previously initialised)
         "x = 1\nx += 3\n",
         "x = 1\nx -= -3\n",

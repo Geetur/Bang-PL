@@ -50,7 +50,6 @@ fn from_array args
             [head, tail] = [n, n]
         else 
             tail.next = n; tail = n
-            end
         end
         i += 1
     end
@@ -92,14 +91,14 @@ fn insert_bst args
             root.left = TreeNode{x}
         else
             root.left = insert_bst{root.left, x}
-        end; end
+        end
     else
         if root.right == none
             root.right = TreeNode{x}
         else
             root.right = insert_bst{root.right, x}
-        end; end
-    end; end
+        end
+    end
     return root
 end
 

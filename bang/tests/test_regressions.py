@@ -40,19 +40,79 @@ class RegressionTests(unittest.TestCase):
         return evaluator
 
     def test_false_elif_is_skipped(self):
-        self.assert_output("if false; print{1}; elif false; print{2}; end; end", "")
+        self.assert_output('if false; print{1}; elif false; print{2}; end', "")
 
     def test_else_runs_after_false_elif(self):
         self.assert_output(
-            "if false; print{1}; elif false; print{2}; end; else; print{3}; end; end",
+            'if false; print{1}; elif false; print{2}; else; print{3}; end',
             "3\n",
         )
 
     def test_first_true_elif_is_selected(self):
         self.assert_output(
-            "if false; print{0}; elif false; print{1}; end; "
-            "elif true; print{2}; end; else; print{3}; end; end", "2\n",
+            'if false; print{0}; elif false; print{1}; '
+            'elif true; print{2}; else; print{3}; end', "2\n",
         )
+
+    def test_single_end_nested_branches_and_control_transfers(self):
+        cases = (
+            ("if true; if false; print{1}; else; print{2}; end; print{3}; "
+             "else; print{0}; end; print{4}", "2\n3\n4\n"),
+            ("if false; if true; print{0}; end; elif true; for i 2; "
+             "if i == 0; print{10}; else; print{11}; end; end; print{12}; "
+             "else; print{0}; end; print{13}", "10\n11\n12\n13\n"),
+            ("total = 0; for i 5; if i == 0; continue; elif i == 3; break; "
+             "else; total += i; end; total += 10; end; print{total}", "23\n"),
+            ("i = 0; total = 0; while i < 5; i += 1; if i == 1; continue; "
+             "elif i == 4; break; else; total += i; end; end; print{total}", "5\n"),
+            ("fn f {x}; for i 1; if x == 0; return 10; elif x == 1; return 20; "
+             "else; return 30; end; end; return 99; end; print{f{0},f{1},f{2}}",
+             "10 20 30\n"),
+            ("if true; elif false; else; end; if false; elif true; else; end; "
+             "if false; else; end; print{1}", "1\n"),
+            ("if false\n print{0}\nelif true\n # selected branch\n print{1}\n"
+             "else\n print{0}\nend\nprint{2}", "1\n2\n"),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                evaluator = self.assert_output(code, expected)
+                self.assertEqual(evaluator.func_depth, 0)
+
+    def test_single_end_conditions_are_lazy_and_branch_locals_do_not_escape(self):
+        self.assert_output(
+            'fn probe {value}; print{value}; return value; end; '
+            'if probe{0}; print{"wrong"}; elif probe{1}; print{"selected"}; '
+            'elif probe{2}; print{"wrong"}; else; print{"wrong"}; end; print{"after"}',
+            '0\n1\nselected\nafter\n',
+        )
+        self.assert_output(
+            'if true; print{"selected"}; elif 1 / 0; print{"wrong"}; end',
+            'selected\n',
+        )
+        for code in (
+            "if true; local = 1; else; local = 2; end; print{local}",
+            "if false; local = 1; elif true; print{local}; end",
+            "if false; local = 1; else; print{local}; end",
+        ):
+            with self.subTest(code=code), self.assertRaises(SemanticError):
+                compile_program(code)
+
+    def test_single_end_cli_reports_structure_errors_without_a_traceback(self):
+        cases = (
+            ("for i 1\nif true\nelse\n", 2, "missing 'end' for 'if'"),
+            ("if true\nelse\nend\nend", 4, "no matching open block"),
+            ("if false\nelse\nelif true\nend", 3, "else must be the last branch"),
+        )
+        for code, row, message in cases:
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / "program.bang"
+                source.write_text(code, encoding="utf-8")
+                diagnostic = io.StringIO()
+                with contextlib.redirect_stderr(diagnostic):
+                    self.assertEqual(run_file(str(source)), 2)
+                self.assertIn(f"Line {row},", diagnostic.getvalue())
+                self.assertIn(message, diagnostic.getvalue())
+                self.assertNotIn("Traceback", diagnostic.getvalue())
 
     def test_and_short_circuits(self):
         self.assert_output("print{false && (1 / 0)}", "0\n")
@@ -117,8 +177,8 @@ class RegressionTests(unittest.TestCase):
 
     def test_branches_start_from_independent_type_environments(self):
         self.assert_output(
-            'x = 1; if false; x = "s"; elif false; print{x + 1}; end; '
-            'else; print{x + 1}; end; end; print{x + 1}', "2\n2\n",
+            'x = 1; if false; x = "s"; elif false; print{x + 1}; '
+            'else; print{x + 1}; end; print{x + 1}', "2\n2\n",
         )
 
     def test_function_definition_does_not_assign_outer_types(self):
@@ -138,7 +198,7 @@ class RegressionTests(unittest.TestCase):
         self.assert_output(
             "data Node [value,next]; head = none; tail = none; for i 3; "
             "node = Node{i}; if head == none; [head,tail] = [node,node]; "
-            "else; tail.next = node; tail = node; end; end; end; print{head.next.value}",
+            'else; tail.next = node; tail = node; end; end; print{head.next.value}',
             "1\n",
         )
 

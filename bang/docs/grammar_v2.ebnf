@@ -1,4 +1,4 @@
-# Bang Grammar v2.1 — Aug 29, 2025
+# Bang Grammar v2.2 — single-end conditionals
 # This EBNF matches the current lexer, expression parser (shunting-yard), control-flow parser,
 # semantic analysis, and evaluator.
 
@@ -69,32 +69,35 @@ IDENT       = ( "_" | LETTER ) { "_" | LETTER | DIGIT }
 # 1) Program structure
 # ---------------------------------------------------------------------
 
-Program        ::= { Line } ;
-Line           ::= Statement [ SEMICOLON ] NEWLINE
-                 | NEWLINE ;
+Separator      ::= SEMICOLON | NEWLINE ;
+Separators     ::= Separator { Separator } ;
+Program        ::= Block [ Statement ] ;
+Block          ::= { Separator | Statement Separators } ;
 
-# A block begins after any header line (if/elif/else/for/while/fn) and
-# continues until a matching KW_END line. "return" is only valid inside
-# a function; "break"/"continue" only inside loops.
+# Newlines and semicolons separate statements. The last statement may end at EOF.
+# Each if/for/while/fn opens one block. elif/else switch branches within that if.
+# "return" is only valid inside a function; "break"/"continue" only inside loops.
 
 Statement      ::= AssignmentStmt
                  | DataClassStmt
-                 | FunctionHeader
-                 | IfHeader
-                 | ElifHeader
-                 | ElseHeader
-                 | ForHeader
-                 | WhileHeader
+                 | FunctionStmt
+                 | IfStmt
+                 | ForStmt
+                 | WhileStmt
                  | BreakStmt
                  | ContinueStmt
                  | ReturnStmt
-                 | ExpressionStmt
-                 | EndStmt ;
+                 | ExpressionStmt ;
 
-EndStmt        ::= KW_END ;
+FunctionStmt   ::= FunctionHeader Separators Block KW_END ;
+IfStmt         ::= IfHeader Separators Block
+                   { ElifHeader Separators Block }
+                   [ ElseHeader Separators Block ] KW_END ;
+ForStmt        ::= ForHeader Separators Block KW_END ;
+WhileStmt      ::= WhileHeader Separators Block KW_END ;
 
 # ---------------------------------------------------------------------
-# 2) Headers (open blocks)
+# 2) Block and branch headers
 # ---------------------------------------------------------------------
 
 # The identifier form receives a variadic argument array. The brace form binds
@@ -225,4 +228,5 @@ Literals       ::= INT_LIT | FLOAT_LIT | BOOL_LIT | NONE_LIT | STRING_LIT ;
 
 # Runtime contract and resource limits are specified in LANGUAGE_SEMANTICS.md.
 # Numeric literals use ASCII digits. Strings cannot contain raw newlines.
+# Each if/elif/else chain has one final end. Each nested block has its own end.
 # Each if has at most one else, and no elif may follow it.

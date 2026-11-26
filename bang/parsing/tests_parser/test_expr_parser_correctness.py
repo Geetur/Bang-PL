@@ -80,12 +80,81 @@ class ParserCorrectnessTests(unittest.TestCase):
 
     def test_elif_and_else_have_separate_ast_branches(self):
         text, nodes = parse(
-            "if false; print{1}; elif true; print{2}; end; "
-            "else; print{3}; end; end"
+            "if false; x = 1; elif true; x = 2; else; x = 3; end; x = 4"
         )
-        root = ControlFlowParser(text, nodes).blockenize()[0]
+        roots = ControlFlowParser(text, nodes).blockenize()
+        self.assertEqual(len(roots), 2)
+        root = roots[0]
         self.assertEqual(len(root.elif_branch.block), 1)
         self.assertEqual(len(root.else_branch.block), 1)
+        for branch, expected in ((root, 1), (root.elif_branch.block[0], 2),
+                                 (root.else_branch.block[0], 3)):
+            self.assertEqual(len(branch.body.block), 1)
+            self.assertEqual(branch.body.block[0].right_hand.root_expr.value, expected)
+        self.assertEqual(roots[1].right_hand.root_expr.value, 4)
+
+    def test_nested_blocks_stay_in_the_active_conditional_branch(self):
+        text, nodes = parse(
+            "if true; if false; x = 1; else; x = 2; end; x = 3; "
+            "elif true; for i 1; if true; x = 4; else; x = 5; end; end; x = 6; "
+            "else; fn f args; if true; return 7; else; return 8; end; end; x = 9; "
+            "end; x = 10"
+        )
+        outer, following = ControlFlowParser(text, nodes).blockenize()
+        inner, then_tail = outer.body.block
+        loop, elif_tail = outer.elif_branch.block[0].body.block
+        function, else_tail = outer.else_branch.block[0].body.block
+        self.assertEqual(inner.else_branch.block[0].body.block[0].right_hand.root_expr.value, 2)
+        self.assertEqual(len(loop.body.block[0].else_branch.block), 1)
+        self.assertEqual(len(function.body.block[0].else_branch.block), 1)
+        self.assertEqual([node.right_hand.root_expr.value for node in
+                          (then_tail, elif_tail, else_tail, following)], [3, 6, 9, 10])
+
+    def test_conditional_structure_errors_identify_the_offending_header(self):
+        cases = (
+            ("elif true; end", "no matching open 'if'"),
+            ("else; end", "no matching open 'if'"),
+            ("if true; else; else; end", "else must be the last branch"),
+            ("if true; else; elif false; end", "else must be the last branch"),
+            ("if true; for i 1; else; end; end", "close the 'for' block first"),
+            ("if true; while false; elif true; end; end", "close the 'while' block first"),
+            ("if true; fn f args; else; end; end", "close the 'fn' block first"),
+            ("if true; else; end; end", "no matching open block"),
+            ("if false; elif true; end; else; end", "no matching open 'if'"),
+            ("return 1", "only valid inside a function"),
+        )
+        for code, message in cases:
+            with self.subTest(code=code), self.assertRaisesRegex(ParserError, message):
+                text, nodes = parse(code)
+                ControlFlowParser(text, nodes).blockenize()
+
+    def test_missing_end_points_to_the_innermost_block_owner(self):
+        for code, kind, row in (
+            ("\nif true\nelse\nx = 1", "if", 2),
+            ("if false\nelif true\nx = 1", "if", 1),
+            ("if true\nelse\nfor i 1", "for", 3),
+            ("if true\nelse\nwhile false", "while", 3),
+            ("if true\nelse\nfn f args", "fn", 3),
+            ("if true\nelse\nif false", "if", 3),
+        ):
+            with self.subTest(code=code), self.assertRaises(ParserError) as error:
+                text, nodes = parse(code)
+                ControlFlowParser(text, nodes).blockenize()
+            self.assertEqual(error.exception.row, row)
+            self.assertEqual(error.exception.msg, f"missing 'end' for '{kind}' block opened here")
+
+    def test_branches_share_one_block_depth_slot(self):
+        depth = ControlFlowParser.MAX_BLOCK_DEPTH
+        for code in (
+            "if true; " * depth + "else; " + "end; " * depth,
+            "if false; " + "elif false; " * 200 + "else; end",
+        ):
+            with self.subTest(code=code):
+                text, nodes = parse(code)
+                self.assertEqual(len(ControlFlowParser(text, nodes).blockenize()), 1)
+        with self.assertRaisesRegex(ParserError, "block nesting exceeds"):
+            text, nodes = parse("if true; " * (depth + 1) + "end; " * (depth + 1))
+            ControlFlowParser(text, nodes).blockenize()
 
     def test_unmatched_blocks_raise_parser_error(self):
         for code in ("end", "if true; x = 1", "else; end"):
