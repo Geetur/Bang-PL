@@ -11,13 +11,15 @@ from bang.parsing.expression_parser import ExpressionParser, ParserError
 from bang.parsing.parser_nodes import BinOpNode, CallNode, FieldAccessNode, IndexNode, UnaryOPNode
 
 
-def parse(code):
+def parse(code, *, split_only=False):
     with tempfile.TemporaryDirectory() as directory:
         source = Path(directory) / "program.bang"
         source.write_text(code, encoding="utf-8")
         lexer = Lexer(source)
         parser = ExpressionParser(lexer.tokenizer(), lexer.text)
         parser.split()
+        if split_only:
+            return lexer.text, parser.post_split
         parser.loading_into_algos()
         return lexer.text, parser.post_SYA
 
@@ -74,9 +76,51 @@ class ParserCorrectnessTests(unittest.TestCase):
             "print{1]", "x = [1}", "f{[1}}", "f{1+}", "x = 1 +",
             "x =", "= 1", "a[]", "()", "1(2)", "*1", "1 + *2",
             "a[1+2}", "1 + )", "(", "!", "a.", "f{1",
+            "[1\n2]", "f{1\n2}", "x = 1 +\n2", "f\n{1}", "(1,\n)",
         ):
             with self.subTest(code=code), self.assertRaises(ParserError):
                 parse(code)
+
+    def test_multiline_logical_statements_keep_physical_source_locations(self):
+        code = (
+            'x = [\n    1, # ignored closing ] }\n\n    (2 +\n     3),\n]; y = 4\n'
+            'print{\n    x[\n        0\n    ],\n    "# ([{ ]})",\n}\n+5'
+        )
+        _, statements = parse(code, split_only=True)
+        self.assertEqual([[tok.value for tok in statement] for statement in statements], [
+            ['x', '=', '[', '1', ',', '(', '2', '+', '3', ')', ',', ']'],
+            ['y', '=', '4'],
+            ['print', '{', 'x', '[', '0', ']', ',', '# ([{ ]})', ',', '}'],
+            ['+', '5'],
+        ])
+        three = statements[0][8]
+        self.assertEqual((three.line, three.column_start, three.column_end), (5, 6, 7))
+        self.assertEqual((statements[1][0].line, statements[1][0].column_start), (6, 4))
+        self.assertEqual(statements[-1][0].line, 13)
+        self.assertEqual(len(parse(code)[1]), 4)
+        for empty in ('', '# no statements\n', ';;\n; # still empty\n'):
+            with self.subTest(code=empty):
+                self.assertEqual(parse(empty, split_only=True)[1], [])
+
+    def test_multiline_delimiter_errors_identify_the_actual_source_token(self):
+        cases = (
+            ('x = [\n    1,\n}\n', 'mismatched closing delimiter', 3, 1),
+            ('x = (\n    [1,2]\n]\n', 'mismatched closing delimiter', 3, 1),
+            ('x = [\n    1\n', 'unclosed delimiter', 1, 5),
+            ('x = (\n    1\n', 'unclosed delimiter', 1, 5),
+            ('print{\n    1\n', 'unclosed delimiter', 1, 6),
+            ('x = [\n    (\n        1\n', 'unclosed delimiter', 2, 5),
+            ('x = 1\n]\n', 'unexpected closing delimiter', 2, 1),
+            ('x = [\n    1;\n    2\n]', 'only allowed outside', 2, 6),
+            ('print{\n1;\n2\n}', 'only allowed outside', 2, 2),
+            ('x = (\n1;\n2\n)', 'only allowed outside', 2, 2),
+        )
+        for code, message, row, column in cases:
+            with self.subTest(code=code):
+                with self.assertRaises(ParserError) as error:
+                    parse(code)
+                self.assertIn(message, error.exception.msg)
+                self.assertEqual((error.exception.row, error.exception.start), (row, column))
 
     def test_elif_and_else_have_separate_ast_branches(self):
         text, nodes = parse(
