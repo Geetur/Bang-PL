@@ -535,6 +535,98 @@ class RegressionTests(unittest.TestCase):
             with self.subTest(code=code):
                 self.assert_output(code, expected)
 
+    def test_for_destructuring_patterns_match_assignment_rules(self):
+        cases = (
+            ('results=[["Ada",10],["Lin",20]]; '
+             'for [name,score] results; print{name,score}; end', 'Ada 10\nLin 20\n'),
+            ('for [a,[b,c]] [[1,[2,3,9]],[4,[5,6],7]]; print{a,b,c}; end',
+             '1 2 3\n4 5 6\n'),
+            ('for [\n name,\n [score,bonus],\n] (\n'
+             ' [["Ada",[10,2]],["Lin",[20,3]]]\n)\nprint{name,score+bonus}\nend',
+             'Ada 12\nLin 23\n'),
+            ('for [] [[],[1],[2,3]]; print{1}; end; '
+             'for [a,b] []; print{a,b}; end', '1\n1\n1\n'),
+            ('for [x,x] [[1,2],[3,4]]; print{x}; end', '2\n4\n'),
+            ('a=[0]; b=[0]; for [x,x[0]] [[a,3],[b,4]]; end; print{a,b}',
+             '[3] [4]\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+
+    def test_for_destructuring_evaluates_bound_once_and_targets_in_order(self):
+        cases = (
+            ('fn rows args; print{"rows"}; return [[1,2],[3,4]]; end; '
+             'fn slot args; print{"slot"}; return 0; end; '
+             'data Box [x]; box=Box{0}; xs=[0]; '
+             'for [box.x,xs[slot{}]] rows{}; print{box.x,xs[0]}; end',
+             'rows\nslot\n1 2\nslot\n3 4\n'),
+            ('row=["hi",1]; for [row[1],value] [row]; print{value+"!"}; end', 'hi!\n'),
+            ('row=["hi",1]; fn touch args; print{"touch"}; row[1]="hi"; return row; end; '
+             'for [touch{}[0],value] [row]; print{value+"!"}; end', 'touch\nhi!\n'),
+            ('rows=[[1,2],[3,4]]; for [rows,x] rows; print{rows,x}; end; print{rows}',
+             '1 2\n3 4\n3\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+
+    def test_for_destructuring_preserves_scope_and_control_flow(self):
+        cases = (
+            ('a=9; b=9; for [a,b] [[1,2],[3,4]]; end; print{a,b}', '3 4\n'),
+            ('total=0; for [a,b] [[0,9],[1,2],[2,3],[3,4]]; '
+             'if a==0; continue; end; if a==3; break; end; total+=a+b; end; print{total}',
+             '8\n'),
+            ('fn find args; for [name,score] args[0]; if score>10; return name; end; end; '
+             'return "none"; end; print{find{[["Ada",10],["Lin",20]]}}', 'Lin\n'),
+            ('for [a,b] [[1,2]]; for [a,c] [[3,4]]; print{a,b,c}; end; print{a,b}; end',
+             '3 2 4\n3 2\n'),
+            ('fns=[]; for [a,b] [[1,2],[3,4]]; fn get args; return [a,b]; end; '
+             'fns += [get]; end; print{fns[0]{},fns[1]{}}', '[3, 4] [3, 4]\n'),
+            ('value=1; for [value,unused] [[2,0],["s",0]]; end; print{value+"!"}', 's!\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                evaluator = self.assert_output(code, expected)
+                self.assertEqual(evaluator.func_depth, 0)
+        for code in (
+            'for [a,b] [[1,2]]; end; print{a}',
+            'a=0; for [a,b] [[1,2]]; end; print{b}',
+            'for [missing[0],x] [[1,2]]; end',
+            'xs=[0]; for [xs[missing],x] [[1,2]]; end',
+            'for [rows,x] rows; end',
+        ):
+            with self.subTest(code=code), self.assertRaises(SemanticError):
+                compile_program(code)
+
+    def test_for_destructuring_failures_restore_loop_and_function_state(self):
+        cases = (
+            'for [a,b] [1]; end',
+            'for [a,b] [[1]]; end',
+            'for [a,[b]] [[1,[]]]; end',
+            'for [a,[b]] [[1,"x"]]; end',
+            'for [] [1]; end',
+            'xs=[0]; for [xs[5],b] [[1,2]]; end',
+            'data Box [x]; box=Box{}; for [box.y,b] [[1,2]]; end',
+            'fn bad args; for [a,b] [[1]]; end; end; bad{}',
+        )
+        for code in cases:
+            with self.subTest(code=code):
+                evaluator = compile_program(code)
+                with self.assertRaises(EvaluatorError):
+                    evaluator.eval_program()
+                self.assertEqual(len(evaluator.scope_stack), 1)
+                self.assertEqual(evaluator.loop_depth, 0)
+                self.assertEqual(evaluator.func_depth, 0)
+        evaluator = compile_program(
+            'a=0; b=0; count=0; for [a,[b]] [[1,[2]],[3,[]]]; count+=1; end'
+        )
+        with self.assertRaisesRegex(EvaluatorError, 'not enough values to unpack'):
+            evaluator.eval_program()
+        self.assertEqual([evaluator.scope_stack[0][name] for name in ('a', 'b', 'count')], [3, 2, 1])
+        self.assertEqual(len(evaluator.scope_stack), 1)
+        self.assertEqual(evaluator.loop_depth, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

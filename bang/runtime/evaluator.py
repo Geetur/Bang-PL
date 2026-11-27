@@ -727,7 +727,12 @@ class Evaluator:
                         root.meta_data.column_start,
                         root.meta_data.column_end,
                     ) from error
-                self.initalize_var(root.variable.value, value)
+                if type(root.variable) is self.IDENTIFIER_NODE_CLASS:
+                    self.initalize_var(root.variable.value, value)
+                else:
+                    self._eval_assignment(
+                        root.variable, self.T_ASSIGN_ENUM_VAL, root, lambda value=value: value
+                    )
                 try:
                     self.eval_block(root.body)
                 except _ContinueSignal:
@@ -821,15 +826,24 @@ class Evaluator:
         )
 
     def eval_assignments(self, root):
-        compound = root.op != self.T_ASSIGN_ENUM_VAL
+        self._eval_assignment(
+            root.left_hand,
+            root.op,
+            root,
+            lambda: self.eval_expression(root.right_hand.root_expr),
+        )
+
+    def _eval_assignment(self, left_hand, op, location, evaluate_rhs):
+        """Share assignment binding with loops while preserving RHS evaluation order."""
+        compound = op != self.T_ASSIGN_ENUM_VAL
 
         def fail(message):
             raise EvaluatorError(
                 self.file,
                 message,
-                root.meta_data.line,
-                root.meta_data.column_start,
-                root.meta_data.column_end,
+                location.meta_data.line,
+                location.meta_data.column_start,
+                location.meta_data.column_end,
             )
 
         def resolve_target(left_hand, *, create=False):
@@ -879,9 +893,9 @@ class Evaluator:
         def combine(current, value):
             operation = self.BIN_OP_NODE_CLASS(
                 left=None,
-                op=self.ASSIGNMENT_TO_NORMAL_OPS[root.op],
+                op=self.ASSIGNMENT_TO_NORMAL_OPS[op],
                 right=None,
-                meta_data=root.meta_data,
+                meta_data=location.meta_data,
             )
             return self._eval_binary_values(operation, current, value)
 
@@ -900,13 +914,13 @@ class Evaluator:
                 value = combine(read_target(target, key), value)
             write_target(target, key, value)
 
-        if compound and type(root.left_hand) is not self.ARRAY_LITERAL_NODE_CLASS:
-            target, key = resolve_target(root.left_hand)
+        if compound and type(left_hand) is not self.ARRAY_LITERAL_NODE_CLASS:
+            target, key = resolve_target(left_hand)
             current = read_target(target, key)
-            value = self.eval_expression(root.right_hand.root_expr)
+            value = evaluate_rhs()
             write_target(target, key, combine(current, value))
         else:
-            assign(root.left_hand, self.eval_expression(root.right_hand.root_expr))
+            assign(left_hand, evaluate_rhs())
 
     # this function handles all expression level contructs such as literals, binary ops,
     # unary ops, and function calls
