@@ -652,8 +652,9 @@ class Evaluator:
         self.initalize_var(dataclass_name, declaration)
 
     def eval_function(self, root):
-        function_name = root.name
-        args_name = root.arg_list_name
+        self.initalize_var(root.name, self._make_function(root))
+
+    def _make_function(self, root):
         # with this, were limiting the number of frames on the scope stack at function creation
         # but were not limiting the contents of those frames.
         # so, we're saying, if this function was declared on the
@@ -663,11 +664,11 @@ class Evaluator:
         # scopes (because we want the function to be able to, say, call itself)
         closure = self.scope_stack[:]
 
-        self.initalize_var(
-            function_name,
-            self.RUN_TIME_FUNCTION(
-                body=root.body, params_name=args_name, closure=closure, parameters=root.parameters
-            ),
+        return self.RUN_TIME_FUNCTION(
+            body=root.body,
+            params_name=root.arg_list_name,
+            closure=closure,
+            parameters=root.parameters,
         )
 
     def eval_block(self, root):
@@ -956,6 +957,8 @@ class Evaluator:
                 elif typ is self.IDENTIFIER_NODE_CLASS:
                     frame = self.scope_stack[self.search_for_var(node.value, node.meta_data)]
                     values.append(frame[node.value])
+                elif typ is self.FUNCTION_NODE_CLASS:
+                    values.append(self._make_function(node))
                 elif typ is self.BIN_OP_NODE_CLASS:
                     tasks.extend((("binary_left", node), ("eval", node.left)))
                 elif typ is self.UNARY_OP_NODE_CLASS:

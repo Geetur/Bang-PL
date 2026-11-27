@@ -268,7 +268,7 @@ class ParameterNode:
 
 @dataclass(slots=True)
 class FunctionNode:
-    name: str
+    name: str | None
     meta_data: Lexeme
     arg_list_name: str | None
     return_expr: ReturnNode | None = None

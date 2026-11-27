@@ -627,6 +627,117 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(len(evaluator.scope_stack), 1)
         self.assertEqual(evaluator.loop_depth, 0)
 
+    def test_named_and_anonymous_short_function_interfaces(self):
+        cases = (
+            ('fn power {x} return x*x; fn first args return args[0]; '
+             'fn total args {offset=0} return sum{args}+offset; '
+             'print{power{5},first{9,8},total{1,2,offset=4}}', '25 9 7\n'),
+            ('power=fn {x} return x*x; first=fn args return args[0]; '
+             'total=fn args {offset=0} return sum{args}+offset; '
+             'print{power{x=5},first{9,8},total{1,2,offset=4}}', '25 9 7\n'),
+            ('fn options {x=2} return x; f=fn options {x=2} return [options,x]; '
+             'print{options{},f{1,2,x=3}}', '2 [[1, 2], 3]\n'),
+            ('fn apply {f,x} return f{x}; '
+             'handlers=[fn {x} return x+1,fn {x} return x*2]; '
+             'data Box [f]; box=Box{fn {x} return x+3}; '
+             'mapping=dict{"square",fn {x} return x*x}; '
+             'print{apply{fn {x} return x*x,5},handlers[0]{4},handlers[1]{4},'
+             'box.f{4},mapping["square"]{3}}', '25 5 8 7 9\n'),
+            ('fn power {\n x,\n factor=1,\n} return (\n x*x*\n factor\n)\n'
+             'f=fn {\n x,\n} return (\n x+\n 1\n)\n'
+             'print{\n power{\n 3,\n factor=2,\n},\n'
+             '(fn args return sum{args}){\n 4,\n 5,\n},\n f{2},\n}', '18 9 3\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+
+    def test_short_functions_reuse_closures_defaults_and_recursion(self):
+        cases = (
+            ('fn mark {label,value}; print{label}; return value; end; '
+             'f=fn {x=mark{"default",3}} return mark{"body",x}; print{"made"}; '
+             'print{f{x=mark{"arg",5}},f{}}', 'made\narg\nbody\ndefault\nbody\n5 3\n'),
+            ('fn bump {xs}; xs[0]+=1; return xs[0]; end; '
+             'f=fn {xs=[0]} return bump{xs}; shared=[0]; '
+             'print{f{},f{},f{shared},f{shared}}', '1 1 1 2\n'),
+            ('x=2; f=fn {a=x,b=a+1} return [a,b,x]; x=7; print{f{},f{0},x}',
+             '[7, 8, 7] [0, 1, 7] 7\n'),
+            ('fn make {x} return fn {y=1} return x+y; a=make{2}; b=make{7}; '
+             'print{a{},a{3},b{},b{0}}', '3 5 8 7\n'),
+            ('fn factory args; n=[0]; fn tick ignored; n[0]+=1; return n[0]; end; '
+             'return fn {} return tick{}; end; a=factory{}; b=factory{}; '
+             'print{a{},a{},b{}}', '1 2 1\n'),
+            ('x=1; fn move args; x=2; return 0; end; '
+             'print{(fn {v} return x){move{}}}', '2\n'),
+            ('fn fact {n} return (n<=1 && 1) || n*fact{n-1}; '
+             'other=fn {n} return (n<=1 && 1) || n*other{n-1}; '
+             'print{fact{6},other{6}}', '720 720\n'),
+            ('fn invoke {f=fn {x} return x+1,x=4} return f{x}; print{invoke{}}', '5\n'),
+            ('a=fn {} return 1; b=a; c=fn {} return 1; print{a==b,a==c}', 'True False\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                evaluator = self.assert_output(code, expected)
+                self.assertNotIn(None, evaluator.scope_stack[0])
+                self.assertEqual(evaluator.func_depth, 0)
+
+    def test_short_functions_respect_expression_and_block_boundaries(self):
+        cases = (
+            ('fn outer args; for [x,y] [[1,2],[3,4]]; fn scale {z} return z*2; '
+             'if x==3; return (fn {v} return scale{v}+y){x}; end; end; return 0; end; '
+             'print{outer{}}', '10\n'),
+            ('fs=[]; for value [1,2]; fs += [fn {} return value]; end; '
+             'print{fs[0]{},fs[1]{}}', '2 2\n'),
+            ('print{(fn {} return 1+2*3){},(fn {x} return -x*2){3},'
+             '(fn {} return [1,sum{[2,3]}]){}[1],'
+             '((fn {x} return fn {y} return x+y){3}){4}}', '7 -6 5 7\n'),
+            ('fn outer args; unused=fn {} return 99; return 1; end; print{outer{}}', '1\n'),
+            ('f=fn {} return 1/0; print{"created"}', 'created\n'),
+            ('fn a {x}; return x+1; end; fn b {x} return a{x}+1; '
+             'fn c {x}; return b{x}+1; end; print{c{1}}', '4\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                evaluator = self.assert_output(code, expected)
+                self.assertEqual(evaluator.func_depth, 0)
+
+    def test_short_function_errors_preserve_binding_checks_and_scope_cleanup(self):
+        for code in (
+            'fn f {x} return x; f{}', 'f=fn {} return 1; f{1}',
+            '(fn {x} return x){other=1}', 'f=fn args return 0; f{x=1}',
+            'f=fn args {offset} return offset; f{1,2}',
+            'fn f {x} return x; f{1,x=2}',
+        ):
+            with self.subTest(code=code):
+                with self.assertRaises(SemanticError):
+                    compile_program(code)
+                evaluator = compile_program(code, analyze=False)
+                with self.assertRaises(EvaluatorError):
+                    evaluator.eval_program()
+                self.assertEqual(len(evaluator.scope_stack), 1)
+                self.assertEqual(evaluator.loop_depth, 0)
+                self.assertEqual(evaluator.func_depth, 0)
+        for code in (
+            'f=fn {x=missing} return x', 'f=fn {x=y,y=1} return x',
+            'f=fn {x=x} return x', 'f=fn {} return missing',
+        ):
+            with self.subTest(code=code), self.assertRaises(SemanticError):
+                compile_program(code)
+        for code in (
+            'f=fn {x=1/0} return x; f{}', 'f=fn {x} return 1/x; f{0}',
+            'fn bad {x} return 1/x; bad{0}',
+            'fn outer args; for i 1; return (fn {} return 1/0){}; end; end; outer{}',
+            'f=fn {self} return self{self}; f{f}',
+            'f=fn {x=f{}} return x; f{}',
+        ):
+            with self.subTest(code=code):
+                evaluator = compile_program(code)
+                with self.assertRaises(EvaluatorError):
+                    evaluator.eval_program()
+                self.assertEqual(len(evaluator.scope_stack), 1)
+                self.assertEqual(evaluator.loop_depth, 0)
+                self.assertEqual(evaluator.func_depth, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

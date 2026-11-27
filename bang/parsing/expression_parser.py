@@ -727,27 +727,22 @@ class ExpressionParser:
                 start = position + 1
         self._syntax_error("unterminated argument list", line[0])
 
-    def handle_function_def(self, line_idx):
-        line = self.post_split[line_idx]
-        message = "expected 'fn name args', 'fn name {parameters}', or 'fn name args {options}'"
-        if len(line) < 3 or line[1].type_enum_id != self.T_IDENT_ENUM_VAL:
+    def _function_signature(self, line, *, anonymous=False):
+        """Parse the shared argument interface and return the first body token."""
+        message = "expected a function signature with an argument-array name or {parameters}"
+        start = 1 if anonymous else 2
+        if not anonymous and (len(line) < 2 or line[1].type_enum_id != self.T_IDENT_ENUM_VAL):
+            self._syntax_error("expected a function name", line[0])
+        if start >= len(line):
             self._syntax_error(message, line[0])
-        if len(line) == 3 and line[2].type_enum_id == self.T_IDENT_ENUM_VAL:
-            node = self.FUNCTION_NODE_CLASS(
-                name=line[1].value, arg_list_name=line[2].value, meta_data=line[0]
-            )
-        else:
-            variadic_name = None
-            start = 2
-            if line[2].type_enum_id == self.T_IDENT_ENUM_VAL:
-                variadic_name = line[2].value
-                start = 3
-            if start >= len(line) or line[start].type_enum_id != self.T_LBRACE_ENUM_VAL:
-                self._syntax_error(message, line[0])
+        variadic_name = None
+        if line[start].type_enum_id == self.T_IDENT_ENUM_VAL:
+            variadic_name = line[start].value
+            start += 1
+        parameters = None
+        if start < len(line) and line[start].type_enum_id == self.T_LBRACE_ENUM_VAL:
             pieces, consumed = self._braced_items(TokenSpan(line, start))
-            end = consumed + start + 1
-            if end != len(line):
-                self._syntax_error("unexpected token after parameter list", line[end])
+            start += consumed + 1
             parameters = []
             seen = set() if variadic_name is None else {variadic_name}
             optional = False
@@ -768,13 +763,62 @@ class ExpressionParser:
                 else:
                     self._syntax_error("expected a parameter name or name = expression", token)
                 parameters.append(ParameterNode(token.value, default, token))
-            node = self.FUNCTION_NODE_CLASS(
-                name=line[1].value,
-                arg_list_name=variadic_name,
-                meta_data=line[0],
-                parameters=tuple(parameters),
-            )
+            parameters = tuple(parameters)
+        elif variadic_name is None:
+            self._syntax_error(message, line[0])
+        node = self.FUNCTION_NODE_CLASS(
+            name=None if anonymous else line[1].value,
+            arg_list_name=variadic_name,
+            meta_data=line[0],
+            parameters=parameters,
+        )
+        return node, start
+
+    def _short_function_return(self, line, position):
+        if position >= len(line) or line[position].type_enum_id != self.T_RETURN_ENUM_VAL:
+            token = line[position] if position < len(line) else line[-1]
+            self._syntax_error("short functions require 'return' before the body expression", token)
+        if position + 1 == len(line):
+            self._syntax_error("short function requires a return expression", line[position])
+        return self.RETURN_NODE_CLASS(
+            meta_data=line[position],
+            expression=self.shunting_yard_algo(TokenSpan(line, position + 1)),
+        )
+
+    def handle_function_def(self, line_idx):
+        line = self.post_split[line_idx]
+        node, position = self._function_signature(line)
         self.post_SYA.append(node)
+        if position != len(line):
+            # Lower a short declaration to the same block AST as its long form.
+            self.post_SYA.append(self._short_function_return(line, position))
+            self.post_SYA.append(self.END_NODE_CLASS(line[position]))
+
+    def handle_anonymous_function(self, line):
+        node, position = self._function_signature(line, anonymous=True)
+        # The body extends to the enclosing expression boundary. Its own nested
+        # delimiters stay inside the body; a caller's closing parenthesis does not.
+        pairs = {
+            self.T_LPAREN_ENUM_VAL: self.T_RPAREN_ENUM_VAL,
+            self.T_LBRACKET_ENUM_VAL: self.T_RBRACKET_ENUM_VAL,
+            self.T_LBRACE_ENUM_VAL: self.T_RBRACE_ENUM_VAL,
+        }
+        enders = set(pairs.values())
+        openings = []
+        end = min(position + 1, len(line))
+        while end < len(line):
+            typ = line[end].type_enum_id
+            if not openings and (typ in enders or typ == self.T_COMMA_ENUM_VAL):
+                break
+            if typ in pairs:
+                openings.append(typ)
+            elif typ in enders:
+                if not openings or pairs[openings[-1]] != typ:
+                    self._syntax_error("mismatched function-body delimiter", line[end])
+                openings.pop()
+            end += 1
+        node.body.block.append(self._short_function_return(TokenSpan(line, 0, end), position))
+        return node, end
 
     def handle_dataclass_def(self, line_idx):
         IDENTIFIER_NODE_CLASS = self.IDENTIFIER_NODE_CLASS
@@ -1163,6 +1207,13 @@ class ExpressionParser:
 
             if expect_operand and self.IS_BIN2UN[tok_type_id]:
                 tok_type_id = self.BINARY_TO_UNARY_OP[tok_type_id]
+
+            if expect_operand and tok_type_id == self.T_FN_ENUM_VAL:
+                function, consumed = self.handle_anonymous_function(line[tok_idx:])
+                output.append(function)
+                tok_idx += consumed
+                expect_operand = False
+                continue
 
             if self.IS_ASSIGN[tok_type_id]:
                 raise ParserError(

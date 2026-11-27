@@ -9,7 +9,8 @@ from bang.lexing.lexer_tokens import TokenType
 from bang.parsing.control_flow_parser import ControlFlowParser
 from bang.parsing.expression_parser import ExpressionParser, ParserError
 from bang.parsing.parser_nodes import (
-    ArrayLiteralNode, BinOpNode, CallNode, FieldAccessNode, IdentifierNode, IndexNode, UnaryOPNode,
+    ArrayLiteralNode, BinOpNode, CallNode, FieldAccessNode, FunctionNode, IdentifierNode,
+    IndexNode, ReturnNode, UnaryOPNode,
 )
 
 
@@ -106,6 +107,46 @@ class ParserCorrectnessTests(unittest.TestCase):
         _, nodes = parse('for item rows; end')
         self.assertIsInstance(nodes[0].variable, IdentifierNode)
         self.assertEqual(nodes[0].variable.value, 'item')
+
+    def test_short_function_asts_preserve_declarations_and_expression_boundaries(self):
+        text, nodes = parse('fn power {x} return x*x; print{power{5}}')
+        roots = ControlFlowParser(text, nodes).blockenize()
+        self.assertEqual(len(roots), 2)
+        self.assertIsInstance(roots[0], FunctionNode)
+        self.assertEqual(roots[0].name, 'power')
+        self.assertEqual(len(roots[0].body.block), 1)
+        self.assertIsInstance(roots[0].body.block[0], ReturnNode)
+        self.assertEqual(roots[0].body.block[0].expression.root_expr.op, TokenType.T_ASTERISK)
+        _, nodes = parse(
+            'square=fn {x} return x*x; first=fn args return args[0]; '
+            'total=fn args {offset=0} return sum{args}+offset'
+        )
+        functions = [node.right_hand.root_expr for node in nodes]
+        self.assertTrue(all(isinstance(node, FunctionNode) and node.name is None for node in functions))
+        self.assertEqual([node.arg_list_name for node in functions], [None, 'args', 'args'])
+        self.assertEqual([p.name for p in functions[0].parameters], ['x'])
+        self.assertEqual([p.name for p in functions[2].parameters], ['offset'])
+        _, nodes = parse('result=apply{fn {x} return x+1,5}; out=(fn {} return [1,2]){}[0]')
+        call = nodes[0].right_hand.root_expr
+        self.assertEqual(len(call.args), 2)
+        self.assertIsInstance(call.args[0].root_expr, FunctionNode)
+        self.assertEqual(call.args[0].root_expr.body.block[0].expression.root_expr.op, TokenType.T_PLUS)
+        self.assertEqual(call.args[1].root_expr.value, 5)
+        self.assertIsInstance(nodes[1].right_hand.root_expr.base.name, FunctionNode)
+
+    def test_short_functions_reject_invalid_signatures_and_incomplete_bodies(self):
+        for code in (
+            'fn f {x} return', 'f=fn {x} return', 'f=fn {x}', 'f=fn args',
+            'f=fn return 1', 'f=fn {x} x', 'fn f {x} return x=1',
+            'f=fn {x} return x=1', 'print{fn {x} return,1}',
+            'f=fn {x,x} return x', 'f=fn {x=1,y} return x',
+            'f=fn args {args=1} return args', 'fn f {x} return 1+',
+            'fn f {x} return x; end', 'f=fn {x} return x; end',
+            'print{fn {x}; return x; end}', 'f=fn {x} return x end',
+        ):
+            with self.subTest(code=code), self.assertRaises(ParserError):
+                text, nodes = parse(code)
+                ControlFlowParser(text, nodes).blockenize()
 
     def test_multiline_logical_statements_keep_physical_source_locations(self):
         code = (
