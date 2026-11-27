@@ -371,16 +371,20 @@ class SemanticAnalysis:
         return handler(root)
 
     def walk_function(self, root):
+        self._function_type(root, binding_name=root.name)
+
+    def _function_type(self, root, *, binding_name=None):
         parameters = root.parameters
         signature = (
             None
             if parameters is None
             else tuple((p.name, p.default is not None) for p in parameters)
         )
-        self.initalize_var(
-            root.name,
-            self.FUNCTION_TYPE_CLASS(parameters=signature, variadic_name=root.arg_list_name),
+        function_type = self.FUNCTION_TYPE_CLASS(
+            parameters=signature, variadic_name=root.arg_list_name
         )
+        if binding_name is not None:
+            self.initalize_var(binding_name, function_type)
         saved_scopes = self.scope_stack
         saved_loop_depth = self.loop_depth
         parameter_names = set() if parameters is None else {p.name for p in parameters}
@@ -405,6 +409,7 @@ class SemanticAnalysis:
             self.scope_stack = saved_scopes
             self.loop_depth = saved_loop_depth
             self.func_depth -= 1
+        return function_type
 
     def walk_dataclass(self, root):
         dataclass_name = root.name
@@ -748,6 +753,13 @@ class SemanticAnalysis:
         self._error("invalid assignment target", target)
 
     def walk_assignments(self, root):
+        if (
+            root.op == self.T_ASSIGN_ENUM_VAL
+            and type(root.left_hand) is self.IDENTIFIER_NODE_CLASS
+            and type(root.right_hand.root_expr) is self.FUNCTION_NODE_CLASS
+        ):
+            self._function_type(root.right_hand.root_expr, binding_name=root.left_hand.value)
+            return
         self._walk_assignment(
             root.left_hand,
             root.op,
@@ -894,6 +906,8 @@ class SemanticAnalysis:
                 typ = type(node)
                 if typ is self.EXPRESSION_NODE_CLASS:
                     tasks.append(("eval", node.root_expr))
+                elif typ is self.FUNCTION_NODE_CLASS:
+                    values.append(self._function_type(node))
                 elif typ is self.DYNAMIC_TYPE_CLASS:
                     values.append(node)
                 elif typ in self.LITERALS:
