@@ -182,7 +182,7 @@ class ElifNode:
 # loops
 @dataclass(slots=True)
 class ForNode:
-    variable: IdentifierNode
+    variable: IdentifierNode | ArrayLiteralNode
     bound: ExpressionNode
     meta_data: Lexeme
     body: BlockNode = field(default_factory=BlockNode)

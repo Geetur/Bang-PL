@@ -443,7 +443,7 @@ class SemanticAnalysis:
                 written.add(node.name)
                 return
             if typ is self.FOR_NODE_CLASS:
-                written.add(node.variable.value)
+                target_names(node.variable)
             for name in ("body", "elif_branch", "else_branch"):
                 block = getattr(node, name, None)
                 if block is not None:
@@ -458,7 +458,7 @@ class SemanticAnalysis:
                     scope[name] = self.DYNAMIC_TYPE_CLASS()
                     break
 
-    def _walk_scoped_path(self, root, *, loop_variable=None, check_condition=True):
+    def _walk_scoped_path(self, root, *, loop_target=None, check_condition=True):
         """Check one possible path without changing another path's input."""
         saved_scopes = self.scope_stack
         self.scope_stack = deepcopy(saved_scopes)
@@ -468,8 +468,13 @@ class SemanticAnalysis:
             if check_condition and hasattr(root, "condition"):
                 self.walk_expression(root.condition.root_expr)
             self.scope_stack.append({})
-            if loop_variable is not None:
-                self.initalize_var(loop_variable, self.DYNAMIC_TYPE_CLASS())
+            if loop_target is not None:
+                if type(loop_target) is self.IDENTIFIER_NODE_CLASS:
+                    self.initalize_var(loop_target.value, self.DYNAMIC_TYPE_CLASS())
+                else:
+                    self._walk_assignment(
+                        loop_target, self.T_ASSIGN_ENUM_VAL, root, self.DYNAMIC_TYPE_CLASS
+                    )
             self.walk_block(root.body)
             self.scope_stack.pop()
             return self.scope_stack
@@ -553,7 +558,7 @@ class SemanticAnalysis:
         self.walk_expression(root.bound.root_expr)
         self.loop_depth += 1
         try:
-            path = self._walk_scoped_path(root, loop_variable=root.variable.value)
+            path = self._walk_scoped_path(root, loop_target=root.variable)
         finally:
             self.loop_depth -= 1
         self._merge_control_paths([path])
@@ -743,22 +748,31 @@ class SemanticAnalysis:
         self._error("invalid assignment target", target)
 
     def walk_assignments(self, root):
-        compound = root.op != self.T_ASSIGN_ENUM_VAL
+        self._walk_assignment(
+            root.left_hand,
+            root.op,
+            root,
+            lambda: self.walk_expression(root.right_hand.root_expr),
+        )
+
+    def _walk_assignment(self, left_hand, op, location, evaluate_rhs):
+        """Share assignment binding with loops while preserving RHS evaluation order."""
+        compound = op != self.T_ASSIGN_ENUM_VAL
         operation = self.BIN_OP_NODE_CLASS(
             left=None,
-            op=self.ASSIGNMENT_TO_NORMAL.get(root.op, root.op),
+            op=self.ASSIGNMENT_TO_NORMAL.get(op, op),
             right=None,
-            meta_data=root.meta_data,
+            meta_data=location.meta_data,
         )
 
         def assign(target, value):
             if type(target) is self.ARRAY_LITERAL_NODE_CLASS:
                 typ = type(value)
                 if typ not in (self.ARRAY_TYPE_CLASS, self.DYNAMIC_TYPE_CLASS):
-                    self._error("multi-variable assignment requires an array", root)
+                    self._error("multi-variable assignment requires an array", location)
                 items = value.value if typ is self.ARRAY_TYPE_CLASS else None
                 if items is not None and len(items) < len(target.elements):
-                    self._error("not enough values to unpack", root)
+                    self._error("not enough values to unpack", location)
                 for index, element in enumerate(target.elements):
                     items = value.value if typ is self.ARRAY_TYPE_CLASS else None
                     item = items[index] if items is not None else self.DYNAMIC_TYPE_CLASS()
@@ -767,12 +781,12 @@ class SemanticAnalysis:
             old, write = self._resolve_type_target(target, require_existing=compound)
             write(self._infer_binary_type(operation, old, value) if compound else value)
 
-        if compound and type(root.left_hand) is not self.ARRAY_LITERAL_NODE_CLASS:
-            old, write = self._resolve_type_target(root.left_hand, require_existing=True)
-            value = self.walk_expression(root.right_hand.root_expr)
+        if compound and type(left_hand) is not self.ARRAY_LITERAL_NODE_CLASS:
+            old, write = self._resolve_type_target(left_hand, require_existing=True)
+            value = evaluate_rhs()
             write(self._infer_binary_type(operation, old, value))
         else:
-            assign(root.left_hand, self.walk_expression(root.right_hand.root_expr))
+            assign(left_hand, evaluate_rhs())
 
     def _invalidate_mutable_facts(self, facts=None):
         if facts is None:

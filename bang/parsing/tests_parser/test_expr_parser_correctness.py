@@ -8,7 +8,9 @@ from bang.lexing.lexer import Lexer
 from bang.lexing.lexer_tokens import TokenType
 from bang.parsing.control_flow_parser import ControlFlowParser
 from bang.parsing.expression_parser import ExpressionParser, ParserError
-from bang.parsing.parser_nodes import BinOpNode, CallNode, FieldAccessNode, IndexNode, UnaryOPNode
+from bang.parsing.parser_nodes import (
+    ArrayLiteralNode, BinOpNode, CallNode, FieldAccessNode, IdentifierNode, IndexNode, UnaryOPNode,
+)
 
 
 def parse(code, *, split_only=False):
@@ -77,9 +79,33 @@ class ParserCorrectnessTests(unittest.TestCase):
             "x =", "= 1", "a[]", "()", "1(2)", "*1", "1 + *2",
             "a[1+2}", "1 + )", "(", "!", "a.", "f{1",
             "[1\n2]", "f{1\n2}", "x = 1 +\n2", "f\n{1}", "(1,\n)",
+            "for [a+1,b] rows; end", "for [1,b] rows; end",
+            "for [f{},b] rows; end", "for [a,[b*2]] rows; end",
+            "for [a,b]; end", "for [a,b]", "for [a,b] = rows; end",
+            "for [a,b] rows extra; end", "for 1 rows; end",
         ):
             with self.subTest(code=code), self.assertRaises(ParserError):
                 parse(code)
+
+    def test_for_destructuring_ast_preserves_nested_targets_and_boundaries(self):
+        _, nodes = parse(
+            'for [\n name,\n [score,bonus],\n obj.value,\n xs[index],\n] '
+            'make{\n [1,2],\n}\nprint{name}\nend'
+        )
+        loop = nodes[0]
+        self.assertIsInstance(loop.variable, ArrayLiteralNode)
+        targets = [element.root_expr for element in loop.variable.elements]
+        self.assertIsInstance(targets[0], IdentifierNode)
+        self.assertEqual(targets[0].value, 'name')
+        self.assertEqual([item.root_expr.value for item in targets[1].elements], ['score', 'bonus'])
+        self.assertIsInstance(targets[2], FieldAccessNode)
+        self.assertIsInstance(targets[3], IndexNode)
+        self.assertIsInstance(loop.bound.root_expr, CallNode)
+        self.assertEqual(loop.bound.root_expr.name.value, 'make')
+        self.assertEqual((loop.meta_data.line, loop.meta_data.column_start), (1, 5))
+        _, nodes = parse('for item rows; end')
+        self.assertIsInstance(nodes[0].variable, IdentifierNode)
+        self.assertEqual(nodes[0].variable.value, 'item')
 
     def test_multiline_logical_statements_keep_physical_source_locations(self):
         code = (

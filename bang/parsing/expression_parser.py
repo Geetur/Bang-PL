@@ -626,33 +626,27 @@ class ExpressionParser:
 
     def handle_for_loop(self, line_idx):
         line = self.post_split[line_idx]
-
         for_token = line[0]
+        message = "for loop syntax is 'for name expression' or 'for [targets] expression'"
         if len(line) < 3:
-            raise ParserError(
-                self.file,
-                "for loop syntax is '[for][some identifier][some expression]'",
-                for_token.line,
-                for_token.column_start,
-                for_token.column_end,
-            )
+            self._syntax_error(message, for_token)
 
         variable_token = line[1]
-        if variable_token.type_enum_id != self.T_IDENT_ENUM_VAL:
-            raise ParserError(
-                self.file,
-                "for loop syntax is '[for][some identifier][some expression]'",
-                variable_token.line,
-                variable_token.column_start,
-                variable_token.column_end,
+        if variable_token.type_enum_id == self.T_IDENT_ENUM_VAL:
+            variable_node = self.IDENTIFIER_NODE_CLASS(
+                value=variable_token.value, meta_data=variable_token
             )
+            bound_start = 2
+        elif variable_token.type_enum_id == self.T_LBRACKET_ENUM_VAL:
+            variable_node, consumed = self.handle_array_literals(TokenSpan(line, 1))
+            self._validate_assignment_target(variable_node, variable_token)
+            bound_start = consumed + 2
+        else:
+            self._syntax_error(message, variable_token)
 
-        expected_expression = line[2:]
-
-        variable_node = self.IDENTIFIER_NODE_CLASS(
-            value=variable_token.value, meta_data=variable_token
-        )
-        expr_node = self.shunting_yard_algo(expected_expression)
+        if bound_start == len(line):
+            self._syntax_error("for loop requires an iterable expression", line[-1])
+        expr_node = self.shunting_yard_algo(TokenSpan(line, bound_start))
 
         for_node = self.FOR_NODE_CLASS(
             variable=variable_node, bound=expr_node, meta_data=variable_token
@@ -893,6 +887,15 @@ class ExpressionParser:
 
         self.post_SYA.append(return_node)
 
+    def _validate_assignment_target(self, target, token):
+        pending = [target]
+        while pending:
+            current = pending.pop()
+            if type(current) not in self.VALID_LEFT_HANDS:
+                self._syntax_error("invalid assignment target", token)
+            if type(current) is self.ARRAY_LITERAL_NODE_CLASS:
+                pending.extend(item.root_expr for item in current.elements)
+
     def handle_assignments(self, line, assignment_idx):
         VALID_LEFT_HANDS = self.VALID_LEFT_HANDS
         assignment_op_token = line[assignment_idx]
@@ -918,19 +921,7 @@ class ExpressionParser:
                 assignment_op_token.column_end,
             )
 
-        pending = [left_hand_node]
-        while pending:
-            target = pending.pop()
-            if type(target) not in VALID_LEFT_HANDS:
-                raise ParserError(
-                    self.file,
-                    "invalid assignment target",
-                    assignment_op_token.line,
-                    assignment_op_token.column_start,
-                    assignment_op_token.column_end,
-                )
-            if type(target) is self.ARRAY_LITERAL_NODE_CLASS:
-                pending.extend(item.root_expr for item in target.elements)
+        self._validate_assignment_target(left_hand_node, assignment_op_token)
 
         expected_expression = line[assignment_idx + 1 :]
         expr_node = self.shunting_yard_algo(expected_expression)
