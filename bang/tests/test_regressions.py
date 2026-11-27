@@ -117,6 +117,75 @@ class RegressionTests(unittest.TestCase):
     def test_and_short_circuits(self):
         self.assert_output("print{false && (1 / 0)}", "0\n")
 
+    def test_multiline_expressions_work_across_language_constructs(self):
+        cases = (
+            (
+                'fn transform {\n input,\n frozen=false,\n}\n return [input,frozen]\nend\n'
+                'values = [1,2]\nresult = transform{\n input = values,\n frozen = true,\n}\n'
+                'grid = [\n [1,2,3],\n [4,5,6],\n]\nprint{result,grid}',
+                '[[1, 2], 1] [[1, 2, 3], [4, 5, 6]]\n',
+            ),
+            (
+                'fn total args {\n bias = sum{\n args,\n},\n}\n'
+                'return sum{args} + bias\nend\n'
+                'print{\n total{\n 1,\n 2,\n bias=(\n 4 +\n 1\n),\n},\n total{1,2},\n}',
+                '8 6\n',
+            ),
+            (
+                'data Box [\n value,\n next\n]\nbox = Box{\n [\n 1,\n 2,\n],\n}\n'
+                'box.value[\n 0\n] += (\n 4 +\n 5\n)\n'
+                '[\n a,\n b\n] = box.value\nprint{a,b}',
+                '10 2\n',
+            ),
+            (
+                'x = 0\nwhile (\n x <\n 2\n)\n x += 1\nend\n'
+                'for value [\n 1,\n 2,\n]\n'
+                'if (\n value == 1\n)\n print{\n value + x,\n}\n'
+                'elif (\n value == 2\n)\n print{value+x}\nend\nend\n'
+                'if (\n false && (1/0)\n)\n print{0}\nend',
+                '3\n4\n',
+            ),
+            (
+                'fn make args; return [[[len]]]; end\nprint{\n'
+                'make{\n}[\n0\n][\n0\n][\n0\n]{\n"ab",\n},\n}',
+                '2\n',
+            ),
+            (
+                'fn mark {label,value}; print{label}; return value; end\n'
+                'fn pair {\n a,\n b=mark{\n "default",\n 9,\n},\n}\n'
+                'return [a,b]\nend\n'
+                'print{\n pair{\n mark{\n "first",\n 1,\n},\n'
+                'b=mark{\n "second",\n 2,\n},\n},\n}',
+                'first\nsecond\n[1, 2]\n',
+            ),
+            (
+                'print{\n [],\n dict{\n},\n set{\n},\n "# []{}();",\n}\n'
+                'x = 1\n+2\nprint{x}; print{\n 3\n}; print{4}',
+                '[] {} set() # []{}();\n1\n3\n4\n',
+            ),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                evaluator = self.assert_output(code, expected)
+                self.assertEqual(evaluator.func_depth, 0)
+
+    def test_multiline_cli_errors_keep_physical_line_numbers(self):
+        for code, status, row in (
+            ('print{\n [1,2}\n}', 2, 2),
+            ('print{\n 1\n', 2, 1),
+            ('x = [\n missing,\n]\n', 3, 2),
+            ('fn zero args; return 0; end\nprint{\n 1 / zero{\n }\n}', 4, 3),
+        ):
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / 'program.bang'
+                source.write_text(code, encoding='utf-8')
+                diagnostic = io.StringIO()
+                with contextlib.redirect_stderr(diagnostic):
+                    self.assertEqual(run_file(str(source)), status)
+                self.assertIn(f'Line {row},', diagnostic.getvalue())
+                self.assertIn(code.splitlines()[row - 1].strip(), diagnostic.getvalue())
+                self.assertNotIn('Traceback', diagnostic.getvalue())
+
     def test_or_short_circuits(self):
         self.assert_output("print{true || (1 / 0)}", "1\n")
 

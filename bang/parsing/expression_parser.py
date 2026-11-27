@@ -450,30 +450,62 @@ class ExpressionParser:
         self.illegal_assignment = 0
         self.expression_depth = 0
 
-    # we're going to split the tokens into seperate lines,
-    # where each line will be transformed into a singular node
     def split(self):
-        T_SEMICOLON_ENUM_VAL = self.T_SEMICOLON_ENUM_VAL
+        """Split logical statements, continuing newlines inside balanced delimiters."""
         if getattr(self.__class__, "IS_ASSIGN", None) is None:
             self.__class__._init_type_tables()
-        past = -1
-        for tok in self.tokens:
-            tok_enum_val = tok.type_enum_id
+        statements = []
+        current = []
+        openings = []
+        previous_line = None
+        pairs = {
+            self.T_LPAREN_ENUM_VAL: self.T_RPAREN_ENUM_VAL,
+            self.T_LBRACKET_ENUM_VAL: self.T_RBRACKET_ENUM_VAL,
+            self.T_LBRACE_ENUM_VAL: self.T_RBRACE_ENUM_VAL,
+        }
+        enders = set(pairs.values())
+        closing_text = {"(": ")", "[": "]", "{": "}"}
 
-            tok_line = tok.line
-            if tok_enum_val == T_SEMICOLON_ENUM_VAL:
-                if self.post_split and self.post_split[-1]:  # don’t keep double blanks
-                    self.post_split.append([])
+        for tok in self.tokens:
+            typ = tok.type_enum_id
+            if tok.line != previous_line and not openings and current:
+                statements.append(current)
+                current = []
+            previous_line = tok.line
+
+            if typ == self.T_SEMICOLON_ENUM_VAL:
+                if openings:
+                    self._syntax_error("';' is only allowed outside expression delimiters", tok)
+                if current:
+                    statements.append(current)
+                    current = []
                 continue
 
-            if tok_line != past:
-                self.post_split.append([])
-                past = tok_line
-            self.post_split[-1].append(tok)
-        # for cases such as i = 5; \n
-        if self.post_split and not self.post_split[-1]:
-            self.post_split.pop()
+            if typ in pairs:
+                openings.append(tok)
+            elif typ in enders:
+                if not openings:
+                    self._syntax_error(f"unexpected closing delimiter {tok.value!r}", tok)
+                opening = openings[-1]
+                if typ != pairs[opening.type_enum_id]:
+                    self._syntax_error(
+                        f"mismatched closing delimiter {tok.value!r}; "
+                        f"expected {closing_text[opening.value]!r} to close "
+                        f"{opening.value!r} from line {opening.line}",
+                        tok,
+                    )
+                openings.pop()
+            current.append(tok)
 
+        if openings:
+            opening = openings[-1]
+            self._syntax_error(
+                f"unclosed delimiter {opening.value!r}; expected {closing_text[opening.value]!r}",
+                opening,
+            )
+        if current:
+            statements.append(current)
+        self.post_split = statements
         return self.post_split
 
     # most constructs in this lang follow wildy different layouts (sometimes very unique)
