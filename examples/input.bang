@@ -1,3 +1,5 @@
+# Error demo: this file intentionally fails at the string + number expression.
+# Expected: SemanticError (CLI exit 3), rather than a successful program.
 
 a = ["1"]
 b = [a[0]]

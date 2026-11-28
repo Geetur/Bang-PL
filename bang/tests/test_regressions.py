@@ -2,6 +2,10 @@
 
 import contextlib
 import io
+import os
+import re
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +17,20 @@ from bang.parsing.control_flow_parser import ControlFlowParser
 from bang.parsing.expression_parser import ExpressionParser
 from bang.runtime.evaluator import Evaluator, EvaluatorError
 from bang.semantic.semantic_analysis import SemanticAnalysis, SemanticError
+
+
+def run_documented_program(path):
+    root = Path(__file__).resolve().parents[2]
+    return subprocess.run(
+        [sys.executable, "-m", "bang", str(path)],
+        cwd=root,
+        input="Ada\n42\n",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
+        timeout=10,
+    )
 
 
 def compile_program(code, *, analyze=True):
@@ -30,6 +48,50 @@ def compile_program(code, *, analyze=True):
 
 
 class RegressionTests(unittest.TestCase):
+    def test_repository_examples_have_the_documented_cli_outcome(self):
+        root = Path(__file__).resolve().parents[2]
+        examples = sorted((root / "examples").glob("*.bang"))
+        self.assertTrue(examples, "No example programs were found")
+        expected_errors = {
+            "input.bang": (3, "operator '+' does not support string and number"),
+        }
+        self.assertTrue(set(expected_errors) <= {path.name for path in examples})
+        for path in examples:
+            with self.subTest(example=path.name):
+                result = run_documented_program(path)
+                expected_code, message = expected_errors.get(path.name, (0, ""))
+                self.assertEqual(
+                    result.returncode, expected_code, result.stdout + result.stderr,
+                )
+                if message:
+                    self.assertIn(message, result.stderr)
+                    self.assertIn('"1" + 5', result.stderr)
+                else:
+                    self.assertEqual(result.stderr, "")
+
+    def test_readme_bang_blocks_run_and_match_documented_output(self):
+        root = Path(__file__).resolve().parents[2]
+        readme = (root / "README.md").read_text(encoding="utf-8-sig")
+        blocks = list(re.finditer(
+            r"^```bang[ \t]*\r?\n(.*?)^```[ \t]*\r?$", readme, re.MULTILINE | re.DOTALL,
+        ))
+        self.assertTrue(blocks, "No executable Bang blocks were found in the README")
+        with tempfile.TemporaryDirectory() as directory:
+            for index, block in enumerate(blocks, 1):
+                line = readme.count("\n", 0, block.start()) + 1
+                with self.subTest(block=index, line=line):
+                    source = Path(directory) / f"readme-{index}.bang"
+                    source.write_text(block.group(1), encoding="utf-8")
+                    result = run_documented_program(source)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(result.stderr, "")
+                    expected = re.match(
+                        r"\s*Output:\s*```text\r?\n(.*?)^```[ \t]*\r?$",
+                        readme[block.end():], re.MULTILINE | re.DOTALL,
+                    )
+                    if expected:
+                        self.assertEqual(result.stdout, expected.group(1))
+
     def assert_output(self, code, expected):
         evaluator = compile_program(code)
         output = io.StringIO()

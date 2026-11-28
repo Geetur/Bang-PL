@@ -104,8 +104,8 @@ from bang.semantic.semantic_nodes import (
     DATA_CLASS_TYPE_CLASS,
     DICT_TYPE_CLASS,
     DYNAMIC_TYPE_CLASS,
-    FUNCTION_TYPE_CLASS,
     FROZEN_SET_TYPE_CLASS,
+    FUNCTION_TYPE_CLASS,
     INSTANCE_TYPE_CLASS,
     NONE_TYPE_CLASS,
     NUMBER_TYPE_CLASS,
@@ -134,9 +134,7 @@ class SemanticError(Exception):
         return ""
 
     def _format(self):
-        return render_error(
-            "SemanticError", self.text, self.msg, self.row, self.start, self.end
-        )
+        return render_error("SemanticError", self.text, self.msg, self.row, self.start, self.end)
 
     def __str__(self) -> str:
         return self._format()
@@ -653,7 +651,8 @@ class SemanticAnalysis:
             return dynamic()
         set_types = (self.SET_TYPE_CLASS, self.FROZEN_SET_TYPE_CLASS)
         if (
-            lt in set_types and rt in set_types
+            lt in set_types
+            and rt in set_types
             and op in (self.T_PLUS_ENUM_VAL, self.T_MINUS_ENUM_VAL)
         ):
             return lt(None)
@@ -725,7 +724,8 @@ class SemanticAnalysis:
         ):
             self._error(
                 f"{type_name(base)} index at level {level} must be an integer "
-                f"(got {type_name(index)})", metadata,
+                f"(got {type_name(index)})",
+                metadata,
             )
         if base.value is None or index.value is None:
             return self.DYNAMIC_TYPE_CLASS()
@@ -802,9 +802,14 @@ class SemanticAnalysis:
                             except ValueError as error:
                                 self._error(
                                     index_error_message(
-                                        error, base.value, index.value, position + 1,
-                                        writing=True, value=value.value,
-                                    ), metadata,
+                                        error,
+                                        base.value,
+                                        index.value,
+                                        position + 1,
+                                        writing=True,
+                                        value=value.value,
+                                    ),
+                                    metadata,
                                 )
                         else:
                             base.value = None
@@ -889,7 +894,9 @@ class SemanticAnalysis:
                 for name in value.fields:
                     value.fields[name] = self.DYNAMIC_TYPE_CLASS()
             elif type(value) in (
-                self.SET_TYPE_CLASS, self.FROZEN_SET_TYPE_CLASS, self.DICT_TYPE_CLASS,
+                self.SET_TYPE_CLASS,
+                self.FROZEN_SET_TYPE_CLASS,
+                self.DICT_TYPE_CLASS,
             ):
                 if value.value is not None:
                     pending.extend(value.value)
@@ -922,7 +929,8 @@ class SemanticAnalysis:
             if len(arguments) > len(callee.fields):
                 self._error(
                     f"too many constructor arguments (expected at most {len(callee.fields)}, "
-                    f"got {len(arguments)})", root,
+                    f"got {len(arguments)})",
+                    root,
                 )
             fields = {
                 name: arguments[index] if index < len(arguments) else self.DYNAMIC_TYPE_CLASS()
@@ -1045,7 +1053,8 @@ class SemanticAnalysis:
                 else:
                     self._error(
                         f"unary '{node.meta_data.value}' requires a number "
-                        f"(got {type_name(operand)})", node,
+                        f"(got {type_name(operand)})",
+                        node,
                     )
                 values.append(value)
             elif tag == "array":

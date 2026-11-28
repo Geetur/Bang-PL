@@ -37,7 +37,8 @@ def bind_arguments(parameters, arguments, keyword_names=(), *, variadic_name=Non
             hint = (
                 f"; '{name}' is a named option: use {name}=...; "
                 f"positional arguments are collected in '{variadic_name}'"
-                if variadic_name is not None else ""
+                if variadic_name is not None
+                else ""
             )
             raise ValueError(f"missing required argument '{name}'" + hint)
     return bound

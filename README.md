@@ -514,6 +514,13 @@ The default selection runs the lexer, parser, semantic, evaluator, and regressio
 * `bang/runtime/tests_evaluator/test_evaluator_correctness.py`
 * `bang/tests/test_regressions.py`
 
+The existing regression suite also runs every `examples/*.bang` file and every
+Bang code block in this README through the CLI, using fixed standard input and
+execution timeouts. Documented output blocks are checked where provided.
+`examples/input.bang` is an intentional string-plus-number error demo: the test
+requires its specific semantic diagnostic and exit status; other examples must
+succeed.
+
 Profiling scripts are excluded from the default run because they use optional profiling tools. The parser and regression suites also run with the standard library:
 
 ```bash
@@ -546,6 +553,10 @@ ruff check .
 ruff format --check .
 python -m pytest -q
 ```
+
+The repository already configures Ruff's lint-fix and formatting hooks. Activate
+them once in your local clone with `python -m pre_commit install`; run
+`python -m pre_commit run --all-files` to check existing files immediately.
 
 * Fork the repository.
 * Create a branch: `git checkout -b feat/my-cool-thing`.

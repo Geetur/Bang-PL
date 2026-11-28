@@ -3,7 +3,6 @@
 from dataclasses import dataclass
 from typing import Any
 
-
 MISSING = object()
 
 
@@ -20,8 +19,10 @@ class BuiltinSpec:
 
 SPECS = {
     "print": BuiltinSpec(
-        required=(), options=("sep", "end", "flush", "spread"),
-        booleans=("flush", "spread"), variadic=True,
+        required=(),
+        options=("sep", "end", "flush", "spread"),
+        booleans=("flush", "spread"),
+        variadic=True,
     ),
     "len": BuiltinSpec(options=("where",), callbacks=("where",)),
     "int": BuiltinSpec(options=("base",)),
@@ -30,33 +31,51 @@ SPECS = {
     ),
     "sum": BuiltinSpec(options=("initial", "transform"), callbacks=("transform",)),
     "set": BuiltinSpec(
-        required=(), options=("frozen", "transform"), booleans=("frozen",),
+        required=(),
+        options=("frozen", "transform"),
+        booleans=("frozen",),
         callbacks=("transform",),
     ),
     "dict": BuiltinSpec(
-        required=(), options=("values", "strict"), booleans=("strict",), variadic=True,
+        required=(),
+        options=("values", "strict"),
+        booleans=("strict",),
+        variadic=True,
     ),
     "min": BuiltinSpec(options=("key", "default"), callbacks=("key",), variadic=True),
     "max": BuiltinSpec(options=("key", "default"), callbacks=("key",), variadic=True),
     "sort": BuiltinSpec(
-        options=("key", "reverse", "in_place"), booleans=("reverse", "in_place"),
-        callbacks=("key",), variadic=True,
+        options=("key", "reverse", "in_place"),
+        booleans=("reverse", "in_place"),
+        callbacks=("key",),
+        variadic=True,
     ),
     "range": BuiltinSpec(
-        required=(), options=("start", "step", "inclusive"), booleans=("inclusive",),
+        required=(),
+        options=("start", "step", "inclusive"),
+        booleans=("inclusive",),
         aliases=(("stop", "input"),),
     ),
     "map": BuiltinSpec(
-        parameters=("input", "transform"), required=("input", "transform"),
-        options=("indexed",), booleans=("indexed",), callbacks=("transform",),
+        parameters=("input", "transform"),
+        required=("input", "transform"),
+        options=("indexed",),
+        booleans=("indexed",),
+        callbacks=("transform",),
     ),
     "filter": BuiltinSpec(
-        parameters=("input", "predicate"), required=("input", "predicate"),
-        options=("indexed", "invert"), booleans=("indexed", "invert"), callbacks=("predicate",),
+        parameters=("input", "predicate"),
+        required=("input", "predicate"),
+        options=("indexed", "invert"),
+        booleans=("indexed", "invert"),
+        callbacks=("predicate",),
     ),
     "reduce": BuiltinSpec(
-        parameters=("input", "combine", "initial"), required=("input", "combine"),
-        options=("indexed",), booleans=("indexed",), callbacks=("combine",),
+        parameters=("input", "combine", "initial"),
+        required=("input", "combine"),
+        options=("indexed",),
+        booleans=("indexed",),
+        callbacks=("combine",),
     ),
 }
 
@@ -104,8 +123,10 @@ def bind_builtin(name, arguments, keyword_names=(), *, kind_of=None):
     if spec.variadic:
         if positional and "input" in supplied:
             raise ValueError(f"{name} received multiple values for 'input'")
-        items = tuple(positional) if positional else (
-            (supplied["input"],) if "input" in supplied else ()
+        items = (
+            tuple(positional)
+            if positional
+            else ((supplied["input"],) if "input" in supplied else ())
         )
         if len(positional) == 1:
             supplied["input"] = positional[0]

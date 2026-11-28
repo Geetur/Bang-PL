@@ -44,9 +44,7 @@ def index_location(node, position):
 
 def field_location(node, position):
     return (
-        node.field_meta_data[position]
-        if position < len(node.field_meta_data)
-        else node.meta_data
+        node.field_meta_data[position] if position < len(node.field_meta_data) else node.meta_data
     )
 
 
@@ -77,7 +75,7 @@ _TYPE_NAMES = {
     "InstanceType": "record",
     "DynamicType": "value",
     "SliceType": "slice",
-    "slice": "slice"
+    "slice": "slice",
 }
 
 
@@ -103,8 +101,7 @@ def diagnostic_value(value):
 
 def nonindexable_message(base, level):
     return (
-        f"cannot index {type_name(base)} at level {level}; "
-        "expected an array, string, or dictionary"
+        f"cannot index {type_name(base)} at level {level}; expected an array, string, or dictionary"
     )
 
 
@@ -124,10 +121,7 @@ def index_error_message(error, base, key, level, *, writing=False, value=None):
             )
         return f"invalid slice at level {level}"
     if isinstance(error, IndexError):
-        return (
-            f"index {diagnostic_value(key)} out of bounds at level {level} "
-            f"(length {len(base)})"
-        )
+        return f"index {diagnostic_value(key)} out of bounds at level {level} (length {len(base)})"
     if isinstance(error, KeyError):
         return f"key {diagnostic_value(key)} not found at level {level}"
     if type(base) is dict:

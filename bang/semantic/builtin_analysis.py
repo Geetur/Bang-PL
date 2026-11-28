@@ -17,7 +17,6 @@ from bang.semantic.semantic_nodes import (
     StringType,
 )
 
-
 CALLABLES = (FunctionType, BuiltinType, DataClassType)
 ITERABLES = (ArrayType, StringType, DictType, SetType, FrozenSetType)
 
@@ -70,7 +69,8 @@ def check_dict(checker, root, bound):
                 if len(key_fact.value) != len(value_fact.value):
                     checker._error(
                         f"dict keys/values length mismatch ({len(key_fact.value)} and "
-                        f"{len(value_fact.value)})", root,
+                        f"{len(value_fact.value)})",
+                        root,
                     )
                 keys = key_fact.value
     else:
@@ -129,7 +129,8 @@ def infer_builtin(checker, root, name, arguments):
     if name == "input" and "input" in options:
         if type(options["input"]) not in (StringType, DynamicType):
             checker._error(
-                f"input prompt must be a string (got {type_name(options['input'])})", root,
+                f"input prompt must be a string (got {type_name(options['input'])})",
+                root,
             )
     if name in ("sum", "set", "len", "map", "filter", "reduce"):
         value = options.get("input")

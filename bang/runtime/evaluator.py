@@ -110,7 +110,6 @@ from bang.runtime.evaluator_nodes import (
     format_value,
 )
 
-
 _MISSING = object()
 
 
@@ -132,9 +131,7 @@ class EvaluatorError(Exception):
         return ""
 
     def _format(self):
-        return render_error(
-            "EvaluatorError", self.text, self.msg, self.row, self.start, self.end
-        )
+        return render_error("EvaluatorError", self.text, self.msg, self.row, self.start, self.end)
 
     def __str__(self) -> str:
         return self._format()
@@ -608,13 +605,18 @@ class Evaluator:
                 target = self.eval_expression(left_hand.base)
                 for position, index in enumerate(left_hand.index[:-1]):
                     target = self._read_index(
-                        target, self.eval_expression(index.root_expr),
-                        index_location(left_hand, position), position + 1,
+                        target,
+                        self.eval_expression(index.root_expr),
+                        index_location(left_hand, position),
+                        position + 1,
                     )
                 key = self.eval_expression(left_hand.index[-1].root_expr)
                 return (
-                    target, key, index_location(left_hand, len(left_hand.index) - 1),
-                    len(left_hand.index), "index",
+                    target,
+                    key,
+                    index_location(left_hand, len(left_hand.index) - 1),
+                    len(left_hand.index),
+                    "index",
                 )
 
             if type(left_hand) is self.FIELD_ACCESS_NODE_CLASS:
@@ -1309,7 +1311,7 @@ class Evaluator:
             return not operand
 
         def eval_uminus(operand):
-            if isinstance(operand, (int, float)):
+            if isinstance(operand, int | float):
                 return -operand
             raise EvaluatorError(
                 self.file,
@@ -1320,7 +1322,7 @@ class Evaluator:
             )
 
         def eval_uplus(operand):
-            if isinstance(operand, (int, float)):
+            if isinstance(operand, int | float):
                 return +operand
             raise EvaluatorError(
                 self.file,

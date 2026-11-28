@@ -287,8 +287,10 @@ class Lexer:
                     if text[pos + 1] in "\r\n":
                         raise LexerError("newline in string literal", text, start)
                     raise LexerError(
-                        f"unknown escape sequence {text[pos:pos + 2]!r}; "
-                        "use '\\\\' for a literal backslash", text, pos,
+                        f"unknown escape sequence {text[pos : pos + 2]!r}; "
+                        "use '\\\\' for a literal backslash",
+                        text,
+                        pos,
                     )
                 continue
             if formatted and char == "{":
@@ -299,9 +301,7 @@ class Lexer:
                 if literal:
                     parts.append("".join(literal))
                     literal = []
-                end = self._field_end(
-                    pos + 1, stop, line=line, line_start=line_start, depth=depth
-                )
+                end = self._field_end(pos + 1, stop, line=line, line_start=line_start, depth=depth)
                 if not text[pos + 1 : end].strip():
                     raise LexerError("empty interpolation field", text, pos)
                 parts.append(InterpolationField(pos + 1, end, line, line_start))

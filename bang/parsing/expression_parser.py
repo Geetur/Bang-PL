@@ -110,9 +110,7 @@ class ParserError(Exception):
         return ""
 
     def _format(self):
-        return render_error(
-            "ParserError", self.text, self.msg, self.row, self.start, self.end
-        )
+        return render_error("ParserError", self.text, self.msg, self.row, self.start, self.end)
 
     def __str__(self) -> str:
         return self._format()
@@ -1259,7 +1257,9 @@ class ExpressionParser:
                 else:
                     output.append(
                         self.FIELD_ACCESS_NODE_CLASS(
-                            base=left, field=[right.value], meta_data=op_tok,
+                            base=left,
+                            field=[right.value],
+                            meta_data=op_tok,
                             field_meta_data=[right.meta_data],
                         )
                     )

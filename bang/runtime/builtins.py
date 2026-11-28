@@ -14,7 +14,6 @@ from bang.runtime.evaluator_nodes import (
     format_value,
 )
 
-
 ITERABLE_TYPES = (list, str, dict, set, frozenset)
 CALLABLE_TYPES = (RUN_TIME_FUNCTION, RUN_TIME_BUILTIN, RUN_TIME_DATACLASS)
 
@@ -29,9 +28,7 @@ def runtime_kind(value):
 
 def build_builtins(evaluator):
     library = BuiltinLibrary(evaluator)
-    return {
-        name: RUN_TIME_BUILTIN(name, partial(library.invoke, name)) for name in SPECS
-    }
+    return {name: RUN_TIME_BUILTIN(name, partial(library.invoke, name)) for name in SPECS}
 
 
 class BuiltinLibrary:
@@ -79,7 +76,9 @@ class BuiltinLibrary:
                 self.fail("print with spread=true needs one iterable input", metadata)
             values = self.iterable("print", values[0], metadata)
         builtins.print(
-            *(format_value(value) for value in values), sep=sep, end=ending,
+            *(format_value(value) for value in values),
+            sep=sep,
+            end=ending,
             flush=bool(options.get("flush", 0)),
         )
         return 0
@@ -97,7 +96,7 @@ class BuiltinLibrary:
         value, base = bound.values["input"], bound.values.get("base", 10)
         if type(base) not in (int, bool) or base != 0 and not 2 <= base <= 36:
             self.fail("int base must be 0 or an integer from 2 through 36", metadata)
-        if isinstance(value, (int, float)):
+        if isinstance(value, int | float):
             if base != 10:
                 self.fail("int bases other than 10 require a string input", metadata)
             return int(value)
@@ -139,13 +138,20 @@ class BuiltinLibrary:
                 value = self.call(transform, [value], metadata)
             if accumulator is MISSING:
                 factories = {
-                    int: int, float: int, bool: int, str: str, list: list,
-                    set: set, frozenset: frozenset, dict: dict,
+                    int: int,
+                    float: int,
+                    bool: int,
+                    str: str,
+                    list: list,
+                    set: set,
+                    frozenset: frozenset,
+                    dict: dict,
                 }
                 factory = factories.get(type(value))
                 if factory is None:
                     self.fail(
-                        "sum items need a supported '+' operation or an initial value", metadata,
+                        "sum items need a supported '+' operation or an initial value",
+                        metadata,
                     )
                 accumulator = factory()
             accumulator = self.evaluator._eval_binary_values(operation, accumulator, value)
@@ -162,21 +168,25 @@ class BuiltinLibrary:
                 result.add(value)
             except TypeError:
                 self.fail(
-                    f"set item {index + 1} must be hashable (got {type_name(value)})", metadata,
+                    f"set item {index + 1} must be hashable (got {type_name(value)})",
+                    metadata,
                 )
         return frozenset(result) if bound.values.get("frozen", 0) else result
 
     def do_dict(self, bound, metadata):
         options = bound.values
-        raw = [] if not bound.items else (
-            bound.items[0] if len(bound.items) == 1 else list(bound.items)
+        raw = (
+            []
+            if not bound.items
+            else (bound.items[0] if len(bound.items) == 1 else list(bound.items))
         )
         if "values" in options:
             keys = self.iterable("dict keys", raw, metadata)
             values = self.iterable("dict values", options["values"], metadata)
             if len(keys) != len(values):
                 self.fail(
-                    f"dict keys/values length mismatch ({len(keys)} and {len(values)})", metadata,
+                    f"dict keys/values length mismatch ({len(keys)} and {len(values)})",
+                    metadata,
                 )
             pairs = list(zip(keys, values, strict=True))
         elif type(raw) is dict:
@@ -189,7 +199,8 @@ class BuiltinLibrary:
                 for index, item in enumerate(items):
                     if len(item) != 2:
                         self.fail(
-                            f"dict pair {index + 1} must contain exactly two values", metadata,
+                            f"dict pair {index + 1} must contain exactly two values",
+                            metadata,
                         )
                 pairs = items
             else:
@@ -222,7 +233,8 @@ class BuiltinLibrary:
             except (TypeError, RecursionError):
                 self.fail(
                     f"{name} expects comparable key values "
-                    f"(got {type_name(selected_key)} and {type_name(candidate)})", metadata,
+                    f"(got {type_name(selected_key)} and {type_name(candidate)})",
+                    metadata,
                 )
             if better:
                 selected, selected_key = value, candidate
