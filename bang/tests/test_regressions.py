@@ -701,6 +701,131 @@ class RegressionTests(unittest.TestCase):
                 evaluator = self.assert_output(code, expected)
                 self.assertEqual(evaluator.func_depth, 0)
 
+    def test_slice_reads_use_exclusive_clamped_bounds_and_shallow_copies(self):
+        cases = (
+            ('values=[0,1,2,3,4,5]; print{values[1:5],values[::-1],values[::2]}',
+             '[1, 2, 3, 4] [5, 4, 3, 2, 1, 0] [0, 2, 4]\n'),
+            ('a=[0,1,2,3]; print{a[-3:-1],a[-99:99],a[99:],a[3:1],'
+             'a[:-1:-1],a[3:0:-2],a[::true],a[none:2],[][::2]}',
+             '[1, 2] [0, 1, 2, 3] [] [] [] [3, 1] [0, 1, 2, 3] [0, 1] []\n'),
+            ('print{"abcdef"[1:5:2],"café🙂"[::-1],""[:],[[1,2],[3,4]][1:][0][::-1]}',
+             'bd 🙂éfac  [4, 3]\n'),
+            ('a=[[1],[2]]; b=a[:]; b[0][0]=9; b[1]=[8]; print{a,b}',
+             '[[9], [2]] [[9], [8]]\n'),
+            ('a=[0,1,2,3]; print{a[\n 1:\n 4:\n 2\n]}', '[1, 3]\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+
+    def test_slice_assignments_preserve_aliases_and_validate_extended_lengths(self):
+        cases = (
+            ('a=[0,1,2,3]; b=a; a[1:3]=[9]; a[1:1]=[7,8]; '
+             'a[-1:]=[]; print{a,b}', '[0, 7, 8, 9] [0, 7, 8, 9]\n'),
+            ('a=[0,1,2,3,4]; a[::2]=[9,8,7]; print{a}; a[::-1]=a; print{a}',
+             '[9, 1, 8, 3, 7]\n[7, 3, 8, 1, 9]\n'),
+            ('a=[1,2,3]; a[1:2]+=[8]; print{a}; a[0:2]*=2; print{a}',
+             '[1, 2, 8, 3]\n[1, 1, 2, 2, 8, 3]\n'),
+            ('a=[1,2]; a[:]=a; a[1:1]=a; print{a}', '[1, 1, 2, 2]\n'),
+            ('a=[1]; a[:]=["ok"]; print{a[0]+"!"}', 'ok!\n'),
+            ('a=[[1],[2]]; for [a[:],value] [[[3,4],9]]; print{a,value}; end',
+             '[3, 4] 9\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+
+    def test_slice_expressions_evaluate_once_in_existing_assignment_order(self):
+        self.assert_output(
+            'a=[0,1,2,3]; fn base args; print{"base"}; return a; end; '
+            'fn mark {label,value}; print{label}; return value; end; '
+            'print{base{}[mark{"start",0}:mark{"stop",4}:mark{"step",2}]}; '
+            'base{}[mark{"target",1}:3]=mark{"rhs",[9]}; '
+            'base{}[mark{"target",1}:2]+=mark{"rhs",[8]}; print{a}',
+            'base\nstart\nstop\nstep\n[0, 2]\nrhs\nbase\ntarget\n'
+            'base\ntarget\nrhs\n[0, 9, 8, 3]\n',
+        )
+
+    def test_slice_errors_are_checked_statically_and_dynamically(self):
+        for code in (
+            'a=[1,2]; a[::0]', 'a=[1,2]; a[::false]', 'a=[1,2]; a[::none]',
+            'a=[1,2]; a[1.0:]', 'a=[1,2]; a[:"x"]', 'a=[1,2]; a[::[]]',
+            'dict{}[:]', 'set{}[:]', 'a=1; a[:]', 'a=[1,2]; a[:]=1',
+            'a=[1,2]; a[::2]=[]', 'a="abc"; a[:]=[1]',
+        ):
+            with self.subTest(code=code):
+                with self.assertRaises(SemanticError):
+                    compile_program(code)
+                evaluator = compile_program(code, analyze=False)
+                with self.assertRaises(EvaluatorError):
+                    evaluator.eval_program()
+                self.assertEqual(len(evaluator.scope_stack), 1)
+        evaluator = compile_program(
+            'a=[1,2]; fn replace {value}; a[::2]=value; end; replace{[]}'
+        )
+        with self.assertRaises(EvaluatorError):
+            evaluator.eval_program()
+        self.assertEqual(evaluator.scope_stack[0]['a'], [1, 2])
+        self.assertEqual(len(evaluator.scope_stack), 1)
+        self.assertEqual(evaluator.func_depth, 0)
+
+    def test_interpolated_strings_compose_with_bang_expressions_and_escapes(self):
+        cases = (
+            ('name="Ada"; score=42; print{f"{name} scored {score} points"}',
+             'Ada scored 42 points\n'),
+            ('x=3; print{f"{{{x}}}","{x}",f"{{}}",f"",f"no fields"}',
+             '{3} {x} {}  no fields\n'),
+            ('values=[1,2,3,4]; print{f"{sum{values[1::2]}}:{len{"ab"}}"}', '6:2\n'),
+            ('x=4; print{f"outer {f"inner {x}"}"}', 'outer inner 4\n'),
+            ('print{f"{(fn {x} return x*x){3}} {dict{"a",1}} {1<2} {none}"}',
+             "9 {'a': 1} True 0\n"),
+            (r'print{"a\nb",f"say \"hi\"\\{2}","\q"}', 'a\nb say "hi"\\2 \\q\n'),
+            ('fn label {x,text=f"value={x}"} return text; print{label{3},label{4,"custom"}}',
+             'value=3 custom\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+
+    def test_interpolation_fields_evaluate_and_format_once_from_left_to_right(self):
+        self.assert_output(
+            'a=[1,2]; n=0; fn change args; n+=1; a[0]=9; return n; end; '
+            'print{f"{a}|{change{}}|{a}|{change{}}"}; print{n}',
+            '[1, 2]|1|[9, 2]|2\n2\n',
+        )
+        evaluator = compile_program(
+            'n=0; fn fail args; return 1/0; end; fn later args; n+=1; return n; end; '
+            'fn outer args; for i 1; return f"{fail{}} {later{}}"; end; end; outer{}'
+        )
+        with self.assertRaises(EvaluatorError):
+            evaluator.eval_program()
+        self.assertEqual(evaluator.scope_stack[0]['n'], 0)
+        self.assertEqual(len(evaluator.scope_stack), 1)
+        self.assertEqual(evaluator.func_depth, 0)
+        self.assertEqual(evaluator.loop_depth, 0)
+
+    def test_slice_and_interpolation_cli_errors_point_into_the_original_source(self):
+        cases = (
+            ('\nprint{\n  f"value={missing}"\n}', 3, 3, 'variable not initialized'),
+            ('\nprint{\n  f"value={1+}"\n}', 2, 3, 'operand'),
+            ('fn zero args; return 0; end\nprint{\n  f"value={1/zero{}}"\n}',
+             4, 3, 'zero'),
+            ('\nprint{\n  f"{[1,2][::0]}"\n}', 3, 3, 'slice step'),
+            ('\nprint{\n  f"bad }"\n}', 1, 3, "single '}'"),
+        )
+        for code, status, row, message in cases:
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / 'program.bang'
+                source.write_text(code, encoding='utf-8')
+                diagnostic = io.StringIO()
+                with contextlib.redirect_stderr(diagnostic):
+                    self.assertEqual(run_file(str(source)), status)
+                text = diagnostic.getvalue()
+                self.assertIn(f'Line {row},', text)
+                self.assertIn(message, text)
+                self.assertIn(code.splitlines()[row - 1].strip(), text)
+                self.assertNotIn('Traceback', text)
+
     def test_short_function_errors_preserve_binding_checks_and_scope_cleanup(self):
         for code in (
             'fn f {x} return x; f{}', 'f=fn {} return 1; f{1}',

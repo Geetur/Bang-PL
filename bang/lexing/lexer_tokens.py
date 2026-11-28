@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import IntEnum
+from typing import Any
 
 
 class TokenType(IntEnum):
@@ -68,6 +69,8 @@ class TokenType(IntEnum):
     T_FN = 47  # fn
     T_IN = 48  # in
     T_DATA = 49  # data
+    T_COLON = 50  # slice separator
+    T_FSTRING = 51  # interpolated string
 
 
 T_PLUS_ENUM_VAL = TokenType.T_PLUS.value  # +
@@ -134,13 +137,15 @@ T_END_ENUM_VAL = TokenType.T_END.value  # end
 T_FN_ENUM_VAL = TokenType.T_FN.value  # fn
 T_IN_ENUM_VAL = TokenType.T_IN.value  # in
 T_DATA_ENUM_VAL = TokenType.T_DATA.value  # data
+T_COLON_ENUM_VAL = TokenType.T_COLON.value
+T_FSTRING_ENUM_VAL = TokenType.T_FSTRING.value
 
 
 @dataclass(slots=True)
 class Lexeme:
     # dataclass for representing a single token of input after lexical analysis
     type_enum_id: int
-    value: str
+    value: Any
     line: int
     column_start: int
     column_end: int
@@ -153,6 +158,14 @@ class Lexeme:
         {self.column_end}\n
         )
         """
+
+
+@dataclass(frozen=True, slots=True)
+class InterpolationField:
+    start: int
+    stop: int
+    line: int
+    line_start: int
 
 
 # these constants aren't tokens but relevant to lexing
@@ -181,6 +194,7 @@ SYMBOLS = {
     '"': T_STRING_ENUM_VAL,
     ",": T_COMMA_ENUM_VAL,
     ";": T_SEMICOLON_ENUM_VAL,
+    ":": T_COLON_ENUM_VAL,
     # double characters
     "+=": T_PLUS_ASSIGN_ENUM_VAL,
     "-=": T_MINUS_ASSIGN_ENUM_VAL,

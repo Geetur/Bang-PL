@@ -4,6 +4,7 @@
 
 from math import isfinite
 
+from bang.lexing.lexer import Lexer
 from bang.lexing.lexer_tokens import (
     T_AND_ENUM_VAL,
     T_ASSIGN_ENUM_VAL,
@@ -11,6 +12,7 @@ from bang.lexing.lexer_tokens import (
     T_ASTERISK_ENUM_VAL,
     T_BOOL_ENUM_VAL,
     T_BREAK_ENUM_VAL,
+    T_COLON_ENUM_VAL,
     T_COMMA_ENUM_VAL,
     T_CONTINUE_ENUM_VAL,
     T_DATA_ENUM_VAL,
@@ -24,6 +26,7 @@ from bang.lexing.lexer_tokens import (
     T_FLOAT_ENUM_VAL,
     T_FN_ENUM_VAL,
     T_FOR_ENUM_VAL,
+    T_FSTRING_ENUM_VAL,
     T_GT_ENUM_VAL,
     T_GTEQ_ENUM_VAL,
     T_IDENT_ENUM_VAL,
@@ -77,12 +80,14 @@ from bang.parsing.parser_nodes import (
     IF_NODE_CLASS,
     INDEX_NODE_CLASS,
     INTEGER_LITERAL_NODE_CLASS,
+    INTERPOLATED_STRING_NODE_CLASS,
     NONE_LITERAL_NODE_CLASS,
-    ParameterNode,
     RETURN_NODE_CLASS,
+    SLICE_NODE_CLASS,
     STRING_LITERAL_NODE_CLASS,
     UNARY_OP_NODE_CLASS,
     WHILE_NODE_CLASS,
+    ParameterNode,
 )
 
 
@@ -196,6 +201,8 @@ class ExpressionParser:
     INTEGER_LITERAL_NODE_CLASS = INTEGER_LITERAL_NODE_CLASS
     NONE_LITERAL_NODE_CLASS = NONE_LITERAL_NODE_CLASS
     RETURN_NODE_CLASS = RETURN_NODE_CLASS
+    INTERPOLATED_STRING_NODE_CLASS = INTERPOLATED_STRING_NODE_CLASS
+    SLICE_NODE_CLASS = SLICE_NODE_CLASS
     STRING_LITERAL_NODE_CLASS = STRING_LITERAL_NODE_CLASS
     UNARY_OP_NODE_CLASS = UNARY_OP_NODE_CLASS
     WHILE_NODE_CLASS = WHILE_NODE_CLASS
@@ -223,6 +230,8 @@ class ExpressionParser:
     T_RBRACE_ENUM_VAL = T_RBRACE_ENUM_VAL  # }
     T_LBRACKET_ENUM_VAL = T_LBRACKET_ENUM_VAL  # [
     T_RBRACKET_ENUM_VAL = T_RBRACKET_ENUM_VAL  # ]
+    T_COLON_ENUM_VAL = T_COLON_ENUM_VAL
+    T_FSTRING_ENUM_VAL = T_FSTRING_ENUM_VAL
     T_COMMA_ENUM_VAL = T_COMMA_ENUM_VAL  # ,
     T_SEMICOLON_ENUM_VAL = T_SEMICOLON_ENUM_VAL  # ;
     T_DOT_ENUM_VAL = T_DOT_ENUM_VAL  # .
@@ -979,6 +988,50 @@ class ExpressionParser:
 
         self.post_SYA.append(assignment_node)
 
+    def _index_expression(self, line, left_bracket):
+        pairs = {
+            self.T_LPAREN_ENUM_VAL: self.T_RPAREN_ENUM_VAL,
+            self.T_LBRACKET_ENUM_VAL: self.T_RBRACKET_ENUM_VAL,
+            self.T_LBRACE_ENUM_VAL: self.T_RBRACE_ENUM_VAL,
+        }
+        openings = []
+        separators = []
+        for position, token in enumerate(line):
+            typ = token.type_enum_id
+            if typ in pairs:
+                openings.append(typ)
+            elif typ in pairs.values():
+                openings.pop()
+            elif typ == self.T_COLON_ENUM_VAL and not openings:
+                separators.append(position)
+        if not separators:
+            return self.shunting_yard_algo(line)
+        if len(separators) > 2:
+            self._syntax_error("a slice allows at most two ':' separators", line[separators[2]])
+        starts = [0] + [position + 1 for position in separators]
+        stops = separators + [len(line)]
+        parts = [
+            self.shunting_yard_algo(line[start:stop]) if start < stop else None
+            for start, stop in zip(starts, stops, strict=True)
+        ]
+        if len(parts) == 2:
+            parts.append(None)
+        return self.EXPRESSION_NODE_CLASS(
+            self.SLICE_NODE_CLASS(parts[0], parts[1], parts[2], left_bracket)
+        )
+
+    def _interpolated_string(self, token):
+        parts = []
+        for part in token.value:
+            if isinstance(part, str):
+                parts.append(part)
+            else:
+                field = Lexer.tokenize_fragment(self.file, part)
+                if not field:
+                    self._syntax_error("empty interpolation field", token)
+                parts.append(self.shunting_yard_algo(field))
+        return self.INTERPOLATED_STRING_NODE_CLASS(tuple(parts), token)
+
     def handle_index(self, base, line):
         INDEX_NODE_CLASS = self.INDEX_NODE_CLASS
         T_RBRACKET_ENUM_VAL = self.T_RBRACKET_ENUM_VAL
@@ -1003,7 +1056,7 @@ class ExpressionParser:
                 depth -= 1
                 if depth == 0:
                     expected_expression = line[1:tok_idx]
-                    evaluated_expression = self.shunting_yard_algo(expected_expression)
+                    evaluated_expression = self._index_expression(expected_expression, left_bracket)
                     if type(base) is not INDEX_NODE_CLASS:
                         return INDEX_NODE_CLASS(
                             base=base, index=[evaluated_expression], meta_data=left_bracket
@@ -1207,6 +1260,12 @@ class ExpressionParser:
 
             if expect_operand and self.IS_BIN2UN[tok_type_id]:
                 tok_type_id = self.BINARY_TO_UNARY_OP[tok_type_id]
+
+            if expect_operand and tok_type_id == self.T_FSTRING_ENUM_VAL:
+                output.append(self._interpolated_string(tok))
+                tok_idx += 1
+                expect_operand = False
+                continue
 
             if expect_operand and tok_type_id == self.T_FN_ENUM_VAL:
                 function, consumed = self.handle_anonymous_function(line[tok_idx:])

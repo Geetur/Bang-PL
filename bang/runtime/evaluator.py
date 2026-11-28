@@ -82,8 +82,10 @@ from bang.parsing.parser_nodes import (
     IF_NODE_CLASS,
     INDEX_NODE_CLASS,
     INTEGER_LITERAL_NODE_CLASS,
+    INTERPOLATED_STRING_NODE_CLASS,
     NONE_LITERAL_NODE_CLASS,
     RETURN_NODE_CLASS,
+    SLICE_NODE_CLASS,
     STRING_LITERAL_NODE_CLASS,
     UNARY_OP_NODE_CLASS,
     WHILE_NODE_CLASS,
@@ -251,6 +253,8 @@ class Evaluator:
     INTEGER_LITERAL_NODE_CLASS = INTEGER_LITERAL_NODE_CLASS
     NONE_LITERAL_NODE_CLASS = NONE_LITERAL_NODE_CLASS
     RETURN_NODE_CLASS = RETURN_NODE_CLASS
+    INTERPOLATED_STRING_NODE_CLASS = INTERPOLATED_STRING_NODE_CLASS
+    SLICE_NODE_CLASS = SLICE_NODE_CLASS
     STRING_LITERAL_NODE_CLASS = STRING_LITERAL_NODE_CLASS
     UNARY_OP_NODE_CLASS = UNARY_OP_NODE_CLASS
     WHILE_NODE_CLASS = WHILE_NODE_CLASS
@@ -834,6 +838,26 @@ class Evaluator:
             lambda: self.eval_expression(root.right_hand.root_expr),
         )
 
+    def _read_index(self, base, key, metadata):
+        if isinstance(key, slice) and type(base) not in (list, str):
+            raise EvaluatorError(
+                self.file,
+                "slicing requires an array or string",
+                metadata.line,
+                metadata.column_start,
+                metadata.column_end,
+            )
+        try:
+            return base[key]
+        except (IndexError, KeyError, TypeError, ValueError) as error:
+            raise EvaluatorError(
+                self.file,
+                "invalid index or index out of bounds",
+                metadata.line,
+                metadata.column_start,
+                metadata.column_end,
+            ) from error
+
     def _eval_assignment(self, left_hand, op, location, evaluate_rhs):
         """Share assignment binding with loops while preserving RHS evaluation order."""
         compound = op != self.T_ASSIGN_ENUM_VAL
@@ -862,7 +886,9 @@ class Evaluator:
                 target = self.eval_expression(left_hand.base)
                 try:
                     for index in left_hand.index[:-1]:
-                        target = target[self.eval_expression(index.root_expr)]
+                        target = self._read_index(
+                            target, self.eval_expression(index.root_expr), left_hand.meta_data
+                        )
                     return target, self.eval_expression(left_hand.index[-1].root_expr)
                 except (IndexError, TypeError, KeyError):
                     fail("Index out of bounds")
@@ -880,14 +906,21 @@ class Evaluator:
             fail("invalid assignment target")
 
         def read_target(target, key):
+            if isinstance(key, slice) and type(target) not in (list, str):
+                fail("slicing requires an array or string")
             try:
                 return target[key]
-            except (IndexError, TypeError, KeyError):
+            except (IndexError, TypeError, KeyError, ValueError):
                 fail("Index out of bounds")
 
         def write_target(target, key, value):
+            if isinstance(key, slice):
+                if type(target) is not list or type(value) is not list:
+                    fail("slice assignment requires an array target and array value")
             try:
                 target[key] = value
+            except ValueError:
+                fail("extended slice assignment length mismatch")
             except (IndexError, TypeError, KeyError):
                 fail("invalid assignment target or index")
 
@@ -959,6 +992,14 @@ class Evaluator:
                     values.append(frame[node.value])
                 elif typ is self.FUNCTION_NODE_CLASS:
                     values.append(self._make_function(node))
+                elif typ is self.SLICE_NODE_CLASS:
+                    parts = (node.start, node.stop, node.step)
+                    tasks.append(("slice", node, sum(part is not None for part in parts)))
+                    tasks.extend(
+                        ("eval", part.root_expr) for part in reversed(parts) if part is not None
+                    )
+                elif typ is self.INTERPOLATED_STRING_NODE_CLASS:
+                    tasks.append(("interpolation", node, 0, []))
                 elif typ is self.BIN_OP_NODE_CLASS:
                     tasks.extend((("binary_left", node), ("eval", node.left)))
                 elif typ is self.UNARY_OP_NODE_CLASS:
@@ -1009,18 +1050,63 @@ class Evaluator:
                         )
                     )
             elif tag == "indexed":
-                try:
-                    value = task[3][values.pop()]
-                except (IndexError, KeyError, TypeError) as error:
+                value = self._read_index(task[3], values.pop(), node.meta_data)
+                values.append(value)
+                tasks.append(("index", node, task[2] + 1))
+            elif tag == "slice":
+                count = task[2]
+                supplied = values[-count:] if count else []
+                if count:
+                    del values[-count:]
+                iterator = iter(supplied)
+                parts = [
+                    next(iterator) if part is not None else None
+                    for part in (node.start, node.stop, node.step)
+                ]
+                if any(value is not None and not isinstance(value, int) for value in parts):
                     raise EvaluatorError(
                         self.file,
-                        "invalid index or index out of bounds",
+                        "slice bounds and step must be integers",
                         node.meta_data.line,
                         node.meta_data.column_start,
                         node.meta_data.column_end,
+                    )
+                if parts[2] == 0:
+                    raise EvaluatorError(
+                        self.file,
+                        "slice step cannot be zero",
+                        node.meta_data.line,
+                        node.meta_data.column_start,
+                        node.meta_data.column_end,
+                    )
+                values.append(slice(*parts))
+            elif tag == "interpolation":
+                position, output = task[2:]
+                if position == len(node.parts):
+                    values.append("".join(output))
+                else:
+                    part = node.parts[position]
+                    if isinstance(part, str):
+                        output.append(part)
+                        tasks.append(("interpolation", node, position + 1, output))
+                    else:
+                        tasks.extend(
+                            (("interpolated", node, position, output), ("eval", part.root_expr))
+                        )
+            elif tag == "interpolated":
+                position, output = task[2:]
+                try:
+                    output.append(str(values.pop()))
+                except (ValueError, OverflowError, RecursionError) as error:
+                    metadata = node.parts[position].root_expr.meta_data
+                    raise EvaluatorError(
+                        self.file,
+                        "value cannot be formatted as a string",
+                        metadata.line,
+                        metadata.column_start,
+                        metadata.column_end,
                     ) from error
-                values.append(value)
-                tasks.append(("index", node, task[2] + 1))
+                tasks.append(("interpolation", node, position + 1, output))
             elif tag == "field":
                 value = values.pop()
                 for name in node.field:
