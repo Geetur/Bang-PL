@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import json
 import os
 import re
 import subprocess
@@ -11,6 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from bang.builtin_specs import SPECS
 from bang.cli import run_file
 from bang.lexing.lexer import Lexer
 from bang.parsing.control_flow_parser import ControlFlowParser
@@ -48,6 +50,258 @@ def compile_program(code, *, analyze=True):
 
 
 class RegressionTests(unittest.TestCase):
+    def test_standard_library_inputs_accept_positional_and_named_forms(self):
+        cases = (
+            ('enumerate', '["a","b"]', ',start=1', "[[1, 'a'], [2, 'b']]\n"),
+            ('zip', '[[1,2],[3,4]]', ',strict=true', '[[1, 3], [2, 4]]\n'),
+            ('any', '[0,2]', ',predicate=fn {x} return x>1', '1\n'),
+            ('all', '[1,2]', ',predicate=fn {x} return x>0', '1\n'),
+            ('items', 'dict{"a",1}', '', "[['a', 1]]\n"),
+            ('get', 'dict{"a",1}', ',key="b",default=9', '9\n'),
+            ('array', '"ab"', '', "['a', 'b']\n"),
+            ('str', '[1,true,none]', '', '[1, 1, 0]\n'),
+            ('float', '"1.25"', '', '1.25\n'),
+            ('join', '["a","b"]', ',sep="-"', 'a-b\n'),
+            ('assert', 'true', ',message="unused"', '0\n'),
+            ('counts', '[1,-1,2]', ',key=fn {x} return x*x', '{1: 2, 4: 1}\n'),
+            ('group_by', '["a","bb","c"]', ',key=len', "{1: ['a', 'c'], 2: ['bb']}\n"),
+        )
+        for name, value, options, expected in cases:
+            for prefix in ('', 'input='):
+                code = f'print{{{name}{{{prefix}{value}{options}}}}}'
+                with self.subTest(code=code): self.assert_output(code, expected)
+
+    def test_collection_helpers_are_eager_shallow_and_support_destructuring(self):
+        self.assert_output(
+            'values=[[1],[2]]; indexed=enumerate{values,start=-2}; indexed[0,1,0]=9; '
+            'zipped=zip{[values,["a","b"]]}; zipped[1,0,0]=8; '
+            'copy=array{values}; copy[0,0]=7; '
+            'mapping=dict{"a",[1]}; pairs=items{mapping}; pairs[0,1,0]=3; '
+            'pairs[0,0]="changed"; print{values,indexed,zipped,copy,mapping}; '
+            'for [index,value] enumerate{"ab",start=1}; print{index,value}; end; '
+            'for [name,score] zip{[["Ada","Lin"],[42,37]]}; print{name,score}; end; '
+            'for [key,value] items{dict{"x",5}}; print{key,value}; end; '
+            'print{array{},array{dict{"a",1,"b",2}},zip{[]},zip{[[],[]]},'
+            'zip{[[1,2],[3]],strict=false}}',
+            "[[7], [8]] [[-2, [7]], [-1, [8]]] [[[7], 'a'], [[8], 'b']] "
+            "[[7], [8]] {'a': [3]}\n1 a\n2 b\nAda 42\nLin 37\nx 5\n"
+            "[] ['a', 'b'] [] [] [[1, 3]]\n",
+        )
+
+    def test_any_all_short_circuit_predicates_and_snapshot_the_input(self):
+        self.assert_output(
+            'visits=[]; fn check {x}; visits+=[x]; return x; end; '
+            'print{any{[0,1,2],predicate=check},visits}; visits=[]; '
+            'print{all{[1,0,2],predicate=check},visits}; '
+            'print{any{[]},all{[]},any{[0,none,[]]},all{[1,"x",[0]]}}; '
+            'values=[1,2]; visits=[]; '
+            'fn change {x}; visits+=[x]; values[:]=[]; return x==2; end; '
+            'print{any{values,predicate=change},visits,values}; '
+            'print{any{[],predicate=fn {a,b} return a},'
+            'all{[],predicate=fn {a,b} return a}}',
+            '1 [0, 1]\n0 [1, 0]\n0 1 0 1\n1 [1, 2] []\n0 1\n',
+        )
+
+    def test_dictionary_helpers_keep_defaults_references_and_first_key_order(self):
+        self.assert_output(
+            'fallback=[]; found=get{dict{},"missing",fallback}; found[:]=[9]; '
+            'n=0; fn mark args; n+=1; return 99; end; '
+            'print{get{dict{"a",0},key="a",default=mark{}},n,fallback,get{dict{},"x"}}; '
+            'print{counts{"abaca"},counts{[true,1,false,none]}}; '
+            'rows=[["Ada",2],["Lin",1],["Max",2]]; '
+            'groups=group_by{rows,key=fn {row} return row[1]}; groups[2,0,0]="A"; '
+            'print{groups,rows}; '
+            'print{counts{[]},group_by{[],key=fn {a,b} return a}}; '
+            'key=set{[1],frozen=true}; print{get{dict{key,"yes"},key=key}}',
+            '0 1 [9] 0\n'
+            "{'a': 3, 'b': 1, 'c': 1} {1: 2, 0: 2}\n"
+            "{2: [['A', 2], ['Max', 2]], 1: [['Lin', 1]]} "
+            "[['A', 2], ['Lin', 1], ['Max', 2]]\n{} {}\nyes\n",
+        )
+
+    def test_string_float_and_join_use_bang_formatting_and_strict_conversion(self):
+        self.assert_output(
+            'data Box [value]; box=Box{}; box.value=box; '
+            'print{str{box},str{len},str{[true,none,1==1]}}; '
+            'print{float{true},float{none},float{" .5 "},float{"5."},float{"-1e2"}}; '
+            'print{map{["1.25","-2"],transform=float},'
+            'join{map{[1,2,3],transform=str},sep=","},join{"ab",sep="-"},join{[]}}',
+            'Box{value=Box{...}} <builtin len> [1, 0, 1]\n'
+            '1.0 0.0 0.5 5.0 -100.0\n[1.25, -2.0] 1,2,3 a-b \n',
+        )
+        for text in ('', 'nan', 'inf', '-Infinity', '1e9999', '1_000', '１２', '1.2.3'):
+            with self.subTest(text=text), self.assertRaises(EvaluatorError):
+                compile_program('float{'+json.dumps(text,ensure_ascii=False)+'}').eval_program()
+
+    def test_assert_messages_are_eager_and_failures_have_source_locations(self):
+        self.assert_output(
+            'n=0; fn message args; n+=1; return "unused"; end; '
+            'print{assert{true,message=message{}},n}', '0 1\n',
+        )
+        error = self.assert_diagnostic(
+            'x=1\nassert{x>2,message="expected a larger value"}', EvaluatorError,
+            'assertion failed: expected a larger value', 'assert',
+        )
+        self.assertNotIn('Traceback',str(error))
+
+    def test_utf8_read_write_roundtrips_overwrite_append_and_line_modes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'dátá.txt'
+            quoted=json.dumps(str(path),ensure_ascii=False)
+            text='é\r\nx\ry\n'
+            code=(f'first=write{{input={json.dumps(text,ensure_ascii=False)},path={quoted}}}; '
+                  f'raw=read{{input={quoted}}}; lines=read{{{quoted},lines=true}}; '
+                  f'second=write{{"z",path={quoted},append=true}}; after=read{{{quoted}}}')
+            evaluator=compile_program(code)
+            self.assertFalse(path.exists(), 'The checker must not perform file I/O')
+            evaluator.eval_program()
+            values=evaluator.scope_stack[0]
+            self.assertEqual((values['first'],values['second']),(8,1))
+            self.assertEqual(values['raw'],text)
+            self.assertEqual(values['lines'],['é','x','y'])
+            self.assertEqual(values['after'],text+'z')
+            self.assertEqual(path.read_bytes(),(text+'z').encode('utf-8'))
+            self.assert_output(
+                f'print{{write{{"",path={quoted}}},read{{{quoted},lines=true}}}}', '0 []\n',
+            )
+            self.assertEqual(path.read_bytes(),b'')
+            created=Path(directory)/'append-created.txt'
+            evaluator=compile_program(
+                'write{"new",path='+json.dumps(str(created))+',append=true}'
+            )
+            evaluator.eval_program()
+            self.assertEqual(created.read_bytes(),b'new')
+            for content,expected in (('',[]),('\n',['']),('a\n\n',['a','']),('a\rb',['a','b'])):
+                path.write_bytes(content.encode('utf-8'))
+                evaluator=compile_program(f'result=read{{{quoted},lines=true}}')
+                evaluator.eval_program()
+                self.assertEqual(evaluator.scope_stack[0]['result'],expected)
+
+    def test_file_errors_are_bang_diagnostics_and_invalid_options_do_not_truncate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'keep.txt'; path.write_bytes(b'keep')
+            quoted=json.dumps(str(path))
+            for code in (f'write{{1,path={quoted}}}', f'write{{"bad",path={quoted},append=2}}'):
+                for analyze in (True,False):
+                    with self.subTest(code=code,analyze=analyze):
+                        with self.assertRaises(SemanticError if analyze else EvaluatorError):
+                            compile_program(code,analyze=analyze).eval_program()
+                        self.assertEqual(path.read_bytes(),b'keep')
+            bad=Path(directory)/'invalid.txt'; bad.write_bytes(b'\xff')
+            missing=Path(directory)/'missing.txt'
+            cases=(
+                f'read{{{json.dumps(str(missing))}}}',
+                f'read{{{json.dumps(str(bad))}}}',
+                f'read{{{json.dumps(directory)}}}',
+                f'write{{"x",path={json.dumps(directory)}}}',
+                f'write{{"x",path={json.dumps(str(Path(directory)/"absent"/"x"))}}}',
+            )
+            for code in cases:
+                with self.subTest(code=code),self.assertRaises(EvaluatorError) as caught:
+                    compile_program(code).eval_program()
+                self.assertNotIn('Traceback',str(caught.exception))
+            self.assertFalse(missing.exists())
+
+    def test_new_builtins_reject_invalid_shapes_options_and_duplicate_inputs(self):
+        cases=(
+            'enumerate{1}', 'enumerate{[],start=1.5}', 'zip{1}', 'zip{[1]}',
+            'any{1}', 'all{[],predicate=0}', 'items{[]}', 'get{[] ,key=0}',
+            'get{dict{},key=[]}', 'array{1}', 'str{}', 'float{[]}', 'join{[1]}',
+            'join{[],sep=0}', 'assert{true,message=0}', 'counts{[[]]}',
+            'group_by{[]}', 'group_by{[],key=0}', 'read{1}', 'read{"x",lines=2}',
+            'write{"x"}', 'write{1,path="unused"}', 'write{"x",path=1}',
+        )
+        for code in cases:
+            for analyze in (True,False):
+                with self.subTest(code=code,analyze=analyze):
+                    with self.assertRaises(SemanticError if analyze else EvaluatorError):
+                        compile_program(code,analyze=analyze).eval_program()
+        for code in ('zip{[[1,2],[3]]}', 'group_by{[1],key=fn {x} return []}',
+                     'counts{[1],key=fn {x} return []}'):
+            with self.subTest(code=code),self.assertRaises(EvaluatorError):
+                compile_program(code).eval_program()
+        inputs={
+            'enumerate':'[]','zip':'[]','any':'[]','all':'[]','items':'dict{}',
+            'get':'dict{},key="x"','array':'[]','str':'1','float':'1','join':'[]',
+            'assert':'true','counts':'[]','group_by':'[],key=len','read':'"unused"',
+            'write':'"unused",path="unused"',
+        }
+        for name,arguments in inputs.items():
+            for tail in (',unknown_option=true',',input=[]'):
+                for analyze in (True,False):
+                    with self.subTest(name=name,tail=tail,analyze=analyze):
+                        with self.assertRaises(SemanticError if analyze else EvaluatorError) as caught:
+                            compile_program(name+'{'+arguments+tail+'}',analyze=analyze).eval_program()
+                        expected='unknown_option' if 'unknown_option' in tail else 'multiple values'
+                        self.assertIn(expected,caught.exception.msg)
+
+    def test_new_callbacks_snapshot_invalidate_captures_and_restore_scopes_on_failure(self):
+        for call in ('any{[1],predicate=change}','all{[1],predicate=change}',
+                     'counts{[1],key=change}','group_by{[1],key=change}'):
+            with self.subTest(call=call):
+                self.assert_output(
+                    'value=1; fn change {x}; value="done"; return x; end; '
+                    +call+'; print{value+"!"}', 'done!\n',
+                )
+        self.assert_output(
+            'values=[1,2]; visits=[]; '
+            'fn key {x}; visits+=[x]; values[:]=[]; return x; end; '
+            'print{group_by{values,key=key},visits,values}',
+            '{1: [1], 2: [2]} [1, 2] []\n',
+        )
+        for call in ('any{[0,1,2],predicate=fail}','all{[0,1,2],predicate=fail}',
+                     'counts{[0,1,2],key=fail}','group_by{[0,1,2],key=fail}'):
+            evaluator=compile_program(
+                'n=0; fn fail {x}; n+=1; return 1/0; end; '
+                'fn outer args; for i 1; return '+call+'; end; end; outer{}'
+            )
+            with self.subTest(call=call),self.assertRaises(EvaluatorError): evaluator.eval_program()
+            self.assertEqual(evaluator.scope_stack[0]['n'],1)
+            self.assertEqual((len(evaluator.scope_stack),evaluator.func_depth,evaluator.loop_depth),(1,0,0))
+
+    def test_every_builtin_shadows_locally_without_replacing_the_default(self):
+        for name in SPECS:
+            with self.subTest(name=name):
+                evaluator=compile_program(
+                    f'fn local args; {name}=42; return {name}; end; '
+                    f'result=local{{}}; original={name}'
+                )
+                evaluator.eval_program()
+                self.assertEqual(evaluator.scope_stack[0]['result'],42)
+                self.assertNotIn(name,evaluator.scope_stack[0])
+                self.assertIs(evaluator.scope_stack[0]['original'],evaluator.built_in_functions[name])
+        self.assert_output(
+            'if true; [len,sum]=[7,8]; print{len,sum}; end; '
+            'for len [1,2]; print{len}; end; print{len{"abc"},sum{[1,2]}}; '
+            'fn maker args; fn len args return 42; return len; end; '
+            'custom=maker{}; print{custom{},len{"a"}}; '
+            'fn constructor args; data len [value]; return len; end; '
+            'C=constructor{}; print{C{9}.value,len{[]}}',
+            '7 8\n1\n2\n3 3\n42 1\n9 0\n',
+        )
+
+    def test_builtin_shadowing_keeps_user_captures_late_bindings_and_aliases(self):
+        self.assert_output(
+            'fn maker args; len=0; fn next args; len+=1; return len; end; return next; end; '
+            'counter=maker{}; print{counter{},counter{},len{"abc"}}; '
+            'alias=len; fn change args; alias=fn args return 8; end; change{}; '
+            'print{alias{},len{"abc"}}; '
+            'fn local args; len=len; return len{"abc"}; end; print{local{}}',
+            '1 2 3\n8 3\n3\n',
+        )
+        self.assert_output(
+            'fn late args return len{1,2}; len=fn args return 9; print{late{}}', '9\n',
+        )
+        self.assert_output(
+            'len=0; fn bump args; len+=1; end; bump{}; bump{}; print{len}', '2\n',
+        )
+        evaluator=compile_program('len+=1',analyze=False)
+        with self.assertRaises(EvaluatorError): evaluator.eval_program()
+        self.assertNotIn('len',evaluator.scope_stack[0])
+        with self.assertRaises(EvaluatorError) as caught:
+            compile_program('fn f {len=len{"abc"}} return len; f{}').eval_program()
+        self.assertIn('read before binding',caught.exception.msg)
+
     def test_repository_examples_have_the_documented_cli_outcome(self):
         root = Path(__file__).resolve().parents[2]
         examples = sorted((root / "examples").glob("*.bang"))

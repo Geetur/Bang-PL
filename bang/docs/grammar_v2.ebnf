@@ -256,3 +256,7 @@ Literals       ::= INT_LIT | FLOAT_LIT | BOOL_LIT | NONE_LIT | STRING_LIT | FSTR
 
 # Builtin signatures and option constraints are runtime interfaces, not keywords.
 # sum/set accept one iterable input (set also permits an empty constructor).
+# enumerate/zip/items/array produce eager arrays; any/all short-circuit callbacks.
+# read/write operate on whole UTF-8 files; options are declared in builtin_specs.py.
+# Builtins are fallback bindings outside user scopes, never assignment targets.
+# Assignments update captured user bindings or create a current-scope binding.

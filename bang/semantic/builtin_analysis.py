@@ -102,6 +102,60 @@ def check_dict(checker, root, bound):
         checker._error("dict requires hashable elements or keys", root)
 
 
+def check_collection_helpers(checker, root, name, options):
+    value = options.get("input")
+    if name in ("enumerate", "any", "all", "array", "join", "counts", "group_by"):
+        if value is not None and type(value) not in ITERABLES + (DynamicType,):
+            checker._error(f"{name} expects an iterable input (got {type_name(value)})", root)
+    if name in ("items", "get") and type(value) not in (DictType, DynamicType):
+        checker._error(f"{name} expects a dictionary input (got {type_name(value)})", root)
+    if name == "enumerate" and "start" in options:
+        start = options["start"]
+        if type(start) is not DynamicType and (
+            type(start) not in (NumberType, BoolType, NoneType)
+            or known(start) is not MISSING
+            and type(known(start)) not in (int, bool)
+        ):
+            checker._error("enumerate start must be an integer", root)
+    if name == "zip":
+        if type(value) not in (ArrayType, DynamicType):
+            checker._error("zip expects an array of iterable inputs", root)
+        if type(value) is ArrayType and value.value is not None:
+            for index, item in enumerate(value.value):
+                if type(item) not in ITERABLES + (DynamicType,):
+                    checker._error(f"zip input {index + 1} must be iterable", root)
+    if name == "get" and type(options["key"]) in checker.UNHASHABLE_TYPES:
+        checker._error("get key must be hashable", root)
+    if name == "counts" and "key" not in options:
+        if type(value) is ArrayType and value.value is not None:
+            if any(type(item) in checker.UNHASHABLE_TYPES for item in value.value):
+                checker._error("counts keys must be hashable", root)
+    if name == "join" and type(value) is ArrayType and value.value is not None:
+        for index, item in enumerate(value.value):
+            if type(item) not in (StringType, DynamicType):
+                checker._error(f"join item {index + 1} must be a string", root)
+
+
+def check_text_helpers(checker, root, name, options):
+    if name == "float" and type(options["input"]) not in (
+        NumberType,
+        BoolType,
+        NoneType,
+        StringType,
+        DynamicType,
+    ):
+        checker._error("float expects a number or numeric string", root)
+    text_fields = {
+        "join": ("sep",),
+        "assert": ("message",),
+        "read": ("input",),
+        "write": ("input", "path"),
+    }
+    for field in text_fields.get(name, ()):
+        if field in options and type(options[field]) not in (StringType, DynamicType):
+            checker._error(f"{name} parameter '{field}' must be a string", root)
+
+
 def infer_builtin(checker, root, name, arguments):
     try:
         bound = bind_builtin(name, arguments, root.keyword_names, kind_of=fact_kind)
@@ -123,6 +177,8 @@ def infer_builtin(checker, root, name, arguments):
         if callback in options and not bound.uncertain_order:
             if type(options[callback]) not in CALLABLES + (DynamicType,):
                 checker._error(f"{name} option '{callback}' must be callable", root)
+    check_collection_helpers(checker, root, name, options)
+    check_text_helpers(checker, root, name, options)
     for option in ("sep", "end") if name == "print" else ():
         if option in options and type(options[option]) not in (StringType, DynamicType):
             checker._error("print options 'sep' and 'end' must be strings", root)
@@ -154,14 +210,19 @@ def infer_builtin(checker, root, name, arguments):
                 checker._invalidate_mutable_facts([value])
     if name in ("map", "filter", "reduce") or any(key in options for key in spec.callbacks):
         checker._invalidate_call_facts()
-    if name in ("print", "len", "int"):
+    if name in ("print", "len", "int", "float", "any", "all", "assert", "write"):
         return NumberType(None)
-    if name == "input":
+    if name in ("input", "str", "join"):
         return StringType(None)
-    if name in ("map", "filter", "sort", "range"):
+    if name in ("map", "filter", "sort", "range", "enumerate", "zip", "items", "array"):
         return ArrayType(None)
-    if name == "dict":
+    if name in ("dict", "counts", "group_by"):
         return DictType(None)
+    if name == "read":
+        lines = known(options["lines"]) if "lines" in options else 0
+        if lines is MISSING:
+            return DynamicType()
+        return ArrayType(None) if lines else StringType(None)
     if name == "set":
         frozen = known(options["frozen"]) if "frozen" in options else 0
         if frozen is MISSING:

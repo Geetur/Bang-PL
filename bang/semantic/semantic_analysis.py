@@ -328,7 +328,7 @@ class SemanticAnalysis:
 
         self.scope_stack = [{}]
 
-        self.scope_stack[0].update({name: BuiltinType(name) for name in self.BUILT_IN_FUNCTIONS})
+        self.builtin_facts = {name: BuiltinType(name) for name in self.BUILT_IN_FUNCTIONS}
 
         self.CONSTRUCTS_TO_WALK = {
             self.ASSIGNMENT_NODE_CLASS: self.walk_assignments,
@@ -631,6 +631,9 @@ class SemanticAnalysis:
         for scope in reversed(self.scope_stack):
             if name in scope:
                 return scope[name]
+        if name in self.builtin_facts:
+            # A captured user frame may acquire a shadow before a function runs.
+            return self.DYNAMIC_TYPE_CLASS() if self.func_depth else self.builtin_facts[name]
         return ""
 
     def _error(self, message, node):
@@ -752,10 +755,11 @@ class SemanticAnalysis:
                         frame[target.value],
                         lambda value, frame=frame: frame.__setitem__(target.value, value),
                     )
-            if require_existing:
+            if require_existing and target.value not in self.builtin_facts:
                 self._error("variable not initialized", target)
             frame = self.scope_stack[-1]
-            return self.DYNAMIC_TYPE_CLASS(), lambda value: frame.__setitem__(target.value, value)
+            current = self.search_for_var(target.value) or self.DYNAMIC_TYPE_CLASS()
+            return current, lambda value: frame.__setitem__(target.value, value)
         if typ is self.FIELD_ACCESS_NODE_CLASS:
             base = self.walk_expression(target.base)
             for position, name in enumerate(target.field[:-1]):
