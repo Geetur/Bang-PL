@@ -72,6 +72,9 @@ The expression parser uses shunting-yard parsing to resolve precedence and build
 | `bang/parsing/control_flow_parser.py` | Organizes statements into nested control-flow and function blocks. |
 | `bang/parsing/parser_nodes.py` | Defines the AST nodes shared by later stages. |
 | `bang/calling.py` | Shares argument-binding rules between the checker and evaluator. |
+| `bang/builtin_specs.py` | Defines builtin inputs, options, aliases, and shared binding. |
+| `bang/runtime/builtins.py` | Implements builtin behavior and callback traversal. |
+| `bang/semantic/builtin_analysis.py` | Checks builtin calls and invalidates facts affected by callbacks. |
 | `bang/diagnostics.py` | Renders source locations and describes invalid values and operations. |
 | `bang/semantic/semantic_analysis.py` | Checks bindings, available type facts, and control-flow placement. |
 | `bang/semantic/semantic_nodes.py` | Defines the checker's type and value facts. |
@@ -175,7 +178,7 @@ fn two_sum args
         if complement in seen
             pairs += [[complement, value]]
         end
-        seen += set{value}
+        seen += set{[value]}
     end
 
     return pairs
@@ -372,41 +375,88 @@ Functions print as `<fn square>` or `<anonymous fn at line 12>`, builtins as
 `<builtin len>`, and records as `Point{x=1, y=2}`. Containers use the same formatting
 for nested values, with quoted strings and `...` to mark cycles.
 
-### Input, conversion, and functional builtins
+### Builtins: input plus named options
+
+Pass the input first, or name it explicitly. Both forms have the same behavior:
 
 ```bang
-name = input{"Name: "}
+values = [3, 1, 3, 2]
+print{sum{values, initial=10}, sum{input=values, initial=10}} # 19 19
+print{set{values, frozen=true}}                             # frozen{1, 2, 3}
+print{sort{input=values, reverse=true}}                     # [3, 3, 2, 1]
+print{map{values, transform=fn {x} return x*x}}              # [9, 1, 9, 4]
+print{filter{input=values, predicate=fn {x} return x>1}}      # [3, 3, 2]
+print{reduce{values, combine=fn {a,b} return a+b, initial=0}} # 9
+```
+
+Named options modify behavior without becoming input data or assigning caller
+variables. Unknown options, duplicate inputs, and conflicting aliases are errors.
+Options follow positional arguments. Boolean options accept `true`/`false` or
+numeric `1`/`0`; omit an optional callback to disable it.
+
+| Builtin | Input and options |
+|---|---|
+| `print` | One input or several values; `sep`, `end`, `flush`, `spread`. |
+| `len` | Iterable input; `where` counts items matching a predicate. |
+| `int` | Number or integer string; `base=10`, with `0` for prefix inference or `2`–`36`. |
+| `input` | Optional prompt as input; `prompt` is an alias, and `strip=true` trims the line. |
+| `sum` | One iterable; `initial` and an optional per-item `transform`. |
+| `set` | One iterable, or no input for an empty set; `frozen` and `transform`. |
+| `dict` | Mapping, pair arrays, flat pairs, or positional key/value arguments; `values` zips keys with values, and `strict=true` rejects duplicate keys. |
+| `min` / `max` | Iterable or positional values; `key` ranks items and `default` handles empty input. |
+| `sort` | Iterable or positional values; `key`, `reverse`, and `in_place`. |
+| `range` | Stop value or the existing start/stop/step forms; `start`, `step`, `inclusive`. `stop` aliases `input`. |
+| `map` | Iterable plus `transform`; `indexed=true` calls it with `item,index`. |
+| `filter` | Iterable plus `predicate`; `indexed` and `invert`. |
+| `reduce` | Iterable plus `combine`; `initial` and `indexed=true` for `accumulator,item,index`. |
+
+`sum` and `set` require an iterable when an input is supplied. Write
+`sum{[1,2,3]}` and `set{[1,2,3]}`. Scalar and variadic inputs such as `sum{1,2,3}`
+are rejected; `sum{[]}` is zero, and `set{}` remains the empty-set constructor.
+Strings iterate over characters, dictionaries over keys, and arrays/sets/frozen
+sets over their elements. To make a set containing one string or record, put it
+in an array first.
+
+```bang
+print{int{"ff", base=16}, int{input="0xff", base=0}} # 255 255
+print{dict{input=[["Ada",42],["Lin",37]], strict=true}}
+print{dict{input=["a","b"], values=[1,2]}}
+print{[1,2,3], spread=true, sep=" | ", end="!\n"}    # 1 | 2 | 3!
+```
+
+Printing an array normally keeps its brackets; `spread=true` prints its items
+instead. Sorting returns a new array by default. `in_place=true` requires one
+array and updates that array and its aliases after sorting succeeds. Key
+functions run once per item; equal keys retain input order.
+
+Frozen sets are immutable containers and can be dictionary keys or members of
+other sets. Their readable display is `frozen{...}`; construct them with
+`set{input=values, frozen=true}`. This freezes the container, not mutable records
+held inside it. Set union/difference preserve the left operand's mutable or
+frozen kind.
+
+Callback-driven builtins snapshot the input's outer contents, preserve nested
+references, and traverse in iteration order. A callback failure skips later
+items. Callback effects persist normally and are not rolled back. Dictionaries
+iterate in insertion order; sets have no promised iteration order.
+
+Input-first functional calls are preferred. The old callback-first forms remain
+valid when unambiguous: `map{callback, values}`, `filter{callback, values}`, and
+`reduce{callback, values, initial}`. Callbacks use ordinary Bang binding. For a
+reduction, `combine` takes two arguments; use `fn {a,b} return a+b` rather than
+the now single-input `sum` builtin. An empty reduction needs an explicit initial
+value, which is returned unchanged.
+
+```bang
+name = input{prompt="Name: ", strip=true}
 score = int{input{"Score: "}}
 print{f"{name} scored {score} points"}
 ```
 
-`input{}` or `input{prompt}` reads one line without its final newline. The prompt
-must be a string, and end-of-input raises a Bang diagnostic. `int{value}` accepts
-numbers or signed base-10 integer strings, with surrounding whitespace allowed.
-Floating-point numbers truncate toward zero. Decimal points in strings, digit
-separators, non-ASCII digits, and strings longer than 4,300 digits are rejected.
-
-```bang
-values = [1, 2, 3, 4]
-squares = map{fn {x} return x*x, values}
-large = filter{fn {x} return x > 2, values}
-total = reduce{fn {acc,x} return acc+x, values, 0}
-numbers = map{int, ["10", "20", "30"]}
-print{squares, large, total, numbers}
-# [1, 4, 9, 16] [3, 4] 10 [10, 20, 30]
-```
-
-| Builtin | Rule |
-|---|---|
-| `map{callback, values}` | Return an array containing `callback{item}` for each item. |
-| `filter{callback, values}` | Return the original items whose callback result is truthy. |
-| `reduce{callback, values}` | Fold left from the first item; an empty array is an error. |
-| `reduce{callback, values, initial}` | Fold left from `initial`; an empty array returns it unchanged. |
-
-These builtins require an array and snapshot its outer contents before callbacks
-run. Callbacks run left to right through ordinary Bang call binding. Nested values
-remain shared references. A callback failure stops traversal. Builtins accept
-positional arguments; user functions with declared parameters also accept names.
+`input` removes the final newline and reports EOF as a Bang diagnostic. `int`
+truncates numeric inputs toward zero and accepts signed ASCII integer strings
+with surrounding whitespace. Decimal points and underscores in strings are
+rejected. The limit is 4,300 digits in any base.
 
 ## Stabilized Behavior
 
@@ -472,7 +522,7 @@ python -m unittest bang.parsing.tests_parser.test_expr_parser_correctness bang.t
 
 ## Extending the Language
 
-* **Add a builtin:** implement its behavior in `bang/runtime/evaluator.py` and register its name in both the runtime and semantic builtin tables.
+* **Add a builtin:** declare its interface in `bang/builtin_specs.py`, implement its behavior in `bang/runtime/builtins.py`, and update facts/checks in `bang/semantic/builtin_analysis.py`.
 * **Extend the syntax:** update `bang/docs/grammar_v2.ebnf`, the relevant lexer/parser logic, and the AST nodes as needed.
 * **Keep checking and execution consistent:** update semantic rules and runtime validation together. Shared argument-binding rules live in `bang/calling.py`.
 * **Add focused coverage:** extend the existing correctness or regression suites with examples of the intended behavior and invalid inputs.

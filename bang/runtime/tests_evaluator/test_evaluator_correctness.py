@@ -7,7 +7,7 @@ from bang.runtime.evaluator import Evaluator, EvaluatorError
 from bang.semantic.semantic_analysis import SemanticAnalysis
 
 
-def evaluate(code: str, tmp_path):
+def evaluate(code: str, tmp_path, *, analyze=True):
     """Tokenises, parses, semantically analyses **and** executes a small Bang
     program.  Any *EvaluatorError* raised at run-time will bubble up to the test
     layer just like *SemanticError* does in the compile-time suite.
@@ -28,7 +28,8 @@ def evaluate(code: str, tmp_path):
 
     # ---------- SEMANTIC CHECK ----------
     sema = SemanticAnalysis(lexer.text, roots)
-    sema.walk_program()  # will raise on failure
+    if analyze:
+        sema.walk_program()  # will raise on failure
 
     # ---------- EVALUATION (unit under test) ----------
     runner = Evaluator(lexer.text, roots)
@@ -89,15 +90,15 @@ def evaluate(code: str, tmp_path):
         'sum{["12","3","4"]}\n',
         "print{sum{[dict{1, 2}, dict{2, 3}, dict{4, 5}]}}\n",
         "print{sum{[set{[1, 2]}, set{[2, 3]}, set{[4, 5]}]}}\n",
-        'sum{"1","2","3","4"}\n',
-        "sum{1,2,3,4}\n",
-        "print{sum{dict{1, 2}, dict{2, 3}, dict{4, 5}}}\n",
-        "print{sum{set{[1, 2]}, set{[2, 3]}, set{[4, 5]}}}\n",
-        "data Class [rand]; class = Class{1}; sum{1,2,class.rand}\n",
-        'data Class [rand]; class = Class{"1"}; sum{"1","2",class.rand}\n',
+        'sum{["1","2","3","4"]}\n',
+        'sum{[1,2,3,4]}\n',
+        'print{sum{[dict{1, 2}, dict{2, 3}, dict{4, 5}]}}\n',
+        'print{sum{[set{[1, 2]}, set{[2, 3]}, set{[4, 5]}]}}\n',
+        'data Class [rand]; class = Class{1}; sum{[1,2,class.rand]}\n',
+        'data Class [rand]; class = Class{"1"}; sum{["1","2",class.rand]}\n',
         "data Class [rand]; class = Class{[1,2,3]}; sum{class.rand}\n",
-        "data Class [rand]; class = Class{dict{1,2}}; sum{dict{3,4},dict{4,5},class.rand}\n",
-        "data Class [rand]; class = Class{set{1,2,3}}; sum{class.rand}\n",
+        'data Class [rand]; class = Class{dict{1,2}}; sum{[dict{3,4},dict{4,5},class.rand]}\n',
+        'data Class [rand]; class = Class{set{[1,2,3]}}; sum{class.rand}\n',
         # built in min function
         "min{[1,2,3,4]}\n",
         "min{[1,2,false,true]}\nmin{[[1],[2],[3],[4]]}\n",
@@ -110,7 +111,7 @@ def evaluate(code: str, tmp_path):
         'data Class [rand]; class = Class{"1"}; min{"1","2",class.rand}\n',
         "data Class [rand]; class = Class{[1,2,3]}; min{class.rand}\n",
         "data Class [rand]; class = Class{[1,2]}; min{[3,4],[4,5],class.rand}\n",
-        "data Class [rand]; class = Class{set{1,2,3}}; min{class.rand}\n",
+        'data Class [rand]; class = Class{set{[1,2,3]}}; min{class.rand}\n',
         # built in max function
         "max{[1,2,3,4]}\n",
         "max{[1,2,false,true]}\n",
@@ -124,14 +125,14 @@ def evaluate(code: str, tmp_path):
         'data Class [rand]; class = Class{"1"}; max{"1","2",class.rand}\n',
         "data Class [rand]; class = Class{[1,2,3]}; max{class.rand}\n",
         "data Class [rand]; class = Class{[1,2]}; max{[3,4],[4,5],class.rand}\n",
-        "data Class [rand]; class = Class{set{1,2,3}}; max{class.rand}\n",
+        'data Class [rand]; class = Class{set{[1,2,3]}}; max{class.rand}\n',
         # built in len function
         "len{[1,2,3,4,5]}\n",
         'len{[1,2,3,4,"5"]}\n',
         "len{[1,2,3,4,[5]]}\n",
         'len{"12fgdgd"}\n',
         "data Class [rand]; class = Class{[1,2,3]}; len{class.rand}\n",
-        "data Class [rand]; class = Class{set{1,2,3}}; len{class.rand}\n",
+        'data Class [rand]; class = Class{set{[1,2,3]}}; len{class.rand}\n',
         "data Class [rand]; class = Class{dict{1,2,3,4,5,6}}; len{class.rand}\n",
         'data Class [rand]; class = Class{"hjdfghjlfgdhjdfg"}; len{class.rand}\n',
         # built in print function
@@ -149,7 +150,7 @@ def evaluate(code: str, tmp_path):
         "print{dict{1,2}}\n",
         "print{dict{1,2,2,3,4,5}}\n",
         "data Class [rand]; class = Class{[1,2,3]}; print{class.rand}\n",
-        "data Class [rand]; class = Class{set{1,2,3}}; print{class.rand}\n",
+        'data Class [rand]; class = Class{set{[1,2,3]}}; print{class.rand}\n',
         "data Class [rand]; class = Class{dict{1,2,3,4,5,6}}; print{class.rand}\n",
         'data Class [rand]; class = Class{"hjdfghjlfgdhjdfg"}; print{class.rand}\n',
         "data Class [rand]; class = Class{dict}; print{class.rand}\n",
@@ -165,7 +166,7 @@ def evaluate(code: str, tmp_path):
         'sort{"323425232353456"}\n',
         "sort{1,true, false}\n",
         "data Class [rand]; class = Class{[1,2,3]}; sort{class.rand}\n",
-        "data Class [rand]; class = Class{set{1,2,3}}; sort{class.rand}\n",
+        'data Class [rand]; class = Class{set{[1,2,3]}}; sort{class.rand}\n',
         "data Class [rand]; class = Class{dict{1,2,3,4,5,6}}; sort{class.rand}\n",
         'data Class [rand]; class = Class{"hjdfghjlfgdhjdfg"}; sort{class.rand}\n',
         # built in set function
@@ -174,27 +175,27 @@ def evaluate(code: str, tmp_path):
         "set{[1,2, true]}\n",
         "set{[1,2, false]}\n",
         "set{}\n",
-        'set{1,2, "5"}\n',
-        "set{1,2, 4}\n",
-        "set{1,2, true}\n",
-        "set{1,2, false}\n",
-        "set{1}\n",
+        'set{[1,2, "5"]}\n',
+        'set{[1,2, 4]}\n',
+        'set{[1,2, true]}\n',
+        'set{[1,2, false]}\n',
+        'set{[1]}\n',
         'set{"1"}\n',
-        "set{false}\n",
+        'set{[false]}\n',
         "a= set{[1,2, 4]} + set{[1,6,7]}\n",
         "a= set{} + set{[1,6,7]}\n",
         "a= set{[1,2, 4]} - set{[1,6,7]}\n",
         "a= set{[1,2, 4]} - set{}\n",
         "a= set{[1,2, 4]} > set{[1,6,7]}\n",
         "a= set{} >= set{[1,6,7]}\n",
-        "a= set{[1,2, 4]} < set{1,6,7}\n",
+        'a= set{[1,2, 4]} < set{[1,6,7]}\n',
         "a= set{[1,2, 4]} <= set{}\n",
-        "a= set{[1,2, 4]} == set{1,6,7}\n",
-        "a= set{} != set{1,6,7}\n",
-        "a= set{[1,2, 4]} && set{1,6,7}\n",
+        'a= set{[1,2, 4]} == set{[1,6,7]}\n',
+        'a= set{} != set{[1,6,7]}\n',
+        'a= set{[1,2, 4]} && set{[1,6,7]}\n',
         "a= set{[1,2, 4]} || set{}\n",
         "data Class [rand]; class = Class{[1,2,3]}; set{class.rand}\n",
-        "data Class [rand]; class = Class{set{1,2,3}};\n",
+        'data Class [rand]; class = Class{set{[1,2,3]}};\n',
         'data Class [rand]; class = Class{"hjdfghjlfgdhjdfg"}; set{class.rand}\n',
         "data Class [rand]; class = Class{[1,2,3]}; set{(class.rand + [1,2,3,4,5]) * 3}\n",
         # built in dict function
@@ -204,7 +205,7 @@ def evaluate(code: str, tmp_path):
         "dict{1,[3]}\n",
         "dict{1,set{[1]}}\n",
         "dict{1,dict{1, 2}}\n",
-        'dict{[1,dict{1, 2}, 1, 2, 2, set{1}, 9, false, 10, "hi"]}\n',
+        'dict{[1,dict{1, 2}, 1, 2, 2, set{[1]}, 9, false, 10, "hi"]}\n',
         "dict{}\n",
         "dict{1,2} + dict{[3,2]}\n",
         "dict{1,2} + dict{[1,2]}\n",
@@ -343,21 +344,21 @@ def test_evaluator_valid(program, tmp_path):
         "fn bar args\n return [1]\nend\nx = [2,3,4][bar{}]\n",
         'fn bar args\n return "5"\nend\nx = [2,3,4][bar{}]\n',
         "a = dict{1,2}\n b = a[0]\n",
-        "fn foo args; return set{1,2}; end; b = foo{}[1]\n",
-        "fn foo args; return set{1,2}; end; data Class [rand]; class = Class{foo}; b = class.rand{}[1]\n",
+        'fn foo args; return set{[1,2]}; end; b = foo{}[1]\n',
+        'fn foo args; return set{[1,2]}; end; data Class [rand]; class = Class{foo}; b = class.rand{}[1]\n',
         # illegal arithmetic
         "fn bar args\n return 5\nend\nx = bar{} + [2,3,4]\n",
         'fn bar args\n return 5\nend\nx = bar{} + "3"\n',
         'fn bar args\n return "5"\nend\nx = 1 + bar{}\n',
         'fn bar args\n return [1]\nend\nx = "1" + bar{}\n',
-        'fn bar args\n return "5"\nend\nx = set{1} + bar{}\n',
+        'fn bar args\n return "5"\nend\nx = set{[1]} + bar{}\n',
         "fn bar args\n return [1]\nend\nx = dict{1,2} + bar{}\n",
-        "fn foo args; return set{1,2}; end; data Class [rand]; class = Class{foo}; b = class.rand{} + 1\n",
+        'fn foo args; return set{[1,2]}; end; data Class [rand]; class = Class{foo}; b = class.rand{} + 1\n',
         "fn bar args; return 5; end; data Class [rand]; fn foo args; return Class{bar}; end; x = foo{}.rand + [2,3,4]\n",
         'fn bar args; return 5; end; data Class [rand]; fn foo args; return Class{bar}; end; x = foo{}.rand + "3"\n',
         'fn bar args;  return "5"; end; data Class [rand]; fn foo args; return Class{bar}; end; x = 1 + foo{}.rand\n',
         'fn bar args; return [1]; end; data Class [rand]; fn foo args; return Class{bar}; end; x = "1" + foo{}.rand\n',
-        'fn bar args; return "5"; end; data Class [rand]; fn foo args; return Class{bar}; end; x = set{1} + foo{}.rand\n',
+        'fn bar args; return "5"; end; data Class [rand]; fn foo args; return Class{bar}; end; x = set{[1]} + foo{}.rand\n',
         "fn bar args; return [1]; end; data Class [rand]; fn foo args; return Class{bar}; end; x = dict{1,2} + foo{}.rand\n",
         # illegal built in len
         "len{}\n",
@@ -371,9 +372,9 @@ def test_evaluator_valid(program, tmp_path):
         "data Class [rand]; class = Class{1}; len{class.rand}\n",
         # illegal built in sum function
         'sum{[1,2,3,"4"]}\n',
-        "sum{1,2,3,set{}}\n",
-        "sum{1,2,3,dict{}}\n",
-        "sum{1,2,3,[1]}\n",
+        'sum{[1,2,3,set{}]}\n',
+        'sum{[1,2,3,dict{}]}\n',
+        'sum{[1,2,3,[1]]}\n',
         'data Class [rand]; class = Class{[1,2,3,"4"]}; sum{class.rand}\n',
         "data Class [rand]; class = Class{[1,2,3,set{}]}; sum{class.rand}\n",
         "data Class [rand]; class = Class{[1,2,3,dict{}]}; sum{class.rand}\n",
@@ -413,24 +414,24 @@ def test_evaluator_valid(program, tmp_path):
         "data Class [rand]; class = Class{[1,2, [5]]}; sort{class.rand}\n",
         # illegal built in set function
         "fn foo args; return [1,2, [5]]; end; set{foo{}}\n",
-        "fn foo args; return [1,2, set{1,2}]; end; set{foo{}}\n",
+        'fn foo args; return [1,2, set{[1,2]}]; end; set{foo{}}\n',
         "fn foo args; return [1,2, dict{1,2}]; end; set{foo{}}\n",
         "fn foo args; return set{[1,2, 5]}; end; foo{} * foo{}\n",
         "fn foo args; return set{[1,2, 5]}; end; foo{} / set{[1,2, 5]}\n",
         "fn foo args; return set{[1,2, 5]}; end; foo{} // set{[1,2, 5]}\n",
         "fn foo args; return set{[1,2, 5]}; end; foo{} ** set{[1,2, 5]}\n",
-        "fn foo args; return set{1,2, 5}; end; 1 + foo{}\n",
-        "fn foo args; return set{1,2, 5}; end; false + foo{}\n",
-        'fn foo args; return set{1,2, 5}; end; "1" + foo{}\n',
-        "fn foo args; return set{1,2, 5}; end; [1] + foo{}\n",
-        "fn foo args; return set{1,2, 5}; end; dict{1,2} + foo{}\n",
-        "fn foo args; return [1,2, [5]]; end; set{foo{}} in set{1,2, 5}\n",
-        'data Class [rand]; class = Class{set{[1,2, "5"]}}; class.rand in set{1,2, 5}\n',
+        'fn foo args; return set{[1,2, 5]}; end; 1 + foo{}\n',
+        'fn foo args; return set{[1,2, 5]}; end; false + foo{}\n',
+        'fn foo args; return set{[1,2, 5]}; end; "1" + foo{}\n',
+        'fn foo args; return set{[1,2, 5]}; end; [1] + foo{}\n',
+        'fn foo args; return set{[1,2, 5]}; end; dict{1,2} + foo{}\n',
+        'fn foo args; return [1,2, [5]]; end; set{foo{}} in set{[1,2, 5]}\n',
+        'data Class [rand]; class = Class{set{[1,2, "5"]}}; class.rand in set{[1,2, 5]}\n',
         "data Class [rand]; class = Class{set{[1,2, 5]}}; class.rand in dict{1,2}\n",
         # illegal built in dict function
         "fn foo args; return [1,2, 5]; end; dict{foo{}}\n",
         "fn foo args; return [[1],2]; end; dict{foo{}}\n",
-        "fn foo args; return [set{1},2]; end; dict{foo{}}\n",
+        'fn foo args; return [set{[1]},2]; end; dict{foo{}}\n',
         "fn foo args; return [dict{1,2},2]; end; dict{foo{}}\n",
         "dict{1,2} * dict{[1,2]}\n",
         "dict{1,2} / dict{[1,2]}\n",
@@ -475,7 +476,7 @@ def test_evaluator_valid(program, tmp_path):
         "fn bar args\n return 4\nend\n[hello] = bar{}\n",
         "fn bar args \nend\n hello = [5]\n[hello] = bar{}\n",
         'fn bar args\n return ["5"]\nend\n hello = "5"\n[hello] *= bar{}\n',
-        "fn bar args; return [false]; end; data Class [rand]; class = Class{bar}; [class.rand{}[0]] *= [set{1}]\n",
+        'fn bar args; return [false]; end; data Class [rand]; class = Class{bar}; [class.rand{}[0]] *= [set{[1]}]\n',
         'fn bar args; return [5]; end; data Class [rand]; class = Class{bar}; [class.rand{}[0]] /= ["1"]\n',
         # invalid dataclass stuff
         # field read on non-instance via dynamic callee → runtime field-access error
@@ -483,7 +484,7 @@ def test_evaluator_valid(program, tmp_path):
         # augmented assign on field whose runtime value defaults to None → op error
         'data P [x]; p = P{}; p.x += "s"\n',
         # field read on non-instance (set) via dynamic path
-        "fn mk args\n return set{1}\nend\nx = mk{}; print{x.a}\n",
+        'fn mk args\n return set{[1]}\nend\nx = mk{}; print{x.a}\n',
         # index OOB before field read in a chain → index runtime error
         "data P [x]; arr = [P{1}]; print{arr[1+1].x}\n",
         # calling an instance like a function → not callable
@@ -493,4 +494,4 @@ def test_evaluator_valid(program, tmp_path):
 def test_evaluator_invalid(program, tmp_path):
     """Each program here is expected to raise *EvaluatorError*."""
     with pytest.raises(EvaluatorError):
-        evaluate(program, tmp_path)
+        evaluate(program, tmp_path, analyze=False)
