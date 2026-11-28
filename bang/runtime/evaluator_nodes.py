@@ -76,10 +76,12 @@ def format_value(value):
         typ = type(current)
         if typ is str:
             output.append(repr(current) if quoted else current)
-        elif typ in (int, float, bool):
+        elif typ is bool:
+            output.append("1" if current else "0")
+        elif typ in (int, float):
             output.append(str(current))
         elif current is None:
-            output.append("none")
+            output.append("0")
         elif typ is runtime_function:
             output.append(
                 f"<fn {current.name}>"

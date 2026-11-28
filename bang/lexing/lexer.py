@@ -282,9 +282,14 @@ class Lexer:
                     literal.append(escapes[text[pos + 1]])
                     pos += 2
                 else:
-                    # Preserve unrecognized sequences, as older Bang strings did.
-                    literal.append(char)
-                    pos += 1
+                    if pos + 1 >= stop:
+                        raise LexerError("unterminated string literal", text, start)
+                    if text[pos + 1] in "\r\n":
+                        raise LexerError("newline in string literal", text, start)
+                    raise LexerError(
+                        f"unknown escape sequence {text[pos:pos + 2]!r}; "
+                        "use '\\\\' for a literal backslash", text, pos,
+                    )
                 continue
             if formatted and char == "{":
                 if pos + 1 < stop and text[pos + 1] == "{":

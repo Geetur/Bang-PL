@@ -257,6 +257,11 @@ class SemanticAnalysis:
 
     BUILT_IN_FUNCTIONS = {
         "print": FUNCTION_TYPE_CLASS,
+        "int": FUNCTION_TYPE_CLASS,
+        "input": FUNCTION_TYPE_CLASS,
+        "map": FUNCTION_TYPE_CLASS,
+        "filter": FUNCTION_TYPE_CLASS,
+        "reduce": FUNCTION_TYPE_CLASS,
         "len": FUNCTION_TYPE_CLASS,
         "sum": FUNCTION_TYPE_CLASS,
         "min": FUNCTION_TYPE_CLASS,
@@ -926,6 +931,34 @@ class SemanticAnalysis:
             return self.INSTANCE_TYPE_CLASS(of=callee, fields=fields)
         if typ is BuiltinType:
             name = callee.name
+            if name in ("map", "filter", "reduce"):
+                maximum = 3 if name == "reduce" else 2
+                if not 2 <= len(arguments) <= maximum:
+                    expected = "2 or 3" if maximum == 3 else "2"
+                    self._error(
+                        f"{name} expects {expected} arguments (got {len(arguments)})", root
+                    )
+                callback, values = arguments[:2]
+                if type(callback) not in (
+                    self.DYNAMIC_TYPE_CLASS, self.FUNCTION_TYPE_CLASS, BuiltinType,
+                    self.DATA_CLASS_TYPE_CLASS,
+                ):
+                    self._error(
+                        f"{name} expects a callable first argument (got {type_name(callback)})",
+                        root,
+                    )
+                if type(values) not in (self.ARRAY_TYPE_CLASS, self.DYNAMIC_TYPE_CLASS):
+                    self._error(
+                        f"{name} expects an array second argument (got {type_name(values)})", root
+                    )
+                self._invalidate_call_facts()
+                return (
+                    self.DYNAMIC_TYPE_CLASS() if name == "reduce" else self.ARRAY_TYPE_CLASS(None)
+                )
+            if name == "int":
+                return self.NUMBER_TYPE_CLASS(None)
+            if name == "input":
+                return self.STRING_TYPE_CLASS(None)
             if name not in ("set", "dict"):
                 return self.NUMBER_TYPE_CLASS(None) if name == "len" else self.DYNAMIC_TYPE_CLASS()
             items = arguments

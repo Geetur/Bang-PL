@@ -194,7 +194,7 @@ def test_keywords(tmp_path, kw, ttype):
     ('"hello"', "hello"),
     (r'"a\nb\rc\td\be\ff\v"', "a\nb\rc\td\be\ff\v"),
     (r'"say \"hello\"; C:\\tmp"', 'say "hello"; C:\\tmp'),
-    (r'"\q\u0041"', r"\q\u0041"),
+    (r'"\\q\\u0041"', r"\q\u0041"),
     ('"{name} {{score}}"', "{name} {{score}}"),
 ])
 def test_string_literal_value_strips_quotes(tmp_path, src, expected):
@@ -222,6 +222,10 @@ def test_interpolation_fields_preserve_spans_and_physical_locations(tmp_path):
 
 
 @pytest.mark.parametrize("src, message", [
+    (r'"\q"', 'unknown escape sequence'),
+    (r'"\x41"', 'unknown escape sequence'),
+    (r'"\u0041"', 'unknown escape sequence'),
+    (r'f"\q"', 'unknown escape sequence'),
     ('f"{}"', 'empty interpolation'),
     ('f"{   }"', 'empty interpolation'),
     ('f"}"', "single '}'"),

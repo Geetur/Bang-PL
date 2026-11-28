@@ -320,6 +320,78 @@ class Evaluator:
             print(*(format_value(value) for value in args))
             return 0
 
+        def _built_in_int(args, meta_data):
+            if len(args) != 1:
+                self._error(f"int expects exactly one argument (got {len(args)})", meta_data)
+            value = args[0]
+            if isinstance(value, (int, float)):
+                return int(value)
+            if type(value) is not str:
+                self._error(
+                    f"int expects a number or base-10 integer string (got {type_name(value)})",
+                    meta_data,
+                )
+            text = value.strip()
+            digits = text[1:] if text.startswith(("+", "-")) else text
+            if not digits or not digits.isascii() or not digits.isdecimal():
+                self._error("int expects a base-10 integer string, such as \"42\"", meta_data)
+            if len(digits) > 4300:
+                self._error("int string exceeds the limit of 4300 digits", meta_data)
+            return int(text, 10)
+
+        def _built_in_input(args, meta_data):
+            if len(args) > 1:
+                self._error(f"input expects zero or one argument (got {len(args)})", meta_data)
+            prompt = args[0] if args else ""
+            if type(prompt) is not str:
+                self._error(f"input prompt must be a string (got {type_name(prompt)})", meta_data)
+            try:
+                return input(prompt)
+            except EOFError:
+                self._error("input reached end of input", meta_data)
+            except OSError as error:
+                self._error(f"input could not read standard input: {error}", meta_data)
+
+        def _functional_arguments(name, args, meta_data, minimum=2, maximum=2):
+            if not minimum <= len(args) <= maximum:
+                expected = str(minimum) if minimum == maximum else f"{minimum} or {maximum}"
+                self._error(f"{name} expects {expected} arguments (got {len(args)})", meta_data)
+            callback, values = args[:2]
+            if type(callback) not in (
+                self.RUN_TIME_FUNCTION, RUN_TIME_BUILTIN, self.RUN_TIME_DATACLASS
+            ):
+                self._error(
+                    f"{name} expects a callable first argument (got {type_name(callback)})",
+                    meta_data,
+                )
+            if type(values) is not list:
+                self._error(
+                    f"{name} expects an array second argument (got {type_name(values)})", meta_data
+                )
+            return callback, list(values)
+
+        def _built_in_map(args, meta_data):
+            callback, values = _functional_arguments("map", args, meta_data)
+            return [self._invoke_callable(callback, [value], meta_data) for value in values]
+
+        def _built_in_filter(args, meta_data):
+            callback, values = _functional_arguments("filter", args, meta_data)
+            return [
+                value for value in values if self._invoke_callable(callback, [value], meta_data)
+            ]
+
+        def _built_in_reduce(args, meta_data):
+            callback, values = _functional_arguments("reduce", args, meta_data, maximum=3)
+            if len(args) == 3:
+                accumulator = args[2]
+            elif values:
+                accumulator = values.pop(0)
+            else:
+                self._error("reduce needs an initial value when the array is empty", meta_data)
+            for value in values:
+                accumulator = self._invoke_callable(callback, [accumulator, value], meta_data)
+            return accumulator
+
         def _built_in_len(args, meta_data):
             # changet this len args != 1 to accomodate any number of expected arguments
             if len(args) != 1:
@@ -599,6 +671,11 @@ class Evaluator:
         # by name
         self.built_in_functions = {
             "print": _built_in_print,
+            "int": _built_in_int,
+            "input": _built_in_input,
+            "map": _built_in_map,
+            "filter": _built_in_filter,
+            "reduce": _built_in_reduce,
             "len": _built_in_len,
             "sum": _built_in_sum,
             "min": _built_in_min,

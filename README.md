@@ -38,12 +38,14 @@ The interpreter is also part of the project. Parsing, checking, and execution li
 ## Key Language Features
 
 * **Array-centric operators:** concatenate with `+`, remove matching elements with `-`, and perform element-wise `*`, `/`, and `//`, including singleton broadcasting. `[1,2] * 2` repeats each element and produces `[1,1,2,2]`.
-* **Destructuring and compound assignment:** `[a,b] = [1,2]`, nested targets, and `+=`, `-=`, `*=`, `/=`.
+* **Indexing, slicing, and destructuring:** `grid[row,column]` or `grid[row][column]`, `values[1:5]`, `values[::-1]`, `[a,b] = pair`, and `for [name,score] results`.
+* **Readable multiline expressions:** calls, arrays, indexes, and grouped expressions continue across newlines inside balanced delimiters. Trailing commas are accepted.
+* **Interpolated strings:** `f"{name} scored {score} points"`, literal brace escaping, and checked string escapes such as `\n`, `\"`, and `\\`.
 * **Familiar expressions and control flow:** arithmetic, comparisons, membership with `in`, short-circuit `&&` and `||`, unary `!`, and `if`, `elif`, `else`, `for`, `while`, `break`, and `continue`.
 * **Flexible function interfaces:** a variadic argument array, that array combined with named options, or a fixed list of declared parameters. Defaults evaluate per call.
-* **First-class functions and persistent closures:** return functions, store them in containers or records, and preserve captured state across calls.
+* **First-class functions and persistent closures:** named block functions, `fn square {x} return x*x`, anonymous `fn {x} return x*x`, and captured state that persists across calls.
 * **Records, sets, and dictionaries:** define record types with `data`, access fields with `.`, and construct sets and dictionaries with `set{...}` and `dict{...}`.
-* **A compact builtin library:** `print`, `len`, `sum`, `min`, `max`, `sort`, `range`, `set`, and `dict`.
+* **A compact builtin library:** output and input with `print`/`input`, conversion with `int`, eager `map`/`filter`/`reduce`, and `len`, `sum`, `min`, `max`, `sort`, `range`, `set`, and `dict`.
 * **Checks at both stages:** semantic analysis validates bindings, known type information, and control-flow placement; runtime checks handle values that remain dynamic.
 
 ## Architecture Overview
@@ -70,10 +72,11 @@ The expression parser uses shunting-yard parsing to resolve precedence and build
 | `bang/parsing/control_flow_parser.py` | Organizes statements into nested control-flow and function blocks. |
 | `bang/parsing/parser_nodes.py` | Defines the AST nodes shared by later stages. |
 | `bang/calling.py` | Shares argument-binding rules between the checker and evaluator. |
+| `bang/diagnostics.py` | Renders source locations and describes invalid values and operations. |
 | `bang/semantic/semantic_analysis.py` | Checks bindings, available type facts, and control-flow placement. |
 | `bang/semantic/semantic_nodes.py` | Defines the checker's type and value facts. |
 | `bang/runtime/evaluator.py` | Executes programs and implements builtins and operator behavior. |
-| `bang/runtime/evaluator_nodes.py` | Represents runtime functions, record constructors, and instances. |
+| `bang/runtime/evaluator_nodes.py` | Represents runtime values and formats readable output, including cycles. |
 | `bang/cli.py` | Implements the `bang` command and diagnostic exit handling. |
 | `bang/tests/test_regressions.py` | Checks behavior across stages, including output, errors, and scope cleanup. |
 
@@ -304,13 +307,114 @@ Output:
 8
 ```
 
+### Indexing, slices, and multiline expressions
+
+Comma indexing descends through nested collections, one level per index. Both forms
+work for reads, assignment, and compound assignment:
+
+```bang
+grid = [
+    [1, 2, 3],
+    [4, 5, 6],
+]
+print{grid[1, 2], grid[1][2]} # 6 6
+grid[0, 1] += 10
+print{grid[0]}               # [1, 12, 3]
+
+values = [0, 1, 2, 3, 4, 5]
+print{values[1:5]}   # [1, 2, 3, 4]
+print{values[::-1]}  # [5, 4, 3, 2, 1, 0]
+print{values[::2]}   # [0, 2, 4]
+```
+
+Slice stops are exclusive. Negative indexes count from the end, bounds beyond the
+collection are clamped, and a zero step is an error. Strings support the same slice
+reads. Array slices make a shallow copy. Array slice assignment can resize a
+contiguous selection; stepped replacement must supply exactly the selected length.
+
+Keep slices in separate brackets: `grid[1][::-1]`. Mixed selectors such as
+`grid[:,1]` are rejected; comma indexing does not implicitly select columns.
+`grid[1,]` means `grid[1]`, consistent with trailing commas in calls and arrays.
+
+Newlines inside balanced `{}`, `[]`, and `()` continue the current expression.
+Commas still separate values; semicolons separate statements only outside groups.
+Destructuring works directly in loops:
+
+```bang
+results = [["Ada", 42], ["Lin", 37]]
+for [name, score] results
+    print{f"{name} scored {score} points"}
+end
+```
+
+### Strings, interpolation, and readable output
+
+```bang
+name = "Ada"
+score = 42
+print{f"{name} scored {score} points"}
+print{f"{{score}} = {score}"} # {score} = 42
+print{"{score}"}             # {score}; ordinary strings keep literal braces
+print{"first\nsecond"}       # two output lines
+print{"a quote: \"; a backslash: \\"}
+```
+
+Interpolation fields contain Bang expressions and evaluate once, left to right.
+Each result is formatted before the next field runs. Use `{{` and `}}` for literal
+braces in an interpolated string. Formatting directives such as `:02` and `!r` are
+not supported. Strings occupy one source line; use `\n` to include a newline value.
+
+Supported escapes are `\n`, `\r`, `\t`, `\b`, `\f`, `\v`, `\"`, `\'`, and `\\`.
+Unknown escapes are errors, including `\x41` and `\u0041`; write UTF-8 characters
+directly. Escape a literal backslash: `"\\x41"` contains the literal text `\x41`.
+
+Functions print as `<fn square>` or `<anonymous fn at line 12>`, builtins as
+`<builtin len>`, and records as `Point{x=1, y=2}`. Containers use the same formatting
+for nested values, with quoted strings and `...` to mark cycles.
+
+### Input, conversion, and functional builtins
+
+```bang
+name = input{"Name: "}
+score = int{input{"Score: "}}
+print{f"{name} scored {score} points"}
+```
+
+`input{}` or `input{prompt}` reads one line without its final newline. The prompt
+must be a string, and end-of-input raises a Bang diagnostic. `int{value}` accepts
+numbers or signed base-10 integer strings, with surrounding whitespace allowed.
+Floating-point numbers truncate toward zero. Decimal points in strings, digit
+separators, non-ASCII digits, and strings longer than 4,300 digits are rejected.
+
+```bang
+values = [1, 2, 3, 4]
+squares = map{fn {x} return x*x, values}
+large = filter{fn {x} return x > 2, values}
+total = reduce{fn {acc,x} return acc+x, values, 0}
+numbers = map{int, ["10", "20", "30"]}
+print{squares, large, total, numbers}
+# [1, 4, 9, 16] [3, 4] 10 [10, 20, 30]
+```
+
+| Builtin | Rule |
+|---|---|
+| `map{callback, values}` | Return an array containing `callback{item}` for each item. |
+| `filter{callback, values}` | Return the original items whose callback result is truthy. |
+| `reduce{callback, values}` | Fold left from the first item; an empty array is an error. |
+| `reduce{callback, values, initial}` | Fold left from `initial`; an empty array returns it unchanged. |
+
+These builtins require an array and snapshot its outer contents before callbacks
+run. Callbacks run left to right through ordinary Bang call binding. Nested values
+remain shared references. A callback failure stops traversal. Builtins accept
+positional arguments; user functions with declared parameters also accept names.
+
 ## Stabilized Behavior
 
 [LANGUAGE_SEMANTICS.md](LANGUAGE_SEMANTICS.md) documents operator rules, evaluation order, closures, records, and diagnostic limits.
 
 A few rules are useful to know up front:
 
-* Boolean literals participate numerically: `true == 1`, `false == 0`, and `none == 0`. Predicate results may display as `True` or `False`.
+* Booleans participate numerically: `true == 1`, `false == 0`, and `none == 0`. Every boolean prints as `1` or `0`, including predicates, nested data, and interpolation. `none` prints as `0`.
 * Array multiplication by an integer repeats each element; multiplication by a singleton array broadcasts an element-wise operation.
 * Captured assignments persist across function calls. Arrays and records retain their normal reference behavior when passed to functions.
 * Source files use UTF-8. The checker uses the facts it can establish; dynamic values remain subject to runtime checks.
@@ -343,7 +447,6 @@ print{total{1, -3, absolute = true}} # 2
 ```
 
 Options do not consume positional values. Their defaults can reference the argument array, such as `count = len{args}`.
-
 
 ## Running the Test-Suite
 

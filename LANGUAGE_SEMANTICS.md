@@ -1,10 +1,10 @@
-# Bang semantics after stabilization
+# Bang language semantics (v0.1)
 
-These rules describe the current implementation. They make the corrected behavior explicit before further language features are added.
+These rules describe the current v0.1 interpreter, including its syntax, numeric compatibility, evaluation order, builtins, and diagnostic limits.
 
 ## Values and operators
 
-- Numbers support ordinary real-number arithmetic. Booleans participate in numeric operations as 1 and 0. Boolean literals retain the existing numeric representation; predicate results may display as `True` or `False` while behaving numerically in arithmetic, iteration bounds, indexing and repetition.
+- Numbers support ordinary real-number arithmetic. Booleans participate in numeric operations as 1 and 0. Boolean literals retain the existing numeric representation. All boolean output is `1` or `0`, including predicate results in interpolation and nested containers. Booleans behave numerically in arithmetic, iteration bounds, indexing, and repetition.
 - `none`, an omitted record field, a function that falls through, and the return value of `print` are all represented by zero. In particular, `none == 0`, `false == 0`, and `true == 1` remain true.
 - Strings support concatenation with `+`, removal of every matching substring with `-`, splitting into an array with `/`, and repetition with an integer multiplier. An empty split separator produces individual characters.
 - Array `+` concatenates. Array `-` removes matching elements, including nested arrays. Array `*`, `/`, and `//` pair corresponding elements and broadcast a singleton operand. Other unequal lengths are errors.
@@ -24,7 +24,32 @@ These rules describe the current implementation. They make the corrected behavio
 - Array `+=` computes and reassigns a concatenated array. Other variables referencing the earlier array keep that earlier array.
 - Assignment is a statement. Assignment expressions and chained assignment are rejected. Inside a call, `name = expression` is a named argument label and never assigns a caller variable.
 
+## Indexing, slices, and multiline expressions
+
+- `g[i,j,k]` is exactly nested access `g[i][j][k]`. Both spellings support reads, assignment, and compound assignment. Each selector evaluates once, then its access completes before the next selector evaluates. A failed access skips later selectors. Levels are one-based in diagnostics; arrays may be ragged.
+- Ordinary array and string indexes must be integers. Negative indexes count from the end; out-of-range ordinary indexes are errors. Dictionaries accept hashable keys. A single trailing comma is allowed: `g[i,]` means `g[i]`.
+- Slices have the form `[start:stop:step]`, with an exclusive stop. The step defaults to 1 and cannot be zero. Bounds and steps must be integers. Boolean numeric compatibility applies. An explicit `none` is zero, distinct from an omitted bound.
+- With a positive step, omitted start and stop mean 0 and the sequence length. With a negative step, they mean the final index and the position before the first element. Negative explicit bounds are offset from the end, then bounds are clamped. An incompatible direction produces an empty slice. In particular, `a[::-1]` reverses while `a[:-1:-1]` is empty.
+- Array and string slice reads work, including on empty sequences. Array slices copy the outer array and retain references to nested values. Strings are immutable.
+- Slice assignment requires an array target and array replacement. A step of 1 permits insertion, deletion, and resizing. Other steps, including negative steps, require exactly as many replacement values as selected positions. Aliased replacement values are handled safely. Compound slice assignment uses the existing operators and assignment order.
+- A comma selector list cannot contain slices. `g[:,1]` is rejected; it does not select a column. Explicit chaining such as `g[:][1]` or `g[1][::-1]` retains its ordinary meaning.
+- Newlines inside balanced `{}`, `[]`, and `()` continue the expression. Commas remain required between values; one trailing comma is supported in arrays, calls, parameter lists, and ordinary index lists. Semicolons are statement separators only outside groups. Comments outside strings extend to the physical line end.
+- `for [name,score] results` destructures each row using the existing assignment rules. Nested targets, record fields, and indexed targets work inside the destructuring pattern. Each row must provide enough values at every unpacking level; extra values are ignored. Loop/branch scope and control-transfer rules remain unchanged.
+
+## Strings and interpolation
+
+- Both ordinary and interpolated double-quoted strings decode `\n`, `\r`, `\t`, `\b`, `\f`, `\v`, `\"`, `\'`, and `\\`. Unknown escapes raise a lexer error at the backslash; `\x41`, `\u0041`, and octal escapes are not implemented. Write UTF-8 characters directly or escape a literal backslash.
+- Strings occupy one physical source line. Escaped `\n` adds a newline value without changing the physical source location of later tokens. Raw newlines and NUL characters in source strings are rejected.
+- Only an immediate lowercase `f"` starts interpolation. Ordinary strings keep all braces literal. In interpolated strings, `{{` and `}}` produce literal braces and `{expression}` evaluates a Bang expression.
+- Fields allow ordinary calls, indexing, slices, function expressions, nested strings, and nested interpolated strings. Quoted strings inside a field may use the same double quote as the outer string. Empty fields, unmatched delimiters, raw newlines, and comments in fields are errors. Conversion flags and format specifications are not supported.
+- Fields evaluate once, left to right. Each result is formatted immediately before the next field runs, so later mutations do not change text already emitted by an earlier field. A failed field skips later fields.
+- Printing and interpolation share one formatter. Top-level strings are verbatim; strings inside containers/records are quoted. All boolean values print as 1/0 and all `none` values as 0. Functions display their diagnostic name or definition line, builtins their Bang name, constructors their name/schema, and instances their type and named fields. Cycles are marked with `...`; shared acyclic values are printed fully.
+
 ## Functions and scopes
+
+- Named block functions retain `fn name interface` followed by statements and `end`. Named short functions use `fn name interface return expression` with no `end`. Anonymous functions use `fn interface return expression` in expression position. All three existing interfaces work: an argument-array name, `{parameters}`, or an argument-array name followed by `{named options}`.
+- In expression position an identifier after `fn` is the argument-array name. `f=fn power {x} return x` therefore collects positional values in `power` and requires the named option `x`; use `f=fn {x} return x` for a fixed parameter.
+- A short body is one explicit return expression, ending at its enclosing statement/comma/closing-delimiter boundary or EOF. Nested groups remain part of the body. Short functions have no implicit branching or conditional expression. Named and anonymous functions use the same closure, default, and call rules.
 
 - Function interfaces compose explicitly. `fn f args` receives positional arguments as one array. `fn f args {frozen = false}` keeps every positional value in `args` and binds the declared options only by name: `f{1,2,frozen=true}` gives `args=[1,2]` and `frozen=true`. Defaults can reference the argument array. The array name cannot also be an option name or be supplied as a named argument.
 - `fn f {input, frozen = false}` remains available for a fixed signature: it accepts positional or named bindings for its individual parameters. `fn f {}` accepts no arguments. Builtins, record constructors and the plain `fn f args` form remain positional-only.
@@ -74,6 +99,19 @@ else
 end
 ```
 
+## Builtins
+
+All builtins are ordinary first-class callable values, resolve correctly through aliases and rebinding, and accept positional arguments only.
+
+- `int{value}` takes exactly one number or string. Numeric values truncate toward zero. Strings allow surrounding whitespace, an optional ASCII sign, and ASCII base-10 digits only. Decimal points, digit separators, radix prefixes, and non-ASCII digits in strings are rejected. The string limit is 4,300 digits, including leading zeroes. Booleans and `none` retain numeric compatibility.
+- `input{}` or `input{prompt}` reads a line from standard input, strips only its final newline, and returns a string. The optional prompt must be a string. EOF and input-stream failures produce Bang diagnostics. A prompt is written once.
+- `map{callback, values}` takes exactly two arguments and returns a new array of `callback{item}` results.
+- `filter{callback, values}` takes exactly two arguments and returns the original items whose callback result is truthy. It does not substitute callback results for the items.
+- `reduce{callback, values}` folds left using the first element as the initial accumulator. The callback receives `accumulator,item`. An empty array without an initial value is an error; a singleton returns its element without invoking the callback.
+- `reduce{callback, values, initial}` folds left from the supplied initial value. An empty array returns that value unchanged, including explicit zero or `none`.
+- These functional builtins require an array and a callable (user function, builtin, or constructor). They snapshot the array's outer contents before invoking callbacks, preserve nested references, and invoke callbacks left to right using ordinary Bang binding. Callback arity is checked when a callback is actually invoked. A failure skips later elements. Captured assignments and mutations persist normally; checking conservatively invalidates facts that callbacks may change.
+- Existing builtins retain their behavior: `print` outputs space-separated values and returns zero; `len` takes one sized value; `sum`, `min`, `max`, and `sort` operate on positional values or an array/set; `set` and `dict` construct collections; `range` accepts zero through three arguments and returns an array. A zero range step is an error. Array multiplication remains per-element repetition rather than whole-array tiling.
+
 ## Checking and diagnostics
 
 - The checker records an operation's result type, not the type or literal shape of its RHS. It updates/invalidate facts when indexed/field mutation or aliases make earlier information stale.
@@ -81,5 +119,7 @@ end
 - Unknown user calls invalidate potentially changed facts. Runtime checks validate values that cannot be determined statically. This is a best-effort checker, not a claim of complete static type safety.
 - Expressions use explicit stacks for checking and evaluation, so long flat arithmetic trees and call/index/field chains do not consume the Python call stack.
 - `Evaluator.MAX_CALL_DEPTH`, `ExpressionParser.MAX_EXPRESSION_DEPTH`, and `ControlFlowParser.MAX_BLOCK_DEPTH` default to 64. They bound nested function invocations, recursive collection/call parsing, and nested control blocks. Parentheses handled iteratively and flat operator chains do not consume the recursive-parser limit. Excess nesting produces a Bang diagnostic.
-- Integer literals are limited to 4,300 digits. Numeric literals use ASCII digits. Source files use UTF-8; NUL and raw newlines inside string literals are rejected. Escaped-string syntax is not introduced by this patch.
+- Integer literals are limited to 4,300 digits. Numeric literals use ASCII digits. Source files use UTF-8; NUL and raw newlines inside string literals are rejected. String escape and interpolation rules are specified above.
 - Error line numbers are one-based. Missing/unreadable source files are reported as file errors.
+
+- Index errors identify the failed selector, its level, and the current length when applicable. Field errors identify the failed field and list available fields. Slice errors identify the bad bound or mismatched replacement lengths. Diagnostic construction never re-evaluates a selector or callback.

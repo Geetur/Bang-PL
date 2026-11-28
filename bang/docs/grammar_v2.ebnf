@@ -1,4 +1,4 @@
-# Bang Grammar v2.2 — single-end conditionals
+# Bang Grammar v0.1 — current implemented syntax
 # This EBNF matches the current lexer, expression parser (shunting-yard), control-flow parser,
 # semantic analysis, and evaluator.
 
@@ -24,6 +24,7 @@ RBRACKET        = "]"
 COMMA           = ","
 SEMICOLON       = ";"
 DOT             = "."   # member access
+COLON           = ":"   # slice separator
 
 # Double-character operators
 PLUS_ASSIGN     = "+="
@@ -62,7 +63,14 @@ BOOL_LIT    = "true" | "false"
 # e.g. ".5", "5.", "5.0" are valid; "." alone is the DOT token.
 FLOAT_LIT   = DIGITS? DOT DIGITS | DIGITS DOT DIGITS?
 INT_LIT     = DIGITS
-STRING_LIT  = '"' { any-char-except-quote-or-newline } '"'
+STRING_LIT  = '"' { StringCharacter | Escape } '"'
+FSTRING_LIT = 'f"' { FStringCharacter | Escape | "{{" | "}}" | Interpolation } '"'
+Escape      = "\\" ( "n" | "r" | "t" | "b" | "f" | "v" | '"' | "'" | "\\" )
+Interpolation = "{" Expression "}"
+# StringCharacter excludes double quote, backslash, raw CR/LF, and NUL.
+# FStringCharacter additionally excludes braces. Fields balance all grouping
+# delimiters and can contain nested quoted/interpolated strings. Unknown escapes,
+# empty fields, field comments, raw newlines, conversions, and format specs fail.
 IDENT       = ( "_" | LETTER ) { "_" | LETTER | DIGIT }
 
 # ---------------------------------------------------------------------
@@ -74,7 +82,9 @@ Separators     ::= Separator { Separator } ;
 Program        ::= Block [ Statement ] ;
 Block          ::= { Separator | Statement Separators } ;
 
-# Newlines and semicolons separate statements. The last statement may end at EOF.
+# Outside balanced expression groups, newlines and semicolons separate statements.
+# Inside {}, [], and (), newlines continue expressions; semicolons are rejected.
+# The last statement may end at EOF.
 # Each if/for/while/fn opens one block. elif/else switch branches within that if.
 # "return" is only valid inside a function; "break"/"continue" only inside loops.
 
@@ -89,7 +99,8 @@ Statement      ::= AssignmentStmt
                  | ReturnStmt
                  | ExpressionStmt ;
 
-FunctionStmt   ::= FunctionHeader Separators Block KW_END ;
+FunctionStmt   ::= FunctionHeader ( Separators Block KW_END | KW_RETURN Expression ) ;
+AnonymousFunction ::= KW_FN FunctionInterface KW_RETURN Expression ;
 IfStmt         ::= IfHeader Separators Block
                    { ElifHeader Separators Block }
                    [ ElseHeader Separators Block ] KW_END ;
@@ -102,7 +113,11 @@ WhileStmt      ::= WhileHeader Separators Block KW_END ;
 
 # The identifier form receives a variadic argument array. The brace form binds
 # declared parameters. Required parameters precede defaults; names are unique.
-FunctionHeader ::= KW_FN IDENT ( IDENT [ ParameterOptions ] | ParameterOptions ) ;
+FunctionHeader ::= KW_FN IDENT FunctionInterface ;
+FunctionInterface ::= IDENT [ ParameterOptions ] | ParameterOptions ;
+# At statement level fn consumes a name; in expression position it does not.
+# A short body ends at its enclosing expression boundary and has no end.
+# An identifier in an anonymous interface names the positional argument array.
 ParameterOptions ::= LBRACE [ ParameterList ] RBRACE ;
 ParameterList  ::= Parameter { COMMA Parameter } [ COMMA ] ;
 Parameter      ::= IDENT [ ASSIGN Expression ] ;
@@ -117,9 +132,9 @@ WhileHeader    ::= KW_WHILE Expression ;
 
 # For header: "for <var> <iterable-expr>"
 # Examples:
-#   for i 10           # iterate 0..10 (via range)
+#   for i 10           # iterate 0 through 9
 #   for x arr          # iterate elements of arr
-ForHeader      ::= KW_FOR IDENT Expression ;
+ForHeader      ::= KW_FOR ( IDENT | Destructure ) Expression ;
 
 # ---------------------------------------------------------------------
 # 3) Single-token statements
@@ -188,12 +203,16 @@ UnaryExpr      ::= ( NEGATE | PLUS | MINUS ) UnaryExpr
 
 # Postfix chaining with highest binding power:
 #   - member access:   a.b.c
-#   - indexing:        a[expr][expr] (one expression per [ ])
+#   - indexing:        a[i,j] or a[i][j]; slices use a[start:stop:step]
 #   - calls (curly):   f{args}
 PostfixExpr    ::= Primary { FieldSuffix | IndexSuffix | CallSuffix } ;
 
 FieldSuffix    ::= DOT IDENT ;
-IndexSuffix    ::= LBRACKET Expression RBRACKET ;   # one top-level expr; use multiple [] for multi-index
+IndexSuffix    ::= LBRACKET ( IndexList | Slice ) RBRACKET ;
+IndexList      ::= Expression { COMMA Expression } [ COMMA ] ;
+Slice          ::= [ Expression ] COLON [ Expression ] [ COLON [ Expression ] ] ;
+# Comma selectors are sequential nested access. Slices cannot share a comma list.
+# An omitted bound differs from explicit none, whose numeric value is zero.
 CallSuffix     ::= LBRACE [ CallArgList ] RBRACE ;
 CallArgList    ::= CallArgument { COMMA CallArgument } [ COMMA ] ;
 CallArgument   ::= [ IDENT ASSIGN ] Expression ;
@@ -201,15 +220,16 @@ CallArgument   ::= [ IDENT ASSIGN ] Expression ;
 # Positional arguments precede named arguments. Names label arguments without
 # assigning caller variables. Named arguments require a declared-parameter function.
 
-ArgList        ::= Expression { COMMA Expression } ;
+ArgList        ::= Expression { COMMA Expression } [ COMMA ] ;
 
 # Primary atoms
-Primary        ::= Literals
+Primary        ::= AnonymousFunction
+                 | Literals
                  | IDENT
                  | LBRACKET [ ArgList ] RBRACKET     # Array literal
                  | LPAREN Expression RPAREN ;
 
-Literals       ::= INT_LIT | FLOAT_LIT | BOOL_LIT | NONE_LIT | STRING_LIT ;
+Literals       ::= INT_LIT | FLOAT_LIT | BOOL_LIT | NONE_LIT | STRING_LIT | FSTRING_LIT ;
 
 # ---------------------------------------------------------------------
 # 5) Precedence & associativity (from the parser)

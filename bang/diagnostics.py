@@ -87,6 +87,8 @@ def diagnostic_value(value):
     """Avoid huge strings, integer conversion limits, and recursive object reprs."""
     if type(value) is str:
         return repr(value[:60]) + ("..." if len(value) > 60 else "")
+    if type(value) is bool:
+        return "1" if value else "0"
     if type(value) in (int, float, bool):
         try:
             if type(value) is int and value.bit_length() > 256:

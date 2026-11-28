@@ -5,6 +5,7 @@ import io
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from bang.cli import run_file
 from bang.lexing.lexer import Lexer
@@ -543,7 +544,7 @@ class RegressionTests(unittest.TestCase):
              '[get{}[0],b]=a; print{b+"!"}', 'hi!\n'),
             ('print{len{dict{set{1,1,2}}},len{dict{set{true,1,2}}}}', '1 1\n'),
             ('print{sort{[]},sort{set{}}}', '[] []\n'),
-            ('data P [x]; p=P{1}; print{min{[p]}==p,max{[p]}==p}', 'True True\n'),
+            ('data P [x]; p=P{1}; print{min{[p]}==p,max{[p]}==p}', '1 1\n'),
         ]
         for code, expected in cases:
             with self.subTest(code=code):
@@ -687,7 +688,7 @@ class RegressionTests(unittest.TestCase):
              'other=fn {n} return (n<=1 && 1) || n*other{n-1}; '
              'print{fact{6},other{6}}', '720 720\n'),
             ('fn invoke {f=fn {x} return x+1,x=4} return f{x}; print{invoke{}}', '5\n'),
-            ('a=fn {} return 1; b=a; c=fn {} return 1; print{a==b,a==c}', 'True False\n'),
+            ('a=fn {} return 1; b=a; c=fn {} return 1; print{a==b,a==c}', '1 0\n'),
         )
         for code, expected in cases:
             with self.subTest(code=code):
@@ -792,8 +793,8 @@ class RegressionTests(unittest.TestCase):
             ('values=[1,2,3,4]; print{f"{sum{values[1::2]}}:{len{"ab"}}"}', '6:2\n'),
             ('x=4; print{f"outer {f"inner {x}"}"}', 'outer inner 4\n'),
             ('print{f"{(fn {x} return x*x){3}} {dict{"a",1}} {1<2} {none}"}',
-             "9 {'a': 1} True 0\n"),
-            (r'print{"a\nb",f"say \"hi\"\\{2}","\q"}', 'a\nb say "hi"\\2 \\q\n'),
+             "9 {'a': 1} 1 0\n"),
+            (r'print{"a\nb",f"say \"hi\"\\{2}","\\q"}', 'a\nb say "hi"\\2 \\q\n'),
             ('fn label {x,text=f"value={x}"} return text; print{label{3},label{4,"custom"}}',
              'value=3 custom\n'),
         )
@@ -882,7 +883,7 @@ class RegressionTests(unittest.TestCase):
         cases = (
             ('fn power {x} return x*x; square=fn {x} return x*x; alias=square; '
              'print{power,square,alias,alias==square,alias{3}}',
-             '<fn power> <fn square> <fn square> True 9\n'),
+             '<fn power> <fn square> <fn square> 1 9\n'),
             ('copy=len; len=sum; print{copy,len,copy{"abc"},len{1,2}}',
              '<builtin len> <builtin sum> 3 3\n'),
             ('print{print,len,sum,min,max,sort,set,dict,range}',
@@ -895,7 +896,7 @@ class RegressionTests(unittest.TestCase):
              '<data Point [x, y]> <data Point [z]> Point{x=1, y=2}\n'),
             ('fn f {x} return x; a=[f,len]; b=a*2; '
              'print{b,b[0]==f,b[2]==len,b[2]{"abc"}}',
-             '[<fn f>, <fn f>, <builtin len>, <builtin len>] True True 3\n'),
+             '[<fn f>, <fn f>, <builtin len>, <builtin len>] 1 1 3\n'),
         )
         for code, expected in cases:
             with self.subTest(code=code):
@@ -910,7 +911,7 @@ class RegressionTests(unittest.TestCase):
              "Person{name='Ada', score=42}|[Person{name='Ada', score=42}]|<builtin len>\n"),
             ('data Empty []; print{Empty,Empty{},[],dict{},set{},"raw",["quoted"],'
              'true,false,none,1<2}',
-             "<data Empty []> Empty{} [] {} set() raw ['quoted'] 1 0 0 True\n"),
+             "<data Empty []> Empty{} [] {} set() raw ['quoted'] 1 0 0 1\n"),
             ('fn f args return 0; print{dict{f,len},set{f},[fn {} return 0]}',
              '{<fn f>: <builtin len>} {<fn f>} [<anonymous fn at line 1>]\n'),
             ('data Box [x]; b=Box{1}; fn change args; b.x=9; return 0; end; '
@@ -1161,6 +1162,135 @@ class RegressionTests(unittest.TestCase):
                 self.assertNotIn('\0', output)
                 self.assertNotIn('Traceback', output)
                 self.assertTrue(output.splitlines()[2].startswith('\t'))
+
+
+    def test_boolean_output_is_numeric_in_all_display_contexts(self):
+        self.assert_output(
+            'data Box [value]; '
+            'print{true,false,none,1==1,1==2,!0,!1}; '
+            'print{[true,1==1,false,1==2,none],Box{1<2},dict{1==1,"yes"},set{1==1}}; '
+            'print{f"{true}|{false}|{none}|{1==1}|{1==2}|{[1<2]}"}; print{"True False"}',
+            '1 0 0 1 0 1 0\n'
+            "[1, 1, 0, 0, 0] Box{value=1} {1: 'yes'} {1}\n"
+            '1|0|0|1|0|[1]\nTrue False\n',
+        )
+
+    def test_int_converts_numbers_and_checked_decimal_strings(self):
+        self.assert_output(
+            'print{int{"42"},int{" -42 "},int{"+7"},int{3.9},int{-3.9},'
+            'int{true},int{false},int{none},int{1==1},int{"0003"}}; '
+            'convert=int; print{convert{"5"}+1}',
+            '42 -42 7 3 -3 1 0 0 1 3\n6\n',
+        )
+        for code in (
+            'int{}', 'int{1,2}', 'int{[]}', 'int{""}', 'int{"+"}',
+            'int{"3.5"}', 'int{"0x10"}', 'int{"1_000"}', 'int{"１２"}',
+            'int{"' + '1' * 4301 + '"}',
+        ):
+            with self.subTest(code=code[:80]), self.assertRaises(EvaluatorError):
+                compile_program(code).eval_program()
+
+    def test_input_reads_lines_and_reports_eof_without_a_python_traceback(self):
+        with patch('sys.stdin', io.StringIO('Ada\n 42 \n\n')):
+            self.assert_output(
+                'name=input{"Name: "}; score=int{input{"Score: "}}; blank=input{}; '
+                'print{f"{name}:{score}",len{blank}}',
+                'Name: Score: Ada:42 0\n',
+            )
+        for code, supplied, message in (
+            ('input{}', '', 'input reached end of input'),
+            ('input{1}', 'unused\n', 'input prompt must be a string'),
+            ('input{"a","b"}', '', 'zero or one argument'),
+        ):
+            with self.subTest(code=code), patch('sys.stdin', io.StringIO(supplied)):
+                with self.assertRaises(EvaluatorError) as caught:
+                    compile_program(code).eval_program()
+                self.assertIn(message, caught.exception.msg)
+        with patch('builtins.input', side_effect=OSError('unavailable')):
+            with self.assertRaises(EvaluatorError) as caught:
+                compile_program('input{}').eval_program()
+            self.assertIn('could not read standard input', caught.exception.msg)
+
+    def test_eager_functional_builtins_support_bang_callables_and_empty_arrays(self):
+        cases = (
+            ('values=[1,2,3,4]; '
+             'print{map{fn {x} return x*x,values},filter{fn {x} return x>2,values},'
+             'reduce{fn {acc,x} return acc+x,values,0},map{int,["10","20"]}}',
+             '[1, 4, 9, 16] [3, 4] 10 [10, 20]\n'),
+            ('fn fold {a,b} return a*10+b; '
+             'print{reduce{fold,[1,2,3]},reduce{fold,[1,2,3],0},'
+             'reduce{fold,[],0},reduce{fold,[],none},reduce{fold,[9]}}', '123 123 0 0 9\n'),
+            ('fn pair {a,b} return a+b; fn identity {x} return x; '
+             'print{map{pair,[]},filter{pair,[]},reduce{pair,[],[]},'
+             'filter{identity,[0,1,none,2]},map{len,["a","abc"]}}',
+             '[] [] [] [1, 2] [1, 3]\n'),
+            ('data Box [value]; values=map{Box,[1,2]}; print{values}; '
+             'm=map; int=fn {x} return x+1; print{m{int,[1,2]}}',
+             '[Box{value=1}, Box{value=2}]\n[2, 3]\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+
+    def test_functional_builtins_snapshot_traversal_and_preserve_nested_references(self):
+        self.assert_output(
+            'values=[1,2]; visits=[]; '
+            'fn change {x}; visits+=[x]; values[:]=[10,20,30]; return x; end; '
+            'print{map{change,values},values,visits}; '
+            'values=[1,2]; visits=[]; '
+            'fn keep {x}; visits+=[x]; values[:]=[]; return true; end; '
+            'print{filter{keep,values},values,visits}',
+            '[1, 2] [10, 20, 30] [1, 2]\n[1, 2] [] [1, 2]\n',
+        )
+        self.assert_output(
+            'a=[[1],[2]]; fn change {x}; x[0]+=10; return x; end; '
+            'b=map{change,a}; b[0][0]=99; c=filter{fn {x} return true,a}; '
+            'c[1][0]=88; print{a,b,c}; '
+            'initial=[]; result=reduce{fn {a,b} return a,[],initial}; '
+            'result[:]=[9]; print{initial}',
+            '[[99], [88]] [[99], [88]] [[99], [88]]\n[9]\n',
+        )
+        for name, parameters in (
+            ('map', 'fn {item} return change{}'),
+            ('filter', 'fn {item} return change{}'),
+            ('reduce', 'fn {acc,item} return change{}'),
+        ):
+            with self.subTest(name=name):
+                self.assert_output(
+                    'value=1; fn change args; value="done"; return 1; end; '
+                    + name + '{' + parameters + ',[1,2]}; print{value+"!"}',
+                    'done!\n',
+                )
+
+    def test_functional_builtin_errors_stop_callbacks_and_restore_scopes(self):
+        for code in (
+            'map{}', 'map{len}', 'map{len,[],0}', 'filter{1,[]}', 'map{len,"text"}',
+            'reduce{1,[1,2]}', 'reduce{sum,dict{}}', 'reduce{sum,[],0,0}',
+        ):
+            for analyze in (True, False):
+                with self.subTest(code=code, analyze=analyze):
+                    with self.assertRaises(SemanticError if analyze else EvaluatorError):
+                        compile_program(code, analyze=analyze).eval_program()
+        for code in (
+            'reduce{sum,[]}', 'map{fn {a,b} return a,[1]}',
+            'reduce{fn {x} return x,[1,2]}',
+        ):
+            with self.subTest(code=code), self.assertRaises(EvaluatorError):
+                compile_program(code).eval_program()
+        for name, signature in (
+            ('map', '{x}'), ('filter', '{x}'), ('reduce', '{acc,x}'),
+        ):
+            code = (
+                'n=0; fn fail ' + signature + '; n+=1; return 1/x; end; '
+                'fn outer args; for i 1; return ' + name + '{fail,[1,0,2]}; end; end; outer{}'
+            )
+            evaluator = compile_program(code)
+            with self.subTest(name=name), self.assertRaises(EvaluatorError):
+                evaluator.eval_program()
+            self.assertEqual(evaluator.scope_stack[0]['n'], 1 if name == 'reduce' else 2)
+            self.assertEqual(len(evaluator.scope_stack), 1)
+            self.assertEqual(evaluator.func_depth, 0)
+            self.assertEqual(evaluator.loop_depth, 0)
 
 
 if __name__ == "__main__":
