@@ -988,7 +988,7 @@ class ExpressionParser:
 
         self.post_SYA.append(assignment_node)
 
-    def _index_expression(self, line, left_bracket):
+    def _index_expressions(self, line, left_bracket):
         pairs = {
             self.T_LPAREN_ENUM_VAL: self.T_RPAREN_ENUM_VAL,
             self.T_LBRACKET_ENUM_VAL: self.T_RBRACKET_ENUM_VAL,
@@ -996,6 +996,7 @@ class ExpressionParser:
         }
         openings = []
         separators = []
+        commas = []
         for position, token in enumerate(line):
             typ = token.type_enum_id
             if typ in pairs:
@@ -1004,8 +1005,26 @@ class ExpressionParser:
                 openings.pop()
             elif typ == self.T_COLON_ENUM_VAL and not openings:
                 separators.append(position)
+            elif typ == self.T_COMMA_ENUM_VAL and not openings:
+                commas.append(position)
+        if commas:
+            if separators:
+                self._syntax_error(
+                    "comma indexing accepts ordinary indexes only; put slices in separate brackets",
+                    line[separators[0]],
+                )
+            indexes = []
+            start = 0
+            for stop in commas + [len(line)]:
+                if start == stop:
+                    if stop == len(line) and indexes:
+                        break  # A single trailing comma is allowed, as in arrays and calls.
+                    self._syntax_error("expected an index between commas", line[stop])
+                indexes.append(self.shunting_yard_algo(line[start:stop]))
+                start = stop + 1
+            return indexes
         if not separators:
-            return self.shunting_yard_algo(line)
+            return [self.shunting_yard_algo(line)]
         if len(separators) > 2:
             self._syntax_error("a slice allows at most two ':' separators", line[separators[2]])
         starts = [0] + [position + 1 for position in separators]
@@ -1016,9 +1035,11 @@ class ExpressionParser:
         ]
         if len(parts) == 2:
             parts.append(None)
-        return self.EXPRESSION_NODE_CLASS(
-            self.SLICE_NODE_CLASS(parts[0], parts[1], parts[2], left_bracket)
-        )
+        return [
+            self.EXPRESSION_NODE_CLASS(
+                self.SLICE_NODE_CLASS(parts[0], parts[1], parts[2], left_bracket)
+            )
+        ]
 
     def _interpolated_string(self, token):
         parts = []
@@ -1056,13 +1077,13 @@ class ExpressionParser:
                 depth -= 1
                 if depth == 0:
                     expected_expression = line[1:tok_idx]
-                    evaluated_expression = self._index_expression(expected_expression, left_bracket)
+                    indexes = self._index_expressions(expected_expression, left_bracket)
                     if type(base) is not INDEX_NODE_CLASS:
                         return INDEX_NODE_CLASS(
-                            base=base, index=[evaluated_expression], meta_data=left_bracket
+                            base=base, index=indexes, meta_data=left_bracket
                         ), tok_idx
                     else:
-                        base.index.append(evaluated_expression)
+                        base.index.extend(indexes)
                         return base, tok_idx
             elif tok_type_id == T_LBRACKET_ENUM_VAL:
                 depth += 1

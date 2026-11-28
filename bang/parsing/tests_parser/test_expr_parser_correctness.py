@@ -86,9 +86,30 @@ class ParserCorrectnessTests(unittest.TestCase):
             "for [a,b] rows extra; end", "for 1 rows; end",
             "a[1:2:3:4]", "a[1+:]", "a[:,1]", "a[1:2,3]", "1:2", "[:]",
             'f"{1:02}"', 'f"{1!r}"', 'f"{x=1}"', 'f"{1;2}"',
+            'a[,]', 'a[,0]', 'a[0,,1]', 'a[0,,]',
+            'a[0,1+]', 'a[0,1:]', 'a[0,::2]', 'a[:,0,]',
         ):
             with self.subTest(code=code), self.assertRaises(ParserError):
                 parse(code)
+
+    def test_comma_indexing_lowers_to_the_existing_index_chain(self):
+        _, nodes = parse('cube[2,4,6]; cube[2][4][6]; cube[2,4][6]; cube[2][4,6]')
+        for node in nodes:
+            root = node.root_expr
+            self.assertIsInstance(root, IndexNode)
+            self.assertEqual(root.base.value, 'cube')
+            self.assertEqual([part.root_expr.value for part in root.index], [2, 4, 6])
+        _, nodes = parse('make{}[\n first{1,2},\n [0,1][0],\n]; table[f"{key}",0,]')
+        first, second = [node.root_expr for node in nodes]
+        self.assertEqual(len(first.index), 2)
+        self.assertIsInstance(first.index[0].root_expr, CallNode)
+        self.assertIsInstance(first.index[1].root_expr, IndexNode)
+        self.assertEqual((first.index[0].root_expr.meta_data.line,
+                          first.index[0].root_expr.meta_data.column_start), (2, 2))
+        self.assertIsInstance(second.index[0].root_expr, InterpolatedStringNode)
+        self.assertEqual(len(second.index), 2)
+        _, nodes = parse('a[0,]; a[0,1][:]; a[:][0,1]')
+        self.assertEqual([len(node.root_expr.index) for node in nodes], [1, 3, 3])
 
     def test_slice_bounds_and_interpolation_use_expression_nodes(self):
         _, nodes = parse('values[:]; values[none:-1:2]; matrix[1:][0][::-1]')
