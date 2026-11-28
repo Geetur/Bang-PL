@@ -91,9 +91,11 @@ from bang.parsing.parser_nodes import (
     WHILE_NODE_CLASS,
 )
 from bang.runtime.evaluator_nodes import (
+    RUN_TIME_BUILTIN,
     RUN_TIME_DATACLASS,
     RUN_TIME_FUNCTION,
     RUN_TIME_INSTANCE,
+    format_value,
 )
 
 
@@ -311,7 +313,7 @@ class Evaluator:
         # remember args is potentially a list of lists
 
         def _built_in_print(args, meta_data):
-            print(*args)
+            print(*(format_value(value) for value in args))
             return 0
 
         def _built_in_len(args, meta_data):
@@ -602,6 +604,10 @@ class Evaluator:
             "dict": _built_in_dict,
             "range": _built_in_range,
         }
+        self.built_in_functions = {
+            name: RUN_TIME_BUILTIN(name, implementation)
+            for name, implementation in self.built_in_functions.items()
+        }
 
         self.construct_to_eval = {
             self.ASSIGNMENT_NODE_CLASS: self.eval_assignments,
@@ -658,7 +664,7 @@ class Evaluator:
     def eval_function(self, root):
         self.initalize_var(root.name, self._make_function(root))
 
-    def _make_function(self, root):
+    def _make_function(self, root, *, binding_name=None):
         # with this, were limiting the number of frames on the scope stack at function creation
         # but were not limiting the contents of those frames.
         # so, we're saying, if this function was declared on the
@@ -673,6 +679,8 @@ class Evaluator:
             params_name=root.arg_list_name,
             closure=closure,
             parameters=root.parameters,
+            name=root.name or binding_name,
+            line=root.meta_data.line,
         )
 
     def eval_block(self, root):
@@ -831,11 +839,21 @@ class Evaluator:
         )
 
     def eval_assignments(self, root):
+        def evaluate_rhs():
+            expression = root.right_hand.root_expr
+            if (
+                root.op == self.T_ASSIGN_ENUM_VAL
+                and type(root.left_hand) is self.IDENTIFIER_NODE_CLASS
+                and type(expression) is self.FUNCTION_NODE_CLASS
+            ):
+                return self._make_function(expression, binding_name=root.left_hand.value)
+            return self.eval_expression(expression)
+
         self._eval_assignment(
             root.left_hand,
             root.op,
             root,
-            lambda: self.eval_expression(root.right_hand.root_expr),
+            evaluate_rhs,
         )
 
     def _read_index(self, base, key, metadata):
@@ -973,6 +991,7 @@ class Evaluator:
             self.RUN_TIME_FUNCTION,
             self.RUN_TIME_DATACLASS,
             self.RUN_TIME_INSTANCE,
+            RUN_TIME_BUILTIN,
         )
         while tasks:
             task = tasks.pop()
@@ -1096,7 +1115,7 @@ class Evaluator:
             elif tag == "interpolated":
                 position, output = task[2:]
                 try:
-                    output.append(str(values.pop()))
+                    output.append(format_value(values.pop()))
                 except (ValueError, OverflowError, RecursionError) as error:
                     metadata = node.parts[position].root_expr.meta_data
                     raise EvaluatorError(

@@ -842,6 +842,7 @@ class RegressionTests(unittest.TestCase):
                 self.assertEqual(len(evaluator.scope_stack), 1)
                 self.assertEqual(evaluator.loop_depth, 0)
                 self.assertEqual(evaluator.func_depth, 0)
+
         for code in (
             'f=fn {x=missing} return x', 'f=fn {x=y,y=1} return x',
             'f=fn {x=x} return x', 'f=fn {} return missing',
@@ -862,6 +863,126 @@ class RegressionTests(unittest.TestCase):
                 self.assertEqual(len(evaluator.scope_stack), 1)
                 self.assertEqual(evaluator.loop_depth, 0)
                 self.assertEqual(evaluator.func_depth, 0)
+
+    def test_readable_functions_builtins_and_constructors_keep_their_identity(self):
+        cases = (
+            ('fn power {x} return x*x; square=fn {x} return x*x; alias=square; '
+             'print{power,square,alias,alias==square,alias{3}}',
+             '<fn power> <fn square> <fn square> True 9\n'),
+            ('copy=len; len=sum; print{copy,len,copy{"abc"},len{1,2}}',
+             '<builtin len> <builtin sum> 3 3\n'),
+            ('print{print,len,sum,min,max,sort,set,dict,range}',
+             '<builtin print> <builtin len> <builtin sum> <builtin min> <builtin max> '
+             '<builtin sort> <builtin set> <builtin dict> <builtin range>\n'),
+            ('\nprint{fn {x} return x}\nfn factory args; return fn {} return 1; end\n'
+             'produced=factory{}; print{produced}',
+             '<anonymous fn at line 2>\n<anonymous fn at line 3>\n'),
+            ('data Point [x,y]; P=Point; p=P{1,2}; data Point [z]; print{P,Point,p}',
+             '<data Point [x, y]> <data Point [z]> Point{x=1, y=2}\n'),
+            ('fn f {x} return x; a=[f,len]; b=a*2; '
+             'print{b,b[0]==f,b[2]==len,b[2]{"abc"}}',
+             '[<fn f>, <fn f>, <builtin len>, <builtin len>] True True 3\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+
+    def test_readable_values_are_consistent_in_records_containers_and_interpolation(self):
+        cases = (
+            ('data Person [name,score]; p=Person{"Ada",42}; print{p,[p],dict{"p",p},set{p}}; '
+             'print{f"{p}|{[p]}|{len}"}',
+             "Person{name='Ada', score=42} [Person{name='Ada', score=42}] "
+             "{'p': Person{name='Ada', score=42}} {Person{name='Ada', score=42}}\n"
+             "Person{name='Ada', score=42}|[Person{name='Ada', score=42}]|<builtin len>\n"),
+            ('data Empty []; print{Empty,Empty{},[],dict{},set{},"raw",["quoted"],'
+             'true,false,none,1<2}',
+             "<data Empty []> Empty{} [] {} set() raw ['quoted'] 1 0 0 True\n"),
+            ('fn f args return 0; print{dict{f,len},set{f},[fn {} return 0]}',
+             '{<fn f>: <builtin len>} {<fn f>} [<anonymous fn at line 1>]\n'),
+            ('data Box [x]; b=Box{1}; fn change args; b.x=9; return 0; end; '
+             'print{f"{b}|{change{}}|{b}"}', 'Box{x=1}|0|Box{x=9}\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+
+    def test_readable_printing_handles_cycles_shared_data_and_deep_values(self):
+        self.assert_output(
+            'data Node [value,next]; n=Node{1}; n.next=n; print{n}; '
+            'a=[0]; a[0]=a; print{a}; d=dict{}; d["self"]=d; print{d}; '
+            'shared=[1]; print{[shared,shared]}; '
+            'data Holder [items]; h=Holder{[]}; h.items=[h]; print{h}; '
+            'print{f"{n}|{d}"}',
+            'Node{value=1, next=Node{...}}\n[[...]]\n'
+            "{'self': {...}}\n[[1], [1]]\nHolder{items=[Holder{...}]}\n"
+            "Node{value=1, next=Node{...}}|{'self': {...}}\n",
+        )
+        self.assert_output('a=0; for i 1500; a=[a]; end; print{a}',
+                           '[' * 1500 + '0' + ']' * 1500 + '\n')
+
+    def test_comma_indexing_supports_reads_writes_calls_and_existing_slices(self):
+        cases = (
+            ('a=[[[0,1],[2,3]],[[4,5],[6,7]]]; '
+             'print{a[1,0,1],a[1][0][1],a[1,0][1],a[-1,-1,-1]}; '
+             'a[1,0,1]=9; a[0,1,0]+=10; print{a}',
+             '5 5 5 7\n[[[0, 1], [12, 3]], [[4, 9], [6, 7]]]\n'),
+            ('d=dict{"row",[10,20]}; print{d["row",1],["abc"][0,1],[[9]][0,0,]}',
+             '20 b 9\n'),
+            ('data Box [items]; b=Box{[[1,2],[3,4]]}; fn make args return b; '
+             'fn choose {a,b} return a+b; print{make{}.items[choose{0,1},[0,1][0]]}; '
+             'b.items[\n 0,\n 1,\n] *= 3; print{b.items}',
+             '3\n[[1, 6], [3, 4]]\n'),
+            ('a=[[[1,2]],[[3,4]]]; print{a[1,0][::-1],a[:][0,0]}; '
+             'a[1,0][:]=[8]; print{a}', '[4, 3] [1, 2]\n[[[1, 2]], [[8]]]\n'),
+            ('a=[[0]]; [a[0,0],other]=[3,4]; '
+             'for [a[0,0],other] [[5,6]]; print{a,other}; end', '[[5]] 6\n'),
+            ('a=[[len]]; print{a[0,0]{"abc"},f"{a[0,0]}"}', '3 <builtin len>\n'),
+        )
+        for code, expected in cases:
+            with self.subTest(code=code):
+                self.assert_output(code, expected)
+
+    def test_comma_indexing_preserves_interleaved_access_and_assignment_order(self):
+        self.assert_output(
+            'a=[[1,2]]; fn base args; print{"base"}; return a; end; '
+            'fn mark {label,value}; print{label}; return value; end; '
+            'print{base{}[mark{"first",0},mark{"second",1}]}; '
+            'base{}[mark{"first",0},mark{"second",1}]=mark{"rhs",9}; '
+            'base{}[mark{"first",0},mark{"second",1}]+=mark{"rhs",3}; print{a}',
+            'base\nfirst\nsecond\n2\nrhs\nbase\nfirst\nsecond\n'
+            'base\nfirst\nsecond\nrhs\n[[1, 12]]\n',
+        )
+        evaluator = compile_program(
+            'n=0; fn first args; return 9; end; '
+            'fn second args; n+=1; return 0; end; '
+            'fn outer args; return [[1]][first{},second{}]; end; outer{}'
+        )
+        with self.assertRaises(EvaluatorError):
+            evaluator.eval_program()
+        self.assertEqual(evaluator.scope_stack[0]['n'], 0)
+        self.assertEqual(len(evaluator.scope_stack), 1)
+        self.assertEqual(evaluator.func_depth, 0)
+
+    def test_comma_indexing_reports_the_same_access_errors_as_chained_indexing(self):
+        for access in ('[0,9]', '[0,"bad"]', '[0,1.5]', '[0,0,0]'):
+            with self.subTest(access=access):
+                code = 'a=[[1]]; a' + access
+                with self.assertRaises(SemanticError):
+                    compile_program(code)
+                evaluator = compile_program(code, analyze=False)
+                with self.assertRaises(EvaluatorError):
+                    evaluator.eval_program()
+                self.assertEqual(len(evaluator.scope_stack), 1)
+        code = 'a=[[1]]\nprint{\n a[0,:]\n}'
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'program.bang'
+            source.write_text(code, encoding='utf-8')
+            diagnostic = io.StringIO()
+            with contextlib.redirect_stderr(diagnostic):
+                self.assertEqual(run_file(str(source)), 2)
+            self.assertIn('Line 3,', diagnostic.getvalue())
+            self.assertIn('put slices in separate brackets', diagnostic.getvalue())
+            self.assertNotIn('Traceback', diagnostic.getvalue())
 
 
 if __name__ == "__main__":
