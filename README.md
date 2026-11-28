@@ -310,7 +310,7 @@ Output:
 8
 ```
 
-### Indexing, slices, and multiline expressions
+### 7. Indexing, slices, and multiline expressions
 
 Comma indexing descends through nested collections, one level per index. Both forms
 work for reads, assignment, and compound assignment:
@@ -350,7 +350,7 @@ for [name, score] results
 end
 ```
 
-### Strings, interpolation, and readable output
+### 8. Strings, interpolation, and readable output
 
 ```bang
 name = "Ada"
@@ -375,7 +375,7 @@ Functions print as `<fn square>` or `<anonymous fn at line 12>`, builtins as
 `<builtin len>`, and records as `Point{x=1, y=2}`. Containers use the same formatting
 for nested values, with quoted strings and `...` to mark cycles.
 
-### Builtins: input plus named options
+### 9. Builtins: input plus named options
 
 Pass the input first, or name it explicitly. Both forms have the same behavior:
 
