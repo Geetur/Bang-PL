@@ -409,6 +409,20 @@ numeric `1`/`0`; omit an optional callback to disable it.
 | `map` | Iterable plus `transform`; `indexed=true` calls it with `item,index`. |
 | `filter` | Iterable plus `predicate`; `indexed` and `invert`. |
 | `reduce` | Iterable plus `combine`; `initial` and `indexed=true` for `accumulator,item,index`. |
+| `enumerate` | One iterable; `start=0`. Returns an array of `[index,value]` rows. |
+| `zip` | One array of iterables; `strict=true` requires equal lengths. `strict=false` truncates to the shortest. |
+| `any` / `all` | One iterable; optional `predicate`. Short-circuits callback execution. |
+| `items` | One dictionary; returns an array of `[key,value]` pairs in insertion order. |
+| `get` | Dictionary plus `key`; `default=none` applies only to missing keys. |
+| `array` | One iterable, or no input for an empty array. Copies the outer collection. |
+| `str` | One value; returns its readable Bang representation. |
+| `float` | One number or ASCII numeric string; produces a finite floating-point value. |
+| `join` | One iterable of strings; `sep=""`. Values are not implicitly converted. |
+| `assert` | One condition; optional string `message`. A false condition raises a Bang diagnostic. |
+| `counts` | One iterable; optional `key` callback. Returns occurrence counts by hashable key. |
+| `group_by` | One iterable plus a required `key` callback. Groups original items into arrays. |
+| `read` | One UTF-8 file path; `lines=true` returns an array of lines instead of the whole text. |
+| `write` | Text input plus required `path`; `append=false`. Returns the number of UTF-8 bytes written. |
 
 `sum` and `set` require an iterable when an input is supplied. Write
 `sum{[1,2,3]}` and `set{[1,2,3]}`. Scalar and variadic inputs such as `sum{1,2,3}`
@@ -448,6 +462,42 @@ the now single-input `sum` builtin. An empty reduction needs an explicit initial
 value, which is returned unchanged.
 
 ```bang
+names = ["Ada", "Lin"]
+scores = [42, 37]
+for [name, score] zip{[names, scores]}
+    print{f"{name}: {score}"}
+end
+print{enumerate{names, start=1}}
+print{any{scores, predicate=fn {score} return score>40}}
+print{all{scores, predicate=fn {score} return score>=0}}
+print{counts{"abaca"}, group_by{["a", "bb", "c"], key=len}}
+print{join{map{scores, transform=str}, sep=", "}}
+assert{get{dict{"score", 42}, key="score", default=0} == 42}
+```
+
+`enumerate`, `zip`, `items`, and `array` return ordinary eager arrays. Their nested
+values remain shared references. `any` and `all` snapshot the input's outer
+contents, then stop invoking the predicate once the result is known. Empty input
+gives `any{[]} == 0` and `all{[]} == 1`. Callback results for `counts` and
+`group_by` must be hashable; keys keep their first-occurrence order.
+
+Use `read{"input.txt"}` to read whole UTF-8 text, or
+`read{input="input.txt", lines=true}` for lines without their endings.
+`write{"hello\n", path="output.txt"}` creates or overwrites a UTF-8 file;
+`append=true` appends and also creates a missing file. Paths are relative to the
+process working directory unless absolute. Parent directories are not created.
+File errors are Bang diagnostics. `write` returns a byte count, so writing `"é"`
+returns 2. Whole-text reads preserve line endings; line mode recognizes LF, CRLF,
+and CR, retains blank lines, and discards a final line-ending-only empty element.
+An empty file produces an empty line array.
+
+`str` shares the print/interpolation formatter, including numeric boolean/none
+output and cycle handling. `float` accepts decimal and exponent notation, rejects
+underscores/non-ASCII digits/non-finite results, and limits strings to 4,300
+digits. `assert` returns zero when successful. Its message and `get`'s default
+are ordinary eagerly evaluated arguments, even when unused.
+
+```bang
 name = input{prompt="Name: ", strip=true}
 score = int{input{"Score: "}}
 print{f"{name} scored {score} points"}
@@ -468,6 +518,19 @@ A few rules are useful to know up front:
 * Array multiplication by an integer repeats each element; multiplication by a singleton array broadcasts an element-wise operation.
 * Captured assignments persist across function calls. Arrays and records retain their normal reference behavior when passed to functions.
 * Source files use UTF-8. The checker uses the facts it can establish; dynamic values remain subject to runtime checks.
+
+Builtin defaults live outside user scopes. Assigning a builtin name inside a
+function, loop, or branch creates a local user binding when no user binding of
+that name already exists. Ordinary captured user bindings still update normally,
+including a user-defined global that shadows a builtin.
+
+```bang
+fn example args
+    len = 42
+    return len
+end
+print{example{}, len{[1, 2, 3]}} # 42 3; the builtin remains available
+```
 
 ## Function Arguments
 

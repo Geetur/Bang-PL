@@ -332,7 +332,7 @@ class Evaluator:
 
         self.built_in_function_objects = set([obj for obj in self.built_in_functions.values()])
 
-        self.scope_stack[0].update(self.built_in_functions)
+        # Builtins are a read fallback, never a captured user assignment target.
 
         # we need to know the loop depth for the break/continue etc constructs
         # because if we see a break outside of a loop for example we can throw an error
@@ -524,7 +524,7 @@ class Evaluator:
         self.scope_stack[-1][left_hand] = right_hand
 
     def search_for_var(self, name, potential_error):
-        for idx, scope in enumerate(reversed(self.scope_stack)):
+        for scope in reversed(self.scope_stack):
             if name in scope:
                 if scope[name] is _MISSING:
                     raise EvaluatorError(
@@ -534,8 +534,9 @@ class Evaluator:
                         potential_error.column_start,
                         potential_error.column_end,
                     )
-                # converts reversed index to normal index
-                return len(self.scope_stack) - idx - 1
+                return scope
+        if name in self.built_in_functions:
+            return self.built_in_functions
         raise EvaluatorError(
             self.file,
             f"variable not initialized '{name}'",
@@ -599,6 +600,14 @@ class Evaluator:
                         return scope, name, left_hand.meta_data, 0, "binding"
                 if create:
                     return self.scope_stack[-1], name, left_hand.meta_data, 0, "binding"
+                if name in self.built_in_functions:
+                    return (
+                        self.scope_stack[-1],
+                        name,
+                        left_hand.meta_data,
+                        0,
+                        "builtin_binding",
+                    )
                 fail(f"variable not initialized '{name}'")
 
             if type(left_hand) is self.INDEX_NODE_CLASS:
@@ -632,6 +641,8 @@ class Evaluator:
         def read_target(target, key, metadata, level, kind):
             if kind == "index":
                 return self._read_index(target, key, metadata, level)
+            if kind == "builtin_binding":
+                return self.built_in_functions[key]
             return target[key]
 
         def write_target(target, key, metadata, level, kind, *, value):
@@ -723,7 +734,7 @@ class Evaluator:
                 elif typ in self.LITERALS:
                     values.append(self.LITERALS[typ](node.value))
                 elif typ is self.IDENTIFIER_NODE_CLASS:
-                    frame = self.scope_stack[self.search_for_var(node.value, node.meta_data)]
+                    frame = self.search_for_var(node.value, node.meta_data)
                     values.append(frame[node.value])
                 elif typ is self.FUNCTION_NODE_CLASS:
                     values.append(self._make_function(node))

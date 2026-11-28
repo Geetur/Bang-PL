@@ -321,3 +321,153 @@ class BuiltinLibrary:
 
     def do_reduce(self, bound, metadata):
         return self.functional("reduce", bound, metadata)
+
+    def do_enumerate(self, bound, metadata):
+        start = bound.values.get("start", 0)
+        if type(start) not in (int, bool):
+            self.fail("enumerate start must be an integer", metadata)
+        values = self.iterable("enumerate", bound.values["input"], metadata)
+        return [[index, value] for index, value in enumerate(values, start)]
+
+    def do_zip(self, bound, metadata):
+        sources = bound.values["input"]
+        if type(sources) is not list:
+            self.fail("zip expects an array of iterable inputs", metadata)
+        columns = [
+            self.iterable(f"zip input {i + 1}", value, metadata)
+            for i, value in enumerate(list(sources))
+        ]
+        if bound.values.get("strict", 1) and len({len(value) for value in columns}) > 1:
+            self.fail("zip inputs must have equal lengths when strict=true", metadata)
+        return [list(row) for row in zip(*columns, strict=False)]
+
+    def quantify(self, name, bound, metadata):
+        values = self.iterable(name, bound.values["input"], metadata)
+        predicate = bound.values.get("predicate", MISSING)
+        for value in values:
+            result = value if predicate is MISSING else self.call(predicate, [value], metadata)
+            if bool(result) == (name == "any"):
+                return int(name == "any")
+        return int(name == "all")
+
+    def do_any(self, bound, metadata):
+        return self.quantify("any", bound, metadata)
+
+    def do_all(self, bound, metadata):
+        return self.quantify("all", bound, metadata)
+
+    def mapping(self, name, value, metadata):
+        if type(value) is not dict:
+            self.fail(f"{name} expects a dictionary input (got {type_name(value)})", metadata)
+        return value
+
+    def do_items(self, bound, metadata):
+        mapping = self.mapping("items", bound.values["input"], metadata)
+        return [[key, value] for key, value in list(mapping.items())]
+
+    def do_get(self, bound, metadata):
+        mapping = self.mapping("get", bound.values["input"], metadata)
+        key = bound.values["key"]
+        try:
+            return mapping.get(key, bound.values.get("default", 0))
+        except TypeError:
+            self.fail(f"get key must be hashable (got {type_name(key)})", metadata)
+
+    def do_array(self, bound, metadata):
+        return self.iterable("array", bound.values.get("input", []), metadata)
+
+    def do_str(self, bound, metadata):
+        return format_value(bound.values["input"])
+
+    def do_float(self, bound, metadata):
+        value = bound.values["input"]
+        if type(value) not in (str, int, bool, float):
+            self.fail(
+                f"float expects a number or numeric string (got {type_name(value)})",
+                metadata,
+            )
+        if type(value) is str:
+            value = value.strip()
+            if not value or not value.isascii() or "_" in value:
+                self.fail("float expects an ASCII numeric string without underscores", metadata)
+            if sum(char.isdigit() for char in value) > 4300:
+                self.fail("float string exceeds the limit of 4300 digits", metadata)
+        try:
+            return self.evaluator._checked_real_result(float(value))
+        except (ValueError, OverflowError) as error:
+            self.fail(f"float expects a finite numeric value: {error}", metadata)
+
+    def do_join(self, bound, metadata):
+        separator = bound.values.get("sep", "")
+        if type(separator) is not str:
+            self.fail("join option 'sep' must be a string", metadata)
+        values = self.iterable("join", bound.values["input"], metadata)
+        for index, value in enumerate(values):
+            if type(value) is not str:
+                self.fail(
+                    f"join item {index + 1} must be a string (got {type_name(value)})",
+                    metadata,
+                )
+        return separator.join(values)
+
+    def do_assert(self, bound, metadata):
+        message = bound.values.get("message", "assertion failed")
+        if type(message) is not str:
+            self.fail("assert option 'message' must be a string", metadata)
+        if not bound.values["input"]:
+            self.fail(
+                "assertion failed" + (": " + message if "message" in bound.values else ""),
+                metadata,
+            )
+        return 0
+
+    def group(self, name, bound, metadata):
+        values = self.iterable(name, bound.values["input"], metadata)
+        callback = bound.values.get("key", MISSING)
+        result = {}
+        for index, value in enumerate(values):
+            key = value if callback is MISSING else self.call(callback, [value], metadata)
+            try:
+                if name == "counts":
+                    result[key] = result.get(key, 0) + 1
+                else:
+                    result.setdefault(key, []).append(value)
+            except TypeError:
+                self.fail(
+                    f"{name} key for item {index + 1} must be hashable (got {type_name(key)})",
+                    metadata,
+                )
+        return result
+
+    def do_counts(self, bound, metadata):
+        return self.group("counts", bound, metadata)
+
+    def do_group_by(self, bound, metadata):
+        return self.group("group_by", bound, metadata)
+
+    def do_read(self, bound, metadata):
+        path = bound.values["input"]
+        if type(path) is not str:
+            self.fail("read path must be a string", metadata)
+        try:
+            with builtins.open(path, "rb") as stream:
+                text = stream.read().decode("utf-8")
+        except (OSError, ValueError) as error:
+            self.fail(f"read could not read UTF-8 file {path!r}: {error}", metadata)
+        if not bound.values.get("lines", 0):
+            return text
+        lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        if lines[-1] == "":
+            lines.pop()
+        return lines
+
+    def do_write(self, bound, metadata):
+        text, path = bound.values["input"], bound.values["path"]
+        if type(text) is not str or type(path) is not str:
+            self.fail("write input and path must be strings", metadata)
+        try:
+            data = text.encode("utf-8")
+            with builtins.open(path, "ab" if bound.values.get("append", 0) else "wb") as stream:
+                return stream.write(data)
+        except (OSError, ValueError) as error:
+            self.fail(f"write could not write UTF-8 file {path!r}: {error}", metadata)

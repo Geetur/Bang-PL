@@ -77,6 +77,33 @@ SPECS = {
         booleans=("indexed",),
         callbacks=("combine",),
     ),
+    "enumerate": BuiltinSpec(options=("start",)),
+    "zip": BuiltinSpec(options=("strict",), booleans=("strict",)),
+    "any": BuiltinSpec(options=("predicate",), callbacks=("predicate",)),
+    "all": BuiltinSpec(options=("predicate",), callbacks=("predicate",)),
+    "items": BuiltinSpec(),
+    "get": BuiltinSpec(
+        parameters=("input", "key", "default"),
+        required=("input", "key"),
+    ),
+    "array": BuiltinSpec(required=()),
+    "str": BuiltinSpec(),
+    "float": BuiltinSpec(),
+    "join": BuiltinSpec(options=("sep",)),
+    "assert": BuiltinSpec(options=("message",)),
+    "counts": BuiltinSpec(options=("key",), callbacks=("key",)),
+    "group_by": BuiltinSpec(
+        parameters=("input", "key"),
+        required=("input", "key"),
+        callbacks=("key",),
+    ),
+    "read": BuiltinSpec(options=("lines",), booleans=("lines",)),
+    "write": BuiltinSpec(
+        parameters=("input", "path"),
+        required=("input", "path"),
+        options=("append",),
+        booleans=("append",),
+    ),
 }
 
 
