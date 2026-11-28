@@ -11,6 +11,7 @@ import operator
 from copy import deepcopy
 from math import isfinite
 
+from bang.builtin_specs import bind_builtin
 from bang.calling import bind_arguments
 from bang.diagnostics import (
     expression_location,
@@ -100,6 +101,7 @@ from bang.parsing.parser_nodes import (
     UNARY_OP_NODE_CLASS,
     WHILE_NODE_CLASS,
 )
+from bang.runtime.builtins import build_builtins, runtime_kind
 from bang.runtime.evaluator_nodes import (
     RUN_TIME_BUILTIN,
     RUN_TIME_DATACLASS,
@@ -314,381 +316,7 @@ class Evaluator:
         # we will have a bunch of scopes
         self.scope_stack = [{}]
 
-        # remember args is potentially a list of lists
-
-        def _built_in_print(args, meta_data):
-            print(*(format_value(value) for value in args))
-            return 0
-
-        def _built_in_int(args, meta_data):
-            if len(args) != 1:
-                self._error(f"int expects exactly one argument (got {len(args)})", meta_data)
-            value = args[0]
-            if isinstance(value, (int, float)):
-                return int(value)
-            if type(value) is not str:
-                self._error(
-                    f"int expects a number or base-10 integer string (got {type_name(value)})",
-                    meta_data,
-                )
-            text = value.strip()
-            digits = text[1:] if text.startswith(("+", "-")) else text
-            if not digits or not digits.isascii() or not digits.isdecimal():
-                self._error("int expects a base-10 integer string, such as \"42\"", meta_data)
-            if len(digits) > 4300:
-                self._error("int string exceeds the limit of 4300 digits", meta_data)
-            return int(text, 10)
-
-        def _built_in_input(args, meta_data):
-            if len(args) > 1:
-                self._error(f"input expects zero or one argument (got {len(args)})", meta_data)
-            prompt = args[0] if args else ""
-            if type(prompt) is not str:
-                self._error(f"input prompt must be a string (got {type_name(prompt)})", meta_data)
-            try:
-                return input(prompt)
-            except EOFError:
-                self._error("input reached end of input", meta_data)
-            except OSError as error:
-                self._error(f"input could not read standard input: {error}", meta_data)
-
-        def _functional_arguments(name, args, meta_data, minimum=2, maximum=2):
-            if not minimum <= len(args) <= maximum:
-                expected = str(minimum) if minimum == maximum else f"{minimum} or {maximum}"
-                self._error(f"{name} expects {expected} arguments (got {len(args)})", meta_data)
-            callback, values = args[:2]
-            if type(callback) not in (
-                self.RUN_TIME_FUNCTION, RUN_TIME_BUILTIN, self.RUN_TIME_DATACLASS
-            ):
-                self._error(
-                    f"{name} expects a callable first argument (got {type_name(callback)})",
-                    meta_data,
-                )
-            if type(values) is not list:
-                self._error(
-                    f"{name} expects an array second argument (got {type_name(values)})", meta_data
-                )
-            return callback, list(values)
-
-        def _built_in_map(args, meta_data):
-            callback, values = _functional_arguments("map", args, meta_data)
-            return [self._invoke_callable(callback, [value], meta_data) for value in values]
-
-        def _built_in_filter(args, meta_data):
-            callback, values = _functional_arguments("filter", args, meta_data)
-            return [
-                value for value in values if self._invoke_callable(callback, [value], meta_data)
-            ]
-
-        def _built_in_reduce(args, meta_data):
-            callback, values = _functional_arguments("reduce", args, meta_data, maximum=3)
-            if len(args) == 3:
-                accumulator = args[2]
-            elif values:
-                accumulator = values.pop(0)
-            else:
-                self._error("reduce needs an initial value when the array is empty", meta_data)
-            for value in values:
-                accumulator = self._invoke_callable(callback, [accumulator, value], meta_data)
-            return accumulator
-
-        def _built_in_len(args, meta_data):
-            # changet this len args != 1 to accomodate any number of expected arguments
-            if len(args) != 1:
-                raise EvaluatorError(
-                    self.file,
-                    f"len expects exactly one argument (got {len(args)})",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                )
-            if not hasattr(args[0], "__len__"):
-                raise EvaluatorError(
-                    self.file,
-                    f"len expects an array, string, set, or dictionary (got {type_name(args[0])})",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                )
-            return len(args[0])
-
-        def _built_in_sum(args, meta_data):
-            if len(args) == 1:
-                if type(args[0]) is list:
-                    args = args[0]
-                elif type(args[0]) is set:
-                    args = list(args[0])
-                else:
-                    return args[0]
-
-            if not args:
-                return 0
-
-            if all(isinstance(value, (int, float)) for value in args):
-                return sum(args)
-            expected_type = type(args[0])
-            factories = {str: str, list: list, set: set, dict: dict}
-            if expected_type not in factories:
-                raise EvaluatorError(
-                    self.file,
-                    "sum expects numbers, strings, arrays, sets, or dictionaries",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                )
-            base = factories[expected_type]()
-            for value in args:
-                if type(value) is not expected_type:
-                    raise EvaluatorError(
-                        self.file,
-                        "sum expects homogeneous values or numeric values",
-                        meta_data.line,
-                        meta_data.column_start,
-                        meta_data.column_end,
-                    )
-                base = base | value if expected_type in (set, dict) else base + value
-            return base
-
-        def _built_in_min(args, meta_data):
-            if len(args) == 1:
-                if type(args[0]) is list:
-                    args = args[0]
-                elif type(args[0]) is set:
-                    args = list(args[0])
-                else:
-                    return args[0]
-
-            if not args:
-                raise EvaluatorError(
-                    self.file,
-                    "min expects at least one value",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                )
-
-            expected_type = type(args[0])
-            base = args[0]
-            for i in args[1:]:
-                if type(i) is not expected_type and not (
-                    isinstance(base, (int, float)) and isinstance(i, (int, float))
-                ):
-                    raise EvaluatorError(
-                        self.file,
-                        f"min expects comparable values (got {type_name(base)} and {type_name(i)})",
-                        meta_data.line,
-                        meta_data.column_start,
-                        meta_data.column_end,
-                    )
-                try:
-                    base = min(base, i)
-                except TypeError:
-                    raise EvaluatorError(
-                        self.file,
-                        f"cannot compare {type_name(base)} and {type_name(i)}",
-                        meta_data.line,
-                        meta_data.column_start,
-                        meta_data.column_end,
-                    ) from None
-            return base
-
-        def _built_in_max(args, meta_data):
-            if len(args) == 1:
-                if type(args[0]) is list:
-                    args = args[0]
-                elif type(args[0]) is set:
-                    args = list(args[0])
-                else:
-                    return args[0]
-
-            if not args:
-                raise EvaluatorError(
-                    self.file,
-                    "max expects at least one value",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                )
-
-            expected_type = type(args[0])
-            base = args[0]
-            for i in args[1:]:
-                if type(i) is not expected_type and not (
-                    isinstance(base, (int, float)) and isinstance(i, (int, float))
-                ):
-                    raise EvaluatorError(
-                        self.file,
-                        f"max expects comparable values (got {type_name(base)} and {type_name(i)})",
-                        meta_data.line,
-                        meta_data.column_start,
-                        meta_data.column_end,
-                    )
-                try:
-                    base = max(base, i)
-                except TypeError:
-                    raise EvaluatorError(
-                        self.file,
-                        f"cannot compare {type_name(base)} and {type_name(i)}",
-                        meta_data.line,
-                        meta_data.column_start,
-                        meta_data.column_end,
-                    ) from None
-            return base
-
-        def _built_in_sort(args, meta_data):
-            if not args:
-                raise EvaluatorError(
-                    self.file,
-                    "sort expects at least one value",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                )
-            if len(args) == 1:
-                if type(args[0]) is list:
-                    args = args[0]
-                elif type(args[0]) is set:
-                    args = list(args[0])
-                else:
-                    return args[0]
-
-            try:
-                return sorted(args)
-
-            except TypeError:
-                raise EvaluatorError(
-                    self.file,
-                    "sort expects mutually comparable values",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                ) from None
-
-        def _built_in_set(args, meta_data):
-            if len(args) == 1:
-                if type(args[0]) is list:
-                    args = args[0]
-                elif type(args[0]) is set:
-                    args = list(args[0])
-
-            if not args:
-                return set()
-
-            try:
-                return set(args)
-            except TypeError:
-                raise EvaluatorError(
-                    self.file,
-                    "set expects hashable types only",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                ) from None
-
-        def _built_in_dict(args, meta_data):
-            expected_return = {}
-            # if empty initialization
-
-            if len(args) == 1:
-                if type(args[0]) is list:
-                    args = args[0]
-                elif type(args[0]) is set:
-                    args = list(args[0])
-
-            if not args:
-                return {}
-
-            for i in range(0, len(args), 2):
-                if i + 1 >= len(args):
-                    raise EvaluatorError(
-                        self.file,
-                        "every key must be paired with a value",
-                        meta_data.line,
-                        meta_data.column_start,
-                        meta_data.column_end,
-                    )
-                try:
-                    expected_return[args[i]] = args[i + 1]
-                except TypeError:
-                    raise EvaluatorError(
-                        self.file,
-                        f"dict key {i // 2 + 1} must be hashable (got {type_name(args[i])})",
-                        meta_data.line,
-                        meta_data.column_start,
-                        meta_data.column_end,
-                    ) from None
-
-            return expected_return
-
-        def _built_in_range(args, meta_data):
-            if len(args) == 1 and type(args[0]) is list:
-                args = args[0]
-
-            if not args:
-                return []
-
-            if len(args) > 3:
-                raise EvaluatorError(
-                    self.file,
-                    f"range expects at most three arguments (got {len(args)})",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                )
-
-            if len(args) == 1:
-                start = 0
-                end = args[0]
-                jmp = 1
-            elif len(args) == 2:
-                start = args[0]
-                end = args[1]
-                jmp = 1
-            elif len(args) == 3:
-                start = args[0]
-                end = args[1]
-                jmp = args[2]
-
-            if jmp == 0:
-                raise EvaluatorError(
-                    self.file,
-                    "range step (argument 3) cannot be zero",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                )
-            if any(not isinstance(x, (int)) for x in (start, end, jmp)):
-                raise EvaluatorError(
-                    self.file,
-                    "range start, stop, and step must be integers",
-                    meta_data.line,
-                    meta_data.column_start,
-                    meta_data.column_end,
-                )
-
-            return [i for i in range(start, end, jmp)]
-
-        # by name
-        self.built_in_functions = {
-            "print": _built_in_print,
-            "int": _built_in_int,
-            "input": _built_in_input,
-            "map": _built_in_map,
-            "filter": _built_in_filter,
-            "reduce": _built_in_reduce,
-            "len": _built_in_len,
-            "sum": _built_in_sum,
-            "min": _built_in_min,
-            "max": _built_in_max,
-            "sort": _built_in_sort,
-            "set": _built_in_set,
-            "dict": _built_in_dict,
-            "range": _built_in_range,
-        }
-        self.built_in_functions = {
-            name: RUN_TIME_BUILTIN(name, implementation)
-            for name, implementation in self.built_in_functions.items()
-        }
+        self.built_in_functions = build_builtins(self)
 
         self.construct_to_eval = {
             self.ASSIGNMENT_NODE_CLASS: self.eval_assignments,
@@ -1072,6 +700,7 @@ class Evaluator:
             float,
             list,
             set,
+            frozenset,
             dict,
             self.RUN_TIME_FUNCTION,
             self.RUN_TIME_DATACLASS,
@@ -1234,6 +863,16 @@ class Evaluator:
     def _invoke_callable(self, callee, args, metadata, keyword_names=()):
         if type(callee) is self.RUN_TIME_FUNCTION:
             return self.eval_call(callee, args, metadata, keyword_names)
+        if type(callee) is RUN_TIME_BUILTIN and callee in self.built_in_function_objects:
+            try:
+                bound = bind_builtin(callee.name, args, keyword_names, kind_of=runtime_kind)
+            except ValueError as error:
+                self._error(str(error), metadata)
+            try:
+                result = self._checked_real_result(callee(bound, metadata))
+            except (TypeError, ValueError, ArithmeticError, RecursionError) as error:
+                self._error(f"invalid {callee.name} operation: {error}", metadata)
+            return 0 if result is None else result
         if keyword_names:
             raise EvaluatorError(
                 self.file,
@@ -1257,18 +896,6 @@ class Evaluator:
                 for index, name in enumerate(callee.fields)
             }
             return self.RUN_TIME_INSTANCE(of=callee, fields=fields)
-        if callable(callee) and callee in self.built_in_function_objects:
-            try:
-                result = self._checked_real_result(callee(args, metadata))
-            except (TypeError, ValueError, ArithmeticError, RecursionError) as error:
-                raise EvaluatorError(
-                    self.file,
-                    f"invalid builtin operation: {error}",
-                    metadata.line,
-                    metadata.column_start,
-                    metadata.column_end,
-                ) from error
-            return 0 if result is None else result
         raise EvaluatorError(
             self.file,
             f"attempt to call a non-function (got {type_name(callee)})",
@@ -1335,6 +962,27 @@ class Evaluator:
             right = int(right)
         type_left = type(left)
         type_right = type(right)
+
+        if type_left in (set, frozenset) and type_right in (set, frozenset):
+            if op == T_IN_ENUM_VAL and type_left is set:
+                self._error(
+                    "set membership needs a hashable item; use frozen=true for a set member",
+                    root.meta_data,
+                )
+            operations = {
+                T_PLUS_ENUM_VAL: operator.or_,
+                T_MINUS_ENUM_VAL: operator.sub,
+                T_LT_ENUM_VAL: operator.lt,
+                T_LEQ_ENUM_VAL: operator.le,
+                T_GT_ENUM_VAL: operator.gt,
+                T_GTEQ_ENUM_VAL: operator.ge,
+                T_IN_ENUM_VAL: lambda a, b: a in b,
+                T_AND_ENUM_VAL: lambda a, b: a and b,
+                T_OR_ENUM_VAL: lambda a, b: a or b,
+            }
+            if op not in operations:
+                self._error(operator_message(op, left, right), root.meta_data)
+            return operations[op](left, right)
 
         # -------------------------------------------
         # INT OPERATIONS START

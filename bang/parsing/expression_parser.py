@@ -890,7 +890,7 @@ class ExpressionParser:
         for piece in pieces:
             if (
                 len(piece) >= 2
-                and piece[0].type_enum_id == self.T_IDENT_ENUM_VAL
+                and piece[0].type_enum_id in (self.T_IDENT_ENUM_VAL, self.T_END_ENUM_VAL)
                 and piece[1].type_enum_id == self.T_ASSIGN_ENUM_VAL
             ):
                 label = piece[0].value

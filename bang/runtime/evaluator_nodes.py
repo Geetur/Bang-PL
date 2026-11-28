@@ -92,10 +92,12 @@ def format_value(value):
             output.append(f"<builtin {current.name}>")
         elif typ is runtime_dataclass:
             output.append(f"<data {current.name} [{', '.join(current.fields)}]>")
-        elif typ in (list, dict, set, runtime_instance):
+        elif typ in (list, dict, set, frozenset, runtime_instance):
             identity = id(current)
             if typ is list:
                 opening, closing, cycle = "[", "]", "[...]"
+            elif typ is frozenset:
+                opening, closing, cycle = "frozen{", "}", "frozen{...}"
             elif typ is runtime_instance:
                 opening, closing = current.of.name + "{", "}"
                 cycle = opening + "...}"

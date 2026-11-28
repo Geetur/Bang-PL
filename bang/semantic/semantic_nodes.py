@@ -71,6 +71,11 @@ class SetType:
 
 
 @dataclass(slots=True)
+class FrozenSetType:
+    value: Any
+
+
+@dataclass(slots=True)
 class DictType:
     value: Any
 
@@ -99,5 +104,6 @@ INSTANCE_TYPE_CLASS = InstanceType
 NONE_TYPE_CLASS = NoneType
 NUMBER_TYPE_CLASS = NumberType
 SET_TYPE_CLASS = SetType
+FROZEN_SET_TYPE_CLASS = FrozenSetType
 STRING_TYPE_CLASS = StringType
 SLICE_TYPE_CLASS = SliceType

@@ -3,6 +3,7 @@
 
 from copy import deepcopy
 
+from bang.builtin_specs import SPECS
 from bang.calling import bind_arguments
 from bang.diagnostics import (
     expression_location,
@@ -96,6 +97,7 @@ from bang.parsing.parser_nodes import (
     UNARY_OP_NODE_CLASS,
     WHILE_NODE_CLASS,
 )
+from bang.semantic.builtin_analysis import infer_builtin
 from bang.semantic.semantic_nodes import (
     ARRAY_TYPE_CLASS,
     BOOL_TYPE_CLASS,
@@ -103,6 +105,7 @@ from bang.semantic.semantic_nodes import (
     DICT_TYPE_CLASS,
     DYNAMIC_TYPE_CLASS,
     FUNCTION_TYPE_CLASS,
+    FROZEN_SET_TYPE_CLASS,
     INSTANCE_TYPE_CLASS,
     NONE_TYPE_CLASS,
     NUMBER_TYPE_CLASS,
@@ -154,6 +157,7 @@ class SemanticAnalysis:
     NONE_TYPE_CLASS = NONE_TYPE_CLASS
     NUMBER_TYPE_CLASS = NUMBER_TYPE_CLASS
     SET_TYPE_CLASS = SET_TYPE_CLASS
+    FROZEN_SET_TYPE_CLASS = FROZEN_SET_TYPE_CLASS
     SLICE_TYPE_CLASS = SLICE_TYPE_CLASS
     STRING_TYPE_CLASS = STRING_TYPE_CLASS
 
@@ -255,22 +259,7 @@ class SemanticAnalysis:
     T_IN_ENUM_VAL = T_IN_ENUM_VAL  # in
     T_DATA_ENUM_VAL = T_DATA_ENUM_VAL  # data
 
-    BUILT_IN_FUNCTIONS = {
-        "print": FUNCTION_TYPE_CLASS,
-        "int": FUNCTION_TYPE_CLASS,
-        "input": FUNCTION_TYPE_CLASS,
-        "map": FUNCTION_TYPE_CLASS,
-        "filter": FUNCTION_TYPE_CLASS,
-        "reduce": FUNCTION_TYPE_CLASS,
-        "len": FUNCTION_TYPE_CLASS,
-        "sum": FUNCTION_TYPE_CLASS,
-        "min": FUNCTION_TYPE_CLASS,
-        "max": FUNCTION_TYPE_CLASS,
-        "sort": FUNCTION_TYPE_CLASS,
-        "set": SET_TYPE_CLASS,
-        "dict": DICT_TYPE_CLASS,
-        "range": FUNCTION_TYPE_CLASS,
-    }
+    BUILT_IN_FUNCTIONS = {name: FUNCTION_TYPE_CLASS for name in SPECS}
 
     LITERALS = {
         INTEGER_LITERAL_NODE_CLASS: NUMBER_TYPE_CLASS,
@@ -511,6 +500,7 @@ class SemanticAnalysis:
             self.NONE_TYPE_CLASS,
             self.ARRAY_TYPE_CLASS,
             self.SET_TYPE_CLASS,
+            self.FROZEN_SET_TYPE_CLASS,
             self.DICT_TYPE_CLASS,
         )
         bindings = []
@@ -661,11 +651,18 @@ class SemanticAnalysis:
         numeric = (self.NUMBER_TYPE_CLASS, self.BOOL_TYPE_CLASS, self.NONE_TYPE_CLASS)
         if dynamic in (lt, rt) or op in (self.T_AND_ENUM_VAL, self.T_OR_ENUM_VAL):
             return dynamic()
+        set_types = (self.SET_TYPE_CLASS, self.FROZEN_SET_TYPE_CLASS)
+        if (
+            lt in set_types and rt in set_types
+            and op in (self.T_PLUS_ENUM_VAL, self.T_MINUS_ENUM_VAL)
+        ):
+            return lt(None)
         if op == self.T_IN_ENUM_VAL:
             containers = (
                 self.ARRAY_TYPE_CLASS,
                 self.STRING_TYPE_CLASS,
                 self.SET_TYPE_CLASS,
+                self.FROZEN_SET_TYPE_CLASS,
                 self.DICT_TYPE_CLASS,
             )
             if rt not in containers or (rt is self.STRING_TYPE_CLASS and lt is not rt):
@@ -682,6 +679,7 @@ class SemanticAnalysis:
                 self.STRING_TYPE_CLASS,
                 self.ARRAY_TYPE_CLASS,
                 self.SET_TYPE_CLASS,
+                self.FROZEN_SET_TYPE_CLASS,
                 self.DICT_TYPE_CLASS,
             ):
                 return lt(None)
@@ -890,7 +888,9 @@ class SemanticAnalysis:
                 pending.extend(value.fields.values())
                 for name in value.fields:
                     value.fields[name] = self.DYNAMIC_TYPE_CLASS()
-            elif type(value) in (self.SET_TYPE_CLASS, self.DICT_TYPE_CLASS):
+            elif type(value) in (
+                self.SET_TYPE_CLASS, self.FROZEN_SET_TYPE_CLASS, self.DICT_TYPE_CLASS,
+            ):
                 if value.value is not None:
                     pending.extend(value.value)
                 value.value = None
@@ -905,7 +905,7 @@ class SemanticAnalysis:
     def _infer_call_type(self, root, callee, arguments):
         typ = type(callee)
         keywords = root.keyword_names
-        if keywords and typ not in (self.DYNAMIC_TYPE_CLASS, self.FUNCTION_TYPE_CLASS):
+        if keywords and typ not in (self.DYNAMIC_TYPE_CLASS, self.FUNCTION_TYPE_CLASS, BuiltinType):
             self._error("named arguments require a function with declared parameters", root)
         if typ is self.FUNCTION_TYPE_CLASS:
             if callee.parameters is None:
@@ -930,69 +930,7 @@ class SemanticAnalysis:
             }
             return self.INSTANCE_TYPE_CLASS(of=callee, fields=fields)
         if typ is BuiltinType:
-            name = callee.name
-            if name in ("map", "filter", "reduce"):
-                maximum = 3 if name == "reduce" else 2
-                if not 2 <= len(arguments) <= maximum:
-                    expected = "2 or 3" if maximum == 3 else "2"
-                    self._error(
-                        f"{name} expects {expected} arguments (got {len(arguments)})", root
-                    )
-                callback, values = arguments[:2]
-                if type(callback) not in (
-                    self.DYNAMIC_TYPE_CLASS, self.FUNCTION_TYPE_CLASS, BuiltinType,
-                    self.DATA_CLASS_TYPE_CLASS,
-                ):
-                    self._error(
-                        f"{name} expects a callable first argument (got {type_name(callback)})",
-                        root,
-                    )
-                if type(values) not in (self.ARRAY_TYPE_CLASS, self.DYNAMIC_TYPE_CLASS):
-                    self._error(
-                        f"{name} expects an array second argument (got {type_name(values)})", root
-                    )
-                self._invalidate_call_facts()
-                return (
-                    self.DYNAMIC_TYPE_CLASS() if name == "reduce" else self.ARRAY_TYPE_CLASS(None)
-                )
-            if name == "int":
-                return self.NUMBER_TYPE_CLASS(None)
-            if name == "input":
-                return self.STRING_TYPE_CLASS(None)
-            if name not in ("set", "dict"):
-                return self.NUMBER_TYPE_CLASS(None) if name == "len" else self.DYNAMIC_TYPE_CLASS()
-            items = arguments
-            if len(items) == 1:
-                item = items[0]
-                if type(item) is self.DYNAMIC_TYPE_CLASS:
-                    return (self.SET_TYPE_CLASS if name == "set" else self.DICT_TYPE_CLASS)(None)
-                if type(item) in (self.ARRAY_TYPE_CLASS, self.SET_TYPE_CLASS):
-                    items = item.value
-                    if items is None:
-                        result_type = self.SET_TYPE_CLASS if name == "set" else self.DICT_TYPE_CLASS
-                        return result_type(None)
-                    if type(item) is self.SET_TYPE_CLASS:
-                        unique = {}
-                        scalar_types = (
-                            self.NUMBER_TYPE_CLASS,
-                            self.BOOL_TYPE_CLASS,
-                            self.NONE_TYPE_CLASS,
-                            self.STRING_TYPE_CLASS,
-                        )
-                        for element in items:
-                            if type(element) not in scalar_types or element.value is None:
-                                result_type = (
-                                    self.SET_TYPE_CLASS if name == "set" else self.DICT_TYPE_CLASS
-                                )
-                                return result_type(None)
-                            unique.setdefault(element.value, element)
-                        items = list(unique.values())
-            if name == "dict" and len(items) % 2:
-                self._error("dict requires a value for every key", root)
-            checked = items if name == "set" else items[::2]
-            if any(type(item) in self.UNHASHABLE_TYPES for item in checked):
-                self._error(f"{name} requires hashable elements or keys", root)
-            return (self.SET_TYPE_CLASS if name == "set" else self.DICT_TYPE_CLASS)(list(items))
+            return infer_builtin(self, root, callee.name, arguments)
         if typ not in (self.DYNAMIC_TYPE_CLASS, self.FUNCTION_TYPE_CLASS):
             self._error(f"attempt to call a non-function (got {type_name(callee)})", root)
         self._invalidate_call_facts()

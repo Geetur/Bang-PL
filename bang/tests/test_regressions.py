@@ -404,7 +404,7 @@ class RegressionTests(unittest.TestCase):
         expressions = [
             'big*2', '[big]*[2]', '[big]*[2,3]', '[2,3]*[big]',
             '[big]/[tiny]', '[big]/[tiny,tiny]', '[big,big]/[tiny]',
-            '[big]//[tiny]', 'sum{big,big}', 'sum{[big,big]}', 'sum{set{big,big*0.9}}',
+            '[big]//[tiny]', 'sum{[big,big]}', 'sum{[big,big]}', 'sum{set{[big,big*0.9]}}',
             '(-1)**0.5',
         ]
         for expression in expressions:
@@ -413,7 +413,7 @@ class RegressionTests(unittest.TestCase):
                 with self.assertRaises(EvaluatorError):
                     evaluator.eval_program()
         self.assert_output(
-            'big=10.0**308; print{[big]*[1],sum{big,-big},sum{[]},[0]/[2],[]*[big]}',
+            'big=10.0**308; print{[big]*[1],sum{[big,-big]},sum{[]},[0]/[2],[]*[big]}',
             '[1e+308] 0.0 0 [0.0] []\n',
         )
 
@@ -542,7 +542,7 @@ class RegressionTests(unittest.TestCase):
             ('a=["hi",1]; d=dict{"a",a}; [d["a"][1],b]=a; print{b+"!"}', 'hi!\n'),
             ('a=["hi",1]; fn get args; a[1]="hi"; return a; end; '
              '[get{}[0],b]=a; print{b+"!"}', 'hi!\n'),
-            ('print{len{dict{set{1,1,2}}},len{dict{set{true,1,2}}}}', '1 1\n'),
+            ('print{len{dict{set{[1,1,2]}}},len{dict{set{[true,1,2]}}}}', '1 1\n'),
             ('print{sort{[]},sort{set{}}}', '[] []\n'),
             ('data P [x]; p=P{1}; print{min{[p]}==p,max{[p]}==p}', '1 1\n'),
         ]
@@ -884,7 +884,7 @@ class RegressionTests(unittest.TestCase):
             ('fn power {x} return x*x; square=fn {x} return x*x; alias=square; '
              'print{power,square,alias,alias==square,alias{3}}',
              '<fn power> <fn square> <fn square> 1 9\n'),
-            ('copy=len; len=sum; print{copy,len,copy{"abc"},len{1,2}}',
+            ('copy=len; len=sum; print{copy,len,copy{"abc"},len{[1,2]}}',
              '<builtin len> <builtin sum> 3 3\n'),
             ('print{print,len,sum,min,max,sort,set,dict,range}',
              '<builtin print> <builtin len> <builtin sum> <builtin min> <builtin max> '
@@ -904,7 +904,7 @@ class RegressionTests(unittest.TestCase):
 
     def test_readable_values_are_consistent_in_records_containers_and_interpolation(self):
         cases = (
-            ('data Person [name,score]; p=Person{"Ada",42}; print{p,[p],dict{"p",p},set{p}}; '
+            ('data Person [name,score]; p=Person{"Ada",42}; print{p,[p],dict{"p",p},set{[p]}}; '
              'print{f"{p}|{[p]}|{len}"}',
              "Person{name='Ada', score=42} [Person{name='Ada', score=42}] "
              "{'p': Person{name='Ada', score=42}} {Person{name='Ada', score=42}}\n"
@@ -912,7 +912,7 @@ class RegressionTests(unittest.TestCase):
             ('data Empty []; print{Empty,Empty{},[],dict{},set{},"raw",["quoted"],'
              'true,false,none,1<2}',
              "<data Empty []> Empty{} [] {} set() raw ['quoted'] 1 0 0 1\n"),
-            ('fn f args return 0; print{dict{f,len},set{f},[fn {} return 0]}',
+            ('fn f args return 0; print{dict{f,len},set{[f]},[fn {} return 0]}',
              '{<fn f>: <builtin len>} {<fn f>} [<anonymous fn at line 1>]\n'),
             ('data Box [x]; b=Box{1}; fn change args; b.x=9; return 0; end; '
              'print{f"{b}|{change{}}|{b}"}', 'Box{x=1}|0|Box{x=9}\n'),
@@ -1137,13 +1137,13 @@ class RegressionTests(unittest.TestCase):
                     self.assertNotIn('<class', caught.exception.msg)
         for code, message in (
             ('len{1}', 'got number'),
-            ('len{1,2}', 'exactly one argument (got 2)'),
-            ('range{1,2,3,4}', 'at most three arguments (got 4)'),
-            ('range{0,3,0}', 'range step (argument 3) cannot be zero'),
-            ('min{1,"x"}', 'min expects comparable values (got number and string)'),
+            ('len{1,2}', 'expected at most 1, got 2'),
+            ('range{1,2,3,4}', 'expected at most 3, got 4'),
+            ('range{0,3,0}', 'range step cannot be zero'),
+            ('min{1,"x"}', 'min expects comparable key values (got number and string)'),
         ):
             with self.subTest(code=code), self.assertRaises(EvaluatorError) as caught:
-                compile_program(code).eval_program()
+                compile_program(code, analyze=False).eval_program()
             self.assertIn(message, caught.exception.msg)
             self.assertNotIn('<class', caught.exception.msg)
 
@@ -1168,7 +1168,7 @@ class RegressionTests(unittest.TestCase):
         self.assert_output(
             'data Box [value]; '
             'print{true,false,none,1==1,1==2,!0,!1}; '
-            'print{[true,1==1,false,1==2,none],Box{1<2},dict{1==1,"yes"},set{1==1}}; '
+            'print{[true,1==1,false,1==2,none],Box{1<2},dict{1==1,"yes"},set{[1==1]}}; '
             'print{f"{true}|{false}|{none}|{1==1}|{1==2}|{[1<2]}"}; print{"True False"}',
             '1 0 0 1 0 1 0\n'
             "[1, 1, 0, 0, 0] Box{value=1} {1: 'yes'} {1}\n"
@@ -1188,7 +1188,7 @@ class RegressionTests(unittest.TestCase):
             'int{"' + '1' * 4301 + '"}',
         ):
             with self.subTest(code=code[:80]), self.assertRaises(EvaluatorError):
-                compile_program(code).eval_program()
+                compile_program(code, analyze=False).eval_program()
 
     def test_input_reads_lines_and_reports_eof_without_a_python_traceback(self):
         with patch('sys.stdin', io.StringIO('Ada\n 42 \n\n')):
@@ -1200,11 +1200,11 @@ class RegressionTests(unittest.TestCase):
         for code, supplied, message in (
             ('input{}', '', 'input reached end of input'),
             ('input{1}', 'unused\n', 'input prompt must be a string'),
-            ('input{"a","b"}', '', 'zero or one argument'),
+            ('input{"a","b"}', '', 'expected at most 1, got 2'),
         ):
             with self.subTest(code=code), patch('sys.stdin', io.StringIO(supplied)):
                 with self.assertRaises(EvaluatorError) as caught:
-                    compile_program(code).eval_program()
+                    compile_program(code, analyze=False).eval_program()
                 self.assertIn(message, caught.exception.msg)
         with patch('builtins.input', side_effect=OSError('unavailable')):
             with self.assertRaises(EvaluatorError) as caught:
@@ -1264,8 +1264,8 @@ class RegressionTests(unittest.TestCase):
 
     def test_functional_builtin_errors_stop_callbacks_and_restore_scopes(self):
         for code in (
-            'map{}', 'map{len}', 'map{len,[],0}', 'filter{1,[]}', 'map{len,"text"}',
-            'reduce{1,[1,2]}', 'reduce{sum,dict{}}', 'reduce{sum,[],0,0}',
+            'map{}', 'map{len}', 'map{len,[],0}', 'filter{1,[]}', 'map{input=1,transform=len}',
+            'reduce{1,[1,2]}', 'reduce{input=1,combine=sum}', 'reduce{sum,[],0,0}',
         ):
             for analyze in (True, False):
                 with self.subTest(code=code, analyze=analyze):
@@ -1288,6 +1288,183 @@ class RegressionTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(EvaluatorError):
                 evaluator.eval_program()
             self.assertEqual(evaluator.scope_stack[0]['n'], 1 if name == 'reduce' else 2)
+            self.assertEqual(len(evaluator.scope_stack), 1)
+            self.assertEqual(evaluator.func_depth, 0)
+            self.assertEqual(evaluator.loop_depth, 0)
+
+
+    def test_builtin_input_keyword_matches_positional_input_with_options(self):
+        cases = (
+            ('print{[1,2],spread=true,sep="|",end="!"}',
+             'print{input=[1,2],spread=true,sep="|",end="!"}', '1|2!'),
+            ('print{len{[1,2,3],where=fn {x} return x>1}}',
+             'print{len{input=[1,2,3],where=fn {x} return x>1}}', '2\n'),
+            ('print{int{"ff",base=16}}', 'print{int{input="ff",base=16}}', '255\n'),
+            ('print{sum{[1,2,3],initial=10,transform=fn {x} return x*x}}',
+             'print{sum{input=[1,2,3],initial=10,transform=fn {x} return x*x}}', '24\n'),
+            ('print{set{[1,2,2],transform=fn {x} return x+1,frozen=true}}',
+             'print{set{input=[1,2,2],transform=fn {x} return x+1,frozen=true}}',
+             'frozen{2, 3}\n'),
+            ('print{dict{[["a",1],["b",2]],strict=true}}',
+             'print{dict{input=[["a",1],["b",2]],strict=true}}', "{'a': 1, 'b': 2}\n"),
+            ('print{min{[1,2,3],key=fn {x} return -x}}',
+             'print{min{input=[1,2,3],key=fn {x} return -x}}', '3\n'),
+            ('print{max{[],default=0}}', 'print{max{input=[],default=0}}', '0\n'),
+            ('print{sort{["a","bbb","cc"],key=len,reverse=true}}',
+             'print{sort{input=["a","bbb","cc"],key=len,reverse=true}}', "['bbb', 'cc', 'a']\n"),
+            ('print{range{5,start=1,step=2,inclusive=true}}',
+             'print{range{input=5,start=1,step=2,inclusive=true}}', '[1, 3, 5]\n'),
+            ('print{map{[2,3],transform=fn {x,i} return x+i,indexed=true}}',
+             'print{map{input=[2,3],transform=fn {x,i} return x+i,indexed=true}}', '[2, 4]\n'),
+            ('print{filter{[0,1,2],predicate=fn {x} return x,invert=true}}',
+             'print{filter{input=[0,1,2],predicate=fn {x} return x,invert=true}}', '[0]\n'),
+            ('print{reduce{[2,3],combine=fn {a,x,i} return a+x+i,initial=10,indexed=true}}',
+             'print{reduce{input=[2,3],combine=fn {a,x,i} return a+x+i,initial=10,indexed=true}}',
+             '16\n'),
+        )
+        for positional, named, expected in cases:
+            for code in (positional, named):
+                with self.subTest(code=code): self.assert_output(code, expected)
+        for call in ('input{"Prompt: ",strip=true}', 'input{input="Prompt: ",strip=true}',
+                     'input{prompt="Prompt: ",strip=true}'):
+            with self.subTest(call=call), patch('sys.stdin', io.StringIO('  value  \n')):
+                self.assert_output('print{'+call+'}', 'Prompt: value\n')
+
+    def test_builtin_binding_preserves_aliases_source_order_and_caller_variables(self):
+        self.assert_output(
+            'm=map; map=fn {x} return x; input=[1,2]; frozen=9; '
+            'print{m{input=input,transform=fn {x} return x+1},frozen}; '
+            'fn mark {label,value}; print{label}; return value; end; '
+            'print{m{transform=mark{"callback",fn {x} return x*2},'
+            'input=mark{"input",[2,3]}}}; '
+            'set{[8],frozen=true}; print{frozen}',
+            '[2, 3] 9\ncallback\ninput\n[4, 6]\n9\n',
+        )
+        self.assert_output(
+            'fn unique args {input=args[0],frozen=false} '
+            'return set{input=input,frozen=frozen}; '
+            'print{unique{[2,2]},unique{input=[2,2],frozen=true}}',
+            '{2} frozen{2}\n',
+        )
+        evaluator = compile_program(
+            'n=0; fn mark {value}; n+=1; return value; end; '
+            'fn run args return sum{mark{[1]},input=mark{[2]}}; run{}'
+        )
+        with self.assertRaises(EvaluatorError): evaluator.eval_program()
+        self.assertEqual(evaluator.scope_stack[0]['n'], 2)
+        self.assertEqual(len(evaluator.scope_stack), 1)
+
+    def test_functional_builtins_accept_input_first_and_unambiguous_legacy_order(self):
+        self.assert_output(
+            'fn twice {x} return x*2; fn add {a,b} return a+b; '
+            'fn get args return twice; fn values args return [1,2]; '
+            'fn apply {a,b} return map{a,b}; '
+            'print{map{[1,2],twice},map{twice,[1,2]},map{get{},[1,2]},map{twice,values{}},'
+            'apply{[1,2],twice},apply{twice,[1,2]}}; '
+            'print{reduce{[1,2],add,0},reduce{add,[1,2],0},'
+            'map{"ab",transform=fn {x} return x+"!"}}',
+            "[2, 4] [2, 4] [2, 4] [2, 4] [2, 4] [2, 4]\n3 3 ['a!', 'b!']\n",
+        )
+        self.assert_output(
+            'print{filter{[4,5,6],predicate=fn {x,i} return i!=1,indexed=true},'
+            'reduce{input=[],combine=fn {a,b} return a+b,initial=none}}', '[4, 6] 0\n',
+        )
+
+    def test_frozen_sets_are_hashable_printable_and_closed_under_set_operations(self):
+        evaluator = self.assert_output(
+            'a=set{[1,2],frozen=true}; b=set{[2,3]}; c=a+b; d=b+a; '
+            'mapping=dict{a,"found"}; outer=set{[a]}; '
+            'print{a,c,d,a-b,b-a,a==set{[1,2]},a in outer,mapping[a],len{a},sum{a}}; '
+            'total=0; for value a; total+=value; end; print{total}; '
+            'data Box [value]; box=Box{}; cyc=set{[box],frozen=true}; box.value=cyc; print{cyc}',
+            'frozen{1, 2} frozen{1, 2, 3} {1, 2, 3} frozen{1} {3} 1 1 found 2 3\n'
+            '3\nfrozen{Box{value=frozen{...}}}\n',
+        )
+        self.assertIs(type(evaluator.scope_stack[0]['c']), frozenset)
+        self.assertIs(type(evaluator.scope_stack[0]['d']), set)
+        self.assertEqual(len(evaluator.scope_stack[0]['outer']), 1)
+        for code in ('a=set{[1],frozen=true}; a[0]=9',
+                     'a=set{[1],frozen=true}; a.value=9'):
+            with self.subTest(code=code), self.assertRaises(EvaluatorError):
+                compile_program(code, analyze=False).eval_program()
+
+    def test_sort_options_preserve_aliasing_stability_and_single_callback_evaluation(self):
+        self.assert_output(
+            'a=[[2,"a"],[1,"b"],[2,"c"]]; alias=a; n=0; '
+            'fn key {row}; n+=1; return row[0]; end; '
+            'copy=sort{a,key=key}; print{copy,a,n}; '
+            'result=sort{input=a,key=key,reverse=true,in_place=true}; '
+            'result[0][1]="changed"; print{a,alias,n}',
+            "[[1, 'b'], [2, 'a'], [2, 'c']] [[2, 'a'], [1, 'b'], [2, 'c']] 3\n"
+            "[[2, 'changed'], [2, 'c'], [1, 'b']] [[2, 'changed'], [2, 'c'], [1, 'b']] 6\n",
+        )
+        evaluator = compile_program('a=[1,"x"]; fn run args return sort{a,in_place=true}; run{}')
+        with self.assertRaises(EvaluatorError): evaluator.eval_program()
+        self.assertEqual(evaluator.scope_stack[0]['a'], [1, 'x'])
+        self.assert_output(
+            'data Box [value]; box=Box{["a",2]}; sort{box.value,in_place=true,key=fn {x} return 0}; '
+            'print{box.value[0]+"!"}', "a!\n",
+        )
+
+    def test_builtin_extensions_handle_empty_inputs_pair_modes_and_base_conversion(self):
+        self.assert_output(
+            'd=dict{"a",1,"b",2}; print{dict{input=d},dict{[["a",1],["b",2]]},'
+            'dict{["a","b"],values=[1,2]},dict{"a",1,"a",2}}; '
+            'print{int{"0xff",base=0},int{"101",base=2},int{"z",base=36},int{" -10 ",base=16}}; '
+            'print{range{start=5,stop=1,step=-2,inclusive=true},range{[1,5],step=2}}; '
+            'print{sum{[],initial=""},min{[],default=none},set{},set{frozen=true}}',
+            "{'a': 1, 'b': 2} {'a': 1, 'b': 2} {'a': 1, 'b': 2} {'a': 2}\n"
+            '255 5 35 -16\n[5, 3, 1] [1, 3]\n 0 set() frozen{}\n',
+        )
+        self.assert_output(
+            'print{sum{"abc"},sum{["a","b"],initial="!"},'
+            'sum{[[1],[2]],initial=[]},sum{[set{[1]},set{[2]}]}}',
+            'abc !ab [1, 2] {1, 2}\n',
+        )
+
+    def test_builtin_modifiers_reject_unknown_duplicate_and_invalid_options(self):
+        both = (
+            'set{[1],input=[2]}', 'sum{[1],input=[2]}', 'print{1,input=2}',
+            'input{input="a",prompt="b"}', 'range{input=5,stop=6}',
+            'set{[1],frozn=true}', 'sort{[1],reverse=2}', 'set{[1],frozen=1.0}',
+            'print{1,sep=0}', 'print{1,end=none}', 'len{[1],where=0}',
+            'map{[1],transform=0}', 'map{[1],fn {x} return x,transform=fn {x} return x}',
+            'sort{"abc",in_place=true}', 'range{1,5,start=0}',
+            'sum{}', 'sum{1}', 'sum{1,2}', 'set{1}', 'set{1,2}',
+        )
+        for code in both:
+            for analyze in (True, False):
+                with self.subTest(code=code, analyze=analyze):
+                    with self.assertRaises(SemanticError if analyze else EvaluatorError):
+                        compile_program(code, analyze=analyze).eval_program()
+        for code in (
+            'dict{["a"],values=[1,2]}', 'dict{"a",1,"a",2,strict=true}',
+            'int{"10",base=1}', 'int{1,base=16}', 'range{[1,5],start=0}',
+            'print{1,2,spread=true}', 'set{[[]],transform=fn {x} return x,frozen=true}',
+        ):
+            with self.subTest(code=code), self.assertRaises(EvaluatorError):
+                compile_program(code, analyze=False).eval_program()
+
+    def test_builtin_callbacks_invalidate_changed_facts_and_stop_on_failure(self):
+        for operation in (
+            'len{[1],where=change}', 'sum{[1],transform=change}',
+            'set{[1],transform=change}', 'min{[1],key=change}',
+            'max{[1],key=change}', 'sort{[1],key=change}',
+        ):
+            with self.subTest(operation=operation):
+                self.assert_output(
+                    'value=1; fn change {x}; value="done"; return x; end; '
+                    + operation + '; print{value+"!"}', 'done!\n',
+                )
+        for operation in ('len{[1,0,2],where=fail}', 'sum{[1,0,2],transform=fail}',
+                          'set{[1,0,2],transform=fail}', 'sort{[1,0,2],key=fail}'):
+            evaluator = compile_program(
+                'n=0; fn fail {x}; n+=1; return 1/x; end; '
+                'fn run args; for i 1; return '+operation+'; end; end; run{}'
+            )
+            with self.subTest(operation=operation), self.assertRaises(EvaluatorError):
+                evaluator.eval_program()
+            self.assertEqual(evaluator.scope_stack[0]['n'], 2)
             self.assertEqual(len(evaluator.scope_stack), 1)
             self.assertEqual(evaluator.func_depth, 0)
             self.assertEqual(evaluator.loop_depth, 0)
