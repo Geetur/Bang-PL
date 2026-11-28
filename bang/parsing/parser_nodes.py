@@ -70,6 +70,7 @@ class NoneLiteralNode:
 @dataclass(slots=True)
 class ExpressionNode:
     root_expr: Any
+    meta_data: Lexeme | None = None
 
     def __repr__(self):
         return f"root_expr: {self.root_expr}"
@@ -328,6 +329,7 @@ class FieldAccessNode:
     base: Any
     field: list[str]
     meta_data: Lexeme
+    field_meta_data: list[Lexeme] = field(default_factory=list)
 
 
 ARRAY_LITERAL_NODE_CLASS = ArrayLiteralNode

@@ -1,6 +1,7 @@
 # after this pass we are guaranteed to have a list
 # of valid bang tokens
 
+from bang.diagnostics import render_error
 from bang.lexing.lexer_tokens import (
     COMMENT,
     DECIMAL,
@@ -44,13 +45,7 @@ class LexerError(Exception):
         super().__init__(self._format())
 
     def _format(self):
-        pointers = " " * (self.col - 1) + "^"
-        return (
-            f"[LexerError] Line {self.line_num}, Column {self.col}:\n"
-            f"{self.line_text}\n"
-            f"{pointers}\n"
-            f"{self.msg}"
-        )
+        return render_error("LexerError", self.text, self.msg, self.line_num, self.col)
 
     def __str__(self) -> str:
         return self._format()

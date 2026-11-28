@@ -39,6 +39,20 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(evaluator.loop_depth, 0)
         return evaluator
 
+    def assert_diagnostic(self, code, expected_type, message, selector, *, analyze=True):
+        with self.assertRaises(expected_type) as caught:
+            evaluator = compile_program(code, analyze=analyze)
+            evaluator.eval_program()
+        error = caught.exception
+        row = len(code.splitlines())
+        line = code.splitlines()[-1]
+        start = line.rindex(selector) + 1
+        self.assertEqual((error.row, error.start, error.end),
+                         (row, start, start + len(selector)))
+        self.assertIn(message, error.msg)
+        self.assertNotIn('\0', str(error))
+        return error
+
     def test_false_elif_is_skipped(self):
         self.assert_output('if false; print{1}; elif false; print{2}; end', "")
 
@@ -983,6 +997,170 @@ class RegressionTests(unittest.TestCase):
             self.assertIn('Line 3,', diagnostic.getvalue())
             self.assertIn('put slices in separate brackets', diagnostic.getvalue())
             self.assertNotIn('Traceback', diagnostic.getvalue())
+
+
+    def test_index_diagnostics_identify_the_failed_level_in_reads_and_assignments(self):
+        for access, selector, message in (
+            ('g[1][9]', '9', 'index 9 out of bounds at level 2 (length 1)'),
+            ('g[1,9]', '9', 'index 9 out of bounds at level 2 (length 1)'),
+            ('g[1,][9]', '9', 'index 9 out of bounds at level 2 (length 1)'),
+            ('g[1,-2]', '-2', 'index -2 out of bounds at level 2 (length 1)'),
+            ('g[1,(4 + 5)]', '(4 + 5)', 'index 9 out of bounds at level 2 (length 1)'),
+            ('g[1][0][2]', '2', 'cannot index number at level 3'),
+            ('g[1,"bad"]', '"bad"', 'index at level 2 must be an integer'),
+            ('g[1,1.5]', '1.5', 'index at level 2 must be an integer'),
+        ):
+            for suffix in ('', '=50', '+=50'):
+                for analyze in (True, False):
+                    code = 'g=[[1,2,3],[4]]\n' + access + suffix
+                    # Unary/binary arithmetic is deliberately not constant-folded.
+                    known = selector not in ('-2', '(4 + 5)')
+                    expected = SemanticError if analyze and known else EvaluatorError
+                    with self.subTest(code=code, analyze=analyze):
+                        self.assert_diagnostic(code, expected, message, selector, analyze=analyze)
+
+    def test_index_diagnostics_cover_strings_dictionaries_and_original_source_spans(self):
+        cases = (
+            ('g=["abc"]\ng[0,9]', '9', 'index 9 out of bounds at level 2 (length 3)'),
+            ('g=dict{"row",dict{}}\ng["row","missing"]', '"missing"',
+             "key 'missing' not found at level 2"),
+            ('g=dict{}\ng[[]]', '[]', 'dictionary key at level 1 must be hashable'),
+            ('g=dict{}\ng[[]]=1', '[]', 'dictionary key at level 1 must be hashable'),
+            ('g=["abc"]\ng[0,1]="x"', '1', 'strings are immutable'),
+            ('g=[[1]]\nprint{f"value={g[0,9]}"}', '9',
+             'index 9 out of bounds at level 2 (length 1)'),
+            ('g=[[1]]\ng[\n 0,\n (4 + 5)]', '(4 + 5)',
+             'index 9 out of bounds at level 2 (length 1)'),
+            ('g=[[1]]\ng[0,10**5000]', '10**5000', 'index <large integer> out of bounds'),
+        )
+        for code, selector, message in cases:
+            with self.subTest(code=code):
+                self.assert_diagnostic(
+                    code, EvaluatorError, message, selector, analyze=False
+                )
+        self.assert_output('d=dict{}; d["new"]=7; print{d["new"]}', '7\n')
+
+    def test_index_diagnostics_preserve_effects_and_use_the_current_failure_length(self):
+        prefix = (
+            'n=0; g=[[1]]; '
+            'fn row args; n+=1; return 0; end; '
+            'fn col args; n+=10; return 9; end; '
+            'fn rhs args; n+=100; return 3; end\n'
+        )
+        for access in ('g[row{},col{}]', 'g[row{}][col{}]'):
+            for suffix, expected in (('', 11), ('=rhs{}', 111), ('+=rhs{}', 11)):
+                code = prefix + access + suffix
+                evaluator = compile_program(code)
+                with self.subTest(code=code), self.assertRaises(EvaluatorError) as caught:
+                    evaluator.eval_program()
+                self.assertEqual(evaluator.scope_stack[0]['n'], expected)
+                self.assertIn('index 9 out of bounds at level 2 (length 1)', caught.exception.msg)
+                self.assertEqual(caught.exception.start, code.splitlines()[-1].index('col{}') + 1)
+                self.assertEqual(len(evaluator.scope_stack), 1)
+                self.assertEqual(evaluator.func_depth, 0)
+        self.assert_diagnostic(
+            'g=[[1,2]]; fn rhs args; g[0][:]=[]; return 1; end\ng[0,1]+=rhs{}',
+            EvaluatorError, 'index 1 out of bounds at level 2 (length 0)', '1',
+        )
+        evaluator = compile_program(
+            'n=0; fn later args; n+=1; return 0; end; '
+            'fn first args return 9; g=[[1]]; g[first{},later{}]'
+        )
+        with self.assertRaises(EvaluatorError):
+            evaluator.eval_program()
+        self.assertEqual(evaluator.scope_stack[0]['n'], 0)
+        self.assert_diagnostic('g=[[1]]\ng[0,1/0]', EvaluatorError, 'division by zero', '/',
+                               analyze=False)
+
+    def test_slice_diagnostics_locate_each_bound_and_explain_replacement_lengths(self):
+        for selector, offending, message in (
+            ('"bad":', '"bad"', 'slice start must be an integer'),
+            (':"bad"', '"bad"', 'slice stop must be an integer'),
+            ('::"bad"', '"bad"', 'slice step must be an integer'),
+            ('::(2-2)', '(2-2)', 'slice step cannot be zero'),
+        ):
+            for analyze in (True, False):
+                with self.subTest(selector=selector, analyze=analyze):
+                    self.assert_diagnostic(
+                        'a=[1,2,3]\na[' + selector + ']',
+                        SemanticError if analyze and offending != '(2-2)' else EvaluatorError,
+                        message, offending, analyze=analyze,
+                    )
+        for analyze in (True, False):
+            self.assert_diagnostic(
+                'a=[[1,2,3,4]]\na[0][::2]=[8]',
+                SemanticError if analyze else EvaluatorError,
+                'extended slice assignment length mismatch at level 2 (expected 2 values, got 1)',
+                '::2', analyze=analyze,
+            )
+        evaluator = compile_program(
+            'n=0; fn mark {v}; n+=v; return v; end; a=[1]; a["bad":mark{1}:mark{2}]',
+            analyze=False,
+        )
+        with self.assertRaises(EvaluatorError):
+            evaluator.eval_program()
+        self.assertEqual(evaluator.scope_stack[0]['n'], 3)
+
+    def test_field_diagnostics_locate_the_failed_member_and_list_available_fields(self):
+        prefix = 'data Box [child,value]; b=Box{Box{0,1},2}\n'
+        for access, selector, message in (
+            ('b.child.missing', 'missing', "has no field 'missing'; available fields: child, value"),
+            ('b.value.missing', 'missing', "cannot access field 'missing' on number"),
+        ):
+            for suffix in ('', '=5', '+=5'):
+                for analyze in (True, False):
+                    with self.subTest(access=access, suffix=suffix, analyze=analyze):
+                        self.assert_diagnostic(
+                            prefix + access + suffix,
+                            SemanticError if analyze else EvaluatorError,
+                            message, selector, analyze=analyze,
+                        )
+        self.assert_diagnostic('d=dict{"key",1}\nd.key', SemanticError,
+                               'use indexing for dictionary keys', 'key')
+
+    def test_call_and_operator_diagnostics_explain_argument_interfaces_and_bang_types(self):
+        for code, message in (
+            ('f=fn power {x} return x; f{5}',
+             "'x' is a named option: use x=...; positional arguments are collected in 'power'"),
+            ('fn f {x} return x; f{1,2}', 'expected at most 1, got 2'),
+            ('fn f {frozen=false} return frozen; f{frezen=true}', 'declared parameters: frozen'),
+            ('x=1; x{}', 'attempt to call a non-function (got number)'),
+            ('[1]+"x"', "operator '+' does not support array and string"),
+            ('-"x"', "unary '-' requires a number (got string)"),
+        ):
+            for analyze in (True, False):
+                with self.subTest(code=code, analyze=analyze):
+                    with self.assertRaises(SemanticError if analyze else EvaluatorError) as caught:
+                        compile_program(code, analyze=analyze).eval_program()
+                    self.assertIn(message, caught.exception.msg)
+                    self.assertNotIn('<class', caught.exception.msg)
+        for code, message in (
+            ('len{1}', 'got number'),
+            ('len{1,2}', 'exactly one argument (got 2)'),
+            ('range{1,2,3,4}', 'at most three arguments (got 4)'),
+            ('range{0,3,0}', 'range step (argument 3) cannot be zero'),
+            ('min{1,"x"}', 'min expects comparable values (got number and string)'),
+        ):
+            with self.subTest(code=code), self.assertRaises(EvaluatorError) as caught:
+                compile_program(code).eval_program()
+            self.assertIn(message, caught.exception.msg)
+            self.assertNotIn('<class', caught.exception.msg)
+
+    def test_cli_diagnostics_remove_the_sentinel_and_align_carets_after_tabs(self):
+        for code, status in (
+            ('\t@', 1), ('\t1 +', 2), ('\tmissing', 3),
+            ('\tfn fail args return 1/0; fail{}', 4),
+        ):
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as directory:
+                source = Path(directory) / 'program.bang'
+                source.write_text(code, encoding='utf-8')
+                diagnostic = io.StringIO()
+                with contextlib.redirect_stderr(diagnostic):
+                    self.assertEqual(run_file(str(source)), status)
+                output = diagnostic.getvalue()
+                self.assertNotIn('\0', output)
+                self.assertNotIn('Traceback', output)
+                self.assertTrue(output.splitlines()[2].startswith('\t'))
 
 
 if __name__ == "__main__":

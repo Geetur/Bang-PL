@@ -4,6 +4,7 @@
 
 from math import isfinite
 
+from bang.diagnostics import render_error, source_span
 from bang.lexing.lexer import Lexer
 from bang.lexing.lexer_tokens import (
     T_AND_ENUM_VAL,
@@ -102,21 +103,15 @@ class ParserError(Exception):
         super().__init__(self._format())
 
     def _get_real_error_line(self):
-        lines = self.text.splitlines()
+        lines = self.text.removesuffix("\0").splitlines()
         # Row is 1-based in tokens, so -1 for index
         if 0 <= self.row - 1 < len(lines):
             return lines[self.row - 1]
         return ""
 
     def _format(self):
-        error_line = self._get_real_error_line()
-        crt_length = max(1, self.end - self.start)
-        pointers = " " * (self.start - 1) + "^" * crt_length
-        return (
-            f"[ParserError] Line {self.row}, Column {self.start}-{self.end}:\n"
-            f"{error_line.rstrip()}\n"
-            f"{pointers}\n"
-            f"{self.msg}"
+        return render_error(
+            "ParserError", self.text, self.msg, self.row, self.start, self.end
         )
 
     def __str__(self) -> str:
@@ -988,6 +983,11 @@ class ExpressionParser:
 
         self.post_SYA.append(assignment_node)
 
+    def _located_expression(self, line):
+        expression = self.shunting_yard_algo(line)
+        expression.meta_data = source_span(line)
+        return expression
+
     def _index_expressions(self, line, left_bracket):
         pairs = {
             self.T_LPAREN_ENUM_VAL: self.T_RPAREN_ENUM_VAL,
@@ -1020,24 +1020,25 @@ class ExpressionParser:
                     if stop == len(line) and indexes:
                         break  # A single trailing comma is allowed, as in arrays and calls.
                     self._syntax_error("expected an index between commas", line[stop])
-                indexes.append(self.shunting_yard_algo(line[start:stop]))
+                indexes.append(self._located_expression(line[start:stop]))
                 start = stop + 1
             return indexes
         if not separators:
-            return [self.shunting_yard_algo(line)]
+            return [self._located_expression(line)]
         if len(separators) > 2:
             self._syntax_error("a slice allows at most two ':' separators", line[separators[2]])
         starts = [0] + [position + 1 for position in separators]
         stops = separators + [len(line)]
         parts = [
-            self.shunting_yard_algo(line[start:stop]) if start < stop else None
+            self._located_expression(line[start:stop]) if start < stop else None
             for start, stop in zip(starts, stops, strict=True)
         ]
         if len(parts) == 2:
             parts.append(None)
         return [
             self.EXPRESSION_NODE_CLASS(
-                self.SLICE_NODE_CLASS(parts[0], parts[1], parts[2], left_bracket)
+                self.SLICE_NODE_CLASS(parts[0], parts[1], parts[2], left_bracket),
+                source_span(line),
             )
         ]
 
@@ -1253,11 +1254,13 @@ class ExpressionParser:
                     )
                 if type(left) is self.FIELD_ACCESS_NODE_CLASS:
                     left.field.append(right.value)
+                    left.field_meta_data.append(right.meta_data)
                     output.append(left)
                 else:
                     output.append(
                         self.FIELD_ACCESS_NODE_CLASS(
-                            base=left, field=[right.value], meta_data=op_tok
+                            base=left, field=[right.value], meta_data=op_tok,
+                            field_meta_data=[right.meta_data],
                         )
                     )
             else:

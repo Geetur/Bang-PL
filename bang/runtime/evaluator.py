@@ -12,6 +12,16 @@ from copy import deepcopy
 from math import isfinite
 
 from bang.calling import bind_arguments
+from bang.diagnostics import (
+    expression_location,
+    field_error_message,
+    field_location,
+    index_error_message,
+    index_location,
+    operator_message,
+    render_error,
+    type_name,
+)
 from bang.lexing.lexer_tokens import (
     T_AND_ENUM_VAL,
     T_ASSIGN_ENUM_VAL,
@@ -120,14 +130,8 @@ class EvaluatorError(Exception):
         return ""
 
     def _format(self):
-        error_line = self._get_real_error_line()
-        crt_length = self.end - self.start if self.end - self.start != 0 else 1
-        pointers = " " * (self.start - 1) + "^" * crt_length
-        return (
-            f"[EvaluatorError] Line {self.row}, Column {self.start}-{self.end}:\n"
-            f"{error_line.rstrip()}\n"
-            f"{pointers}\n"
-            f"{self.msg}"
+        return render_error(
+            "EvaluatorError", self.text, self.msg, self.row, self.start, self.end
         )
 
     def __str__(self) -> str:
@@ -321,7 +325,7 @@ class Evaluator:
             if len(args) != 1:
                 raise EvaluatorError(
                     self.file,
-                    "len expects exactly one arg",
+                    f"len expects exactly one argument (got {len(args)})",
                     meta_data.line,
                     meta_data.column_start,
                     meta_data.column_end,
@@ -329,7 +333,7 @@ class Evaluator:
             if not hasattr(args[0], "__len__"):
                 raise EvaluatorError(
                     self.file,
-                    f"len expects iterable not {type(args[0])}",
+                    f"len expects an array, string, set, or dictionary (got {type_name(args[0])})",
                     meta_data.line,
                     meta_data.column_start,
                     meta_data.column_end,
@@ -385,7 +389,7 @@ class Evaluator:
             if not args:
                 raise EvaluatorError(
                     self.file,
-                    "min function expects atleast one arg",
+                    "min expects at least one value",
                     meta_data.line,
                     meta_data.column_start,
                     meta_data.column_end,
@@ -399,7 +403,7 @@ class Evaluator:
                 ):
                     raise EvaluatorError(
                         self.file,
-                        "min function expects argument list of homegenous type",
+                        f"min expects comparable values (got {type_name(base)} and {type_name(i)})",
                         meta_data.line,
                         meta_data.column_start,
                         meta_data.column_end,
@@ -409,7 +413,7 @@ class Evaluator:
                 except TypeError:
                     raise EvaluatorError(
                         self.file,
-                        f"comparison not supported between type {type(base)} and {type(i)}",
+                        f"cannot compare {type_name(base)} and {type_name(i)}",
                         meta_data.line,
                         meta_data.column_start,
                         meta_data.column_end,
@@ -428,7 +432,7 @@ class Evaluator:
             if not args:
                 raise EvaluatorError(
                     self.file,
-                    "max function expects atleast one arg",
+                    "max expects at least one value",
                     meta_data.line,
                     meta_data.column_start,
                     meta_data.column_end,
@@ -442,7 +446,7 @@ class Evaluator:
                 ):
                     raise EvaluatorError(
                         self.file,
-                        "max function expects argument list of homegenous type",
+                        f"max expects comparable values (got {type_name(base)} and {type_name(i)})",
                         meta_data.line,
                         meta_data.column_start,
                         meta_data.column_end,
@@ -452,7 +456,7 @@ class Evaluator:
                 except TypeError:
                     raise EvaluatorError(
                         self.file,
-                        f"comparison not supported between type {type(base)} and {type(i)}",
+                        f"cannot compare {type_name(base)} and {type_name(i)}",
                         meta_data.line,
                         meta_data.column_start,
                         meta_data.column_end,
@@ -463,7 +467,7 @@ class Evaluator:
             if not args:
                 raise EvaluatorError(
                     self.file,
-                    "sort function expects atleast one arg",
+                    "sort expects at least one value",
                     meta_data.line,
                     meta_data.column_start,
                     meta_data.column_end,
@@ -482,7 +486,7 @@ class Evaluator:
             except TypeError:
                 raise EvaluatorError(
                     self.file,
-                    "sort function expects argument list of homogenous, sortable type",
+                    "sort expects mutually comparable values",
                     meta_data.line,
                     meta_data.column_start,
                     meta_data.column_end,
@@ -536,7 +540,7 @@ class Evaluator:
                 except TypeError:
                     raise EvaluatorError(
                         self.file,
-                        "dict initalization expects key to be hashable",
+                        f"dict key {i // 2 + 1} must be hashable (got {type_name(args[i])})",
                         meta_data.line,
                         meta_data.column_start,
                         meta_data.column_end,
@@ -554,7 +558,7 @@ class Evaluator:
             if len(args) > 3:
                 raise EvaluatorError(
                     self.file,
-                    "range function expects three args only",
+                    f"range expects at most three arguments (got {len(args)})",
                     meta_data.line,
                     meta_data.column_start,
                     meta_data.column_end,
@@ -576,7 +580,7 @@ class Evaluator:
             if jmp == 0:
                 raise EvaluatorError(
                     self.file,
-                    "jump arg (arg 3) can't be zero due to infinite evaluation",
+                    "range step (argument 3) cannot be zero",
                     meta_data.line,
                     meta_data.column_start,
                     meta_data.column_end,
@@ -584,7 +588,7 @@ class Evaluator:
             if any(not isinstance(x, (int)) for x in (start, end, jmp)):
                 raise EvaluatorError(
                     self.file,
-                    "start, jump, and end arguments must be int type",
+                    "range start, stop, and step must be integers",
                     meta_data.line,
                     meta_data.column_start,
                     meta_data.column_end,
@@ -832,7 +836,7 @@ class Evaluator:
                 return len(self.scope_stack) - idx - 1
         raise EvaluatorError(
             self.file,
-            f"Variable {name} not found in current scope",
+            f"variable not initialized '{name}'",
             potential_error.line,
             potential_error.column_start,
             potential_error.column_end,
@@ -856,38 +860,33 @@ class Evaluator:
             evaluate_rhs,
         )
 
-    def _read_index(self, base, key, metadata):
+    def _error(self, message, metadata):
+        raise EvaluatorError(
+            self.file, message, metadata.line, metadata.column_start, metadata.column_end
+        )
+
+    def _read_index(self, base, key, metadata, level=1):
         if isinstance(key, slice) and type(base) not in (list, str):
-            raise EvaluatorError(
-                self.file,
-                "slicing requires an array or string",
-                metadata.line,
-                metadata.column_start,
-                metadata.column_end,
+            self._error(
+                f"slicing requires an array or string at level {level} (got {type_name(base)})",
+                metadata,
             )
         try:
             return base[key]
         except (IndexError, KeyError, TypeError, ValueError) as error:
-            raise EvaluatorError(
-                self.file,
-                "invalid index or index out of bounds",
-                metadata.line,
-                metadata.column_start,
-                metadata.column_end,
-            ) from error
+            self._error(index_error_message(error, base, key, level), metadata)
+
+    def _read_field(self, base, name, metadata):
+        if type(base) is not self.RUN_TIME_INSTANCE or name not in base.fields:
+            self._error(field_error_message(base, name), metadata)
+        return base.fields[name]
 
     def _eval_assignment(self, left_hand, op, location, evaluate_rhs):
         """Share assignment binding with loops while preserving RHS evaluation order."""
         compound = op != self.T_ASSIGN_ENUM_VAL
 
-        def fail(message):
-            raise EvaluatorError(
-                self.file,
-                message,
-                location.meta_data.line,
-                location.meta_data.column_start,
-                location.meta_data.column_end,
-            )
+        def fail(message, metadata=None):
+            self._error(message, metadata or location.meta_data)
 
         def resolve_target(left_hand, *, create=False):
             """Resolve a writable container/key pair, evaluating its parts once."""
@@ -895,52 +894,61 @@ class Evaluator:
                 name = left_hand.value
                 for scope in reversed(self.scope_stack):
                     if name in scope:
-                        return scope, name
+                        return scope, name, left_hand.meta_data, 0, "binding"
                 if create:
-                    return self.scope_stack[-1], name
-                fail(f"Variable {name} not found in current scope")
+                    return self.scope_stack[-1], name, left_hand.meta_data, 0, "binding"
+                fail(f"variable not initialized '{name}'")
 
             if type(left_hand) is self.INDEX_NODE_CLASS:
                 target = self.eval_expression(left_hand.base)
-                try:
-                    for index in left_hand.index[:-1]:
-                        target = self._read_index(
-                            target, self.eval_expression(index.root_expr), left_hand.meta_data
-                        )
-                    return target, self.eval_expression(left_hand.index[-1].root_expr)
-                except (IndexError, TypeError, KeyError):
-                    fail("Index out of bounds")
+                for position, index in enumerate(left_hand.index[:-1]):
+                    target = self._read_index(
+                        target, self.eval_expression(index.root_expr),
+                        index_location(left_hand, position), position + 1,
+                    )
+                key = self.eval_expression(left_hand.index[-1].root_expr)
+                return (
+                    target, key, index_location(left_hand, len(left_hand.index) - 1),
+                    len(left_hand.index), "index",
+                )
 
             if type(left_hand) is self.FIELD_ACCESS_NODE_CLASS:
                 target = self.eval_expression(left_hand.base)
                 for index, name in enumerate(left_hand.field):
-                    if type(target) is not self.RUN_TIME_INSTANCE:
-                        fail("field access is only performable on instances of classes")
-                    if name not in target.fields:
-                        fail("field name was not included in the dataclass definition")
+                    metadata = field_location(left_hand, index)
+                    value = self._read_field(target, name, metadata)
                     if index == len(left_hand.field) - 1:
-                        return target.fields, name
-                    target = target.fields[name]
+                        return target.fields, name, metadata, 0, "field"
+                    target = value
             fail("invalid assignment target")
 
-        def read_target(target, key):
-            if isinstance(key, slice) and type(target) not in (list, str):
-                fail("slicing requires an array or string")
-            try:
-                return target[key]
-            except (IndexError, TypeError, KeyError, ValueError):
-                fail("Index out of bounds")
+        def read_target(target, key, metadata, level, kind):
+            if kind == "index":
+                return self._read_index(target, key, metadata, level)
+            return target[key]
 
-        def write_target(target, key, value):
+        def write_target(target, key, metadata, level, kind, *, value):
             if isinstance(key, slice):
+                if type(target) is str:
+                    fail(
+                        f"cannot assign to string slice at level {level}; strings are immutable",
+                        metadata,
+                    )
                 if type(target) is not list or type(value) is not list:
-                    fail("slice assignment requires an array target and array value")
+                    fail(
+                        "slice assignment requires an array target and array value "
+                        f"at level {level} (got {type_name(target)} and {type_name(value)})",
+                        metadata,
+                    )
             try:
                 target[key] = value
-            except ValueError:
-                fail("extended slice assignment length mismatch")
-            except (IndexError, TypeError, KeyError):
-                fail("invalid assignment target or index")
+            except (IndexError, TypeError, KeyError, ValueError) as error:
+                if kind == "index":
+                    fail(
+                        index_error_message(error, target, key, level, writing=True, value=value),
+                        metadata,
+                    )
+                fail("invalid assignment target or index", metadata)
 
         def combine(current, value):
             operation = self.BIN_OP_NODE_CLASS(
@@ -961,16 +969,16 @@ class Evaluator:
                     assign(element.root_expr, item)
                 return
 
-            target, key = resolve_target(left_hand, create=not compound)
+            target = resolve_target(left_hand, create=not compound)
             if compound:
-                value = combine(read_target(target, key), value)
-            write_target(target, key, value)
+                value = combine(read_target(*target), value)
+            write_target(*target, value=value)
 
         if compound and type(left_hand) is not self.ARRAY_LITERAL_NODE_CLASS:
-            target, key = resolve_target(left_hand)
-            current = read_target(target, key)
+            target = resolve_target(left_hand)
+            current = read_target(*target)
             value = evaluate_rhs()
-            write_target(target, key, combine(current, value))
+            write_target(*target, value=combine(current, value))
         else:
             assign(left_hand, evaluate_rhs())
 
@@ -1069,7 +1077,9 @@ class Evaluator:
                         )
                     )
             elif tag == "indexed":
-                value = self._read_index(task[3], values.pop(), node.meta_data)
+                value = self._read_index(
+                    task[3], values.pop(), index_location(node, task[2]), task[2] + 1
+                )
                 values.append(value)
                 tasks.append(("index", node, task[2] + 1))
             elif tag == "slice":
@@ -1082,21 +1092,20 @@ class Evaluator:
                     next(iterator) if part is not None else None
                     for part in (node.start, node.stop, node.step)
                 ]
-                if any(value is not None and not isinstance(value, int) for value in parts):
-                    raise EvaluatorError(
-                        self.file,
-                        "slice bounds and step must be integers",
-                        node.meta_data.line,
-                        node.meta_data.column_start,
-                        node.meta_data.column_end,
-                    )
+                for role, expression, value in zip(
+                    ("start", "stop", "step"),
+                    (node.start, node.stop, node.step),
+                    parts,
+                    strict=True,
+                ):
+                    if value is not None and not isinstance(value, int):
+                        self._error(
+                            f"slice {role} must be an integer (got {type_name(value)})",
+                            expression_location(expression, node.meta_data),
+                        )
                 if parts[2] == 0:
-                    raise EvaluatorError(
-                        self.file,
-                        "slice step cannot be zero",
-                        node.meta_data.line,
-                        node.meta_data.column_start,
-                        node.meta_data.column_end,
+                    self._error(
+                        "slice step cannot be zero", expression_location(node.step, node.meta_data)
                     )
                 values.append(slice(*parts))
             elif tag == "interpolation":
@@ -1128,16 +1137,8 @@ class Evaluator:
                 tasks.append(("interpolation", node, position + 1, output))
             elif tag == "field":
                 value = values.pop()
-                for name in node.field:
-                    if type(value) is not self.RUN_TIME_INSTANCE or name not in value.fields:
-                        raise EvaluatorError(
-                            self.file,
-                            "field is not defined on this instance",
-                            node.meta_data.line,
-                            node.meta_data.column_start,
-                            node.meta_data.column_end,
-                        )
-                    value = value.fields[name]
+                for position, name in enumerate(node.field):
+                    value = self._read_field(value, name, field_location(node, position))
                 values.append(value)
             elif tag == "callee":
                 callee = values.pop()
@@ -1168,7 +1169,8 @@ class Evaluator:
             if len(args) > len(callee.fields):
                 raise EvaluatorError(
                     self.file,
-                    f"{callee.name} received too many constructor arguments",
+                    f"{callee.name} received too many constructor arguments "
+                    f"(expected at most {len(callee.fields)}, got {len(args)})",
                     metadata.line,
                     metadata.column_start,
                     metadata.column_end,
@@ -1192,7 +1194,7 @@ class Evaluator:
             return 0 if result is None else result
         raise EvaluatorError(
             self.file,
-            "attempt to call a non-function",
+            f"attempt to call a non-function (got {type_name(callee)})",
             metadata.line,
             metadata.column_start,
             metadata.column_end,
@@ -1293,7 +1295,7 @@ class Evaluator:
             if op_type_id not in supported_types:
                 raise EvaluatorError(
                     self.file,
-                    f"operation '{op}' not supported between {type(left)} and {type(right)}",
+                    operator_message(op, left, right),
                     root.meta_data.line,
                     root.meta_data.column_start,
                     root.meta_data.column_end,
@@ -1336,7 +1338,7 @@ class Evaluator:
             if op not in supported_types:
                 raise EvaluatorError(
                     self.file,
-                    f"operation '{op}' not supported between {type(left)} and {type(right)}",
+                    operator_message(op, left, right),
                     root.meta_data.line,
                     root.meta_data.column_start,
                     root.meta_data.column_end,
@@ -1437,7 +1439,7 @@ class Evaluator:
             if op not in supported_types:
                 raise EvaluatorError(
                     self.file,
-                    f"operation '{op}' not supported between {type(left)} and {type(right)}",
+                    operator_message(op, left, right),
                     root.meta_data.line,
                     root.meta_data.column_start,
                     root.meta_data.column_end,
@@ -1469,7 +1471,7 @@ class Evaluator:
             if op not in supported_types:
                 raise EvaluatorError(
                     self.file,
-                    f"operation '{op}' not supported between {type(left)} and {type(right)}",
+                    operator_message(op, left, right),
                     root.meta_data.line,
                     root.meta_data.column_start,
                     root.meta_data.column_end,
@@ -1496,7 +1498,7 @@ class Evaluator:
             if op not in supported_types:
                 raise EvaluatorError(
                     self.file,
-                    f"operation '{op}' not supported between {type(left)} and {type(right)}",
+                    operator_message(op, left, right),
                     root.meta_data.line,
                     root.meta_data.column_start,
                     root.meta_data.column_end,
@@ -1511,7 +1513,7 @@ class Evaluator:
                 except TypeError:
                     raise EvaluatorError(
                         self.file,
-                        f"in binary operation not supported between {type(a)} and {type(b)}",
+                        operator_message(op, a, b),
                         root.meta_data.line,
                         root.meta_data.column_start,
                         root.meta_data.column_end,
@@ -1536,7 +1538,7 @@ class Evaluator:
             if op not in supported_types and (type(left), type(right), op) not in supported_types:
                 raise EvaluatorError(
                     self.file,
-                    f"operation '{op}' not supported between {type(left)} and {type(right)}",
+                    operator_message(op, left, right),
                     root.meta_data.line,
                     root.meta_data.column_start,
                     root.meta_data.column_end,
@@ -1586,7 +1588,7 @@ class Evaluator:
                 return -operand
             raise EvaluatorError(
                 self.file,
-                f"unary negation not supported on type {type(operand)}",
+                f"unary '-' requires a number (got {type_name(operand)})",
                 root.meta_data.line,
                 root.meta_data.column_start,
                 root.meta_data.column_end,
@@ -1597,7 +1599,7 @@ class Evaluator:
                 return +operand
             raise EvaluatorError(
                 self.file,
-                f"unary plus not supported on type {type(operand)}",
+                f"unary '+' requires a number (got {type_name(operand)})",
                 root.meta_data.line,
                 root.meta_data.column_start,
                 root.meta_data.column_end,

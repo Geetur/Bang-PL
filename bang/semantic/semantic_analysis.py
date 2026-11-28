@@ -4,6 +4,17 @@
 from copy import deepcopy
 
 from bang.calling import bind_arguments
+from bang.diagnostics import (
+    expression_location,
+    field_error_message,
+    field_location,
+    index_error_message,
+    index_location,
+    nonindexable_message,
+    operator_message,
+    render_error,
+    type_name,
+)
 from bang.lexing.lexer_tokens import (
     T_AND_ENUM_VAL,
     T_ASSIGN_ENUM_VAL,
@@ -120,14 +131,8 @@ class SemanticError(Exception):
         return ""
 
     def _format(self):
-        error_line = self._get_real_error_line()
-        crt_length = max(1, self.end - self.start)
-        pointers = " " * (self.start - 1) + "^" * crt_length
-        return (
-            f"[SemanticError] Line {self.row}, Column {self.start}-{self.end}:\n"
-            f"{error_line.rstrip()}\n"
-            f"{pointers}\n"
-            f"{self.msg}"
+        return render_error(
+            "SemanticError", self.text, self.msg, self.row, self.start, self.end
         )
 
     def __str__(self) -> str:
@@ -636,7 +641,7 @@ class SemanticAnalysis:
         return ""
 
     def _error(self, message, node):
-        metadata = getattr(node, "meta_data", None)
+        metadata = getattr(node, "meta_data", None) or (node if hasattr(node, "line") else None)
         raise SemanticError(
             self.file,
             message,
@@ -659,7 +664,7 @@ class SemanticAnalysis:
                 self.DICT_TYPE_CLASS,
             )
             if rt not in containers or (rt is self.STRING_TYPE_CLASS and lt is not rt):
-                self._error("in operator requires a compatible container", root)
+                self._error(operator_message(op, left, right), root)
             return self.BOOL_TYPE_CLASS(None)
         if op not in self.ARITH_OPS:
             return self.BOOL_TYPE_CLASS(None)
@@ -681,16 +686,21 @@ class SemanticAnalysis:
         norm_right = self.NUMBER_TYPE_CLASS if rt in numeric else rt
         result = self.BIN_OP_DIFFERENT_RULES.get((norm_left, norm_right, op))
         if result is None:
-            self._error("Invalid operation", root)
+            self._error(operator_message(op, left, right), root)
         return result(None)
 
-    def _index_type(self, base, index, root):
+    def _index_type(self, base, index, root, position=0):
         typ = type(base)
+        metadata = index_location(root, position)
+        level = position + 1
         if type(index) is self.SLICE_TYPE_CLASS:
             if typ is self.DYNAMIC_TYPE_CLASS:
                 return self.DYNAMIC_TYPE_CLASS()
             if typ not in (self.ARRAY_TYPE_CLASS, self.STRING_TYPE_CLASS):
-                self._error("slicing requires an array or string", root)
+                self._error(
+                    f"slicing requires an array or string at level {level} (got {type_name(base)})",
+                    metadata,
+                )
             result_type = (
                 self.ARRAY_TYPE_CLASS if typ is self.ARRAY_TYPE_CLASS else self.STRING_TYPE_CLASS
             )
@@ -703,27 +713,30 @@ class SemanticAnalysis:
         if typ is self.DICT_TYPE_CLASS:
             return self.DYNAMIC_TYPE_CLASS()
         if typ not in (self.ARRAY_TYPE_CLASS, self.STRING_TYPE_CLASS):
-            self._error("object is not indexable", root)
+            self._error(nonindexable_message(base, level), metadata)
         if type(index) not in (
             self.NUMBER_TYPE_CLASS,
             self.BOOL_TYPE_CLASS,
             self.NONE_TYPE_CLASS,
             self.DYNAMIC_TYPE_CLASS,
         ):
-            self._error("array and string indexes must be numbers", root)
+            self._error(
+                f"{type_name(base)} index at level {level} must be an integer "
+                f"(got {type_name(index)})", metadata,
+            )
         if base.value is None or index.value is None:
             return self.DYNAMIC_TYPE_CLASS()
         try:
             value = base.value[index.value]
-        except (IndexError, TypeError, KeyError):
-            self._error("Index out of bounds", root)
+        except (IndexError, TypeError, KeyError) as error:
+            self._error(index_error_message(error, base.value, index.value, level), metadata)
         return self.STRING_TYPE_CLASS(value) if typ is self.STRING_TYPE_CLASS else value
 
     def _field_type(self, base, name, root):
         if type(base) is self.DYNAMIC_TYPE_CLASS:
             return self.DYNAMIC_TYPE_CLASS()
         if type(base) is not self.INSTANCE_TYPE_CLASS or name not in base.fields:
-            self._error("field is not defined on this instance", root)
+            self._error(field_error_message(base, name), root)
         return base.fields[name]
 
     def _resolve_type_target(self, target, *, require_existing=False):
@@ -742,26 +755,36 @@ class SemanticAnalysis:
             return self.DYNAMIC_TYPE_CLASS(), lambda value: frame.__setitem__(target.value, value)
         if typ is self.FIELD_ACCESS_NODE_CLASS:
             base = self.walk_expression(target.base)
-            for name in target.field[:-1]:
-                base = self._field_type(base, name, target)
-            current = self._field_type(base, target.field[-1], target)
+            for position, name in enumerate(target.field[:-1]):
+                base = self._field_type(base, name, field_location(target, position))
+            current = self._field_type(
+                base, target.field[-1], field_location(target, len(target.field) - 1)
+            )
             if type(base) is self.INSTANCE_TYPE_CLASS:
                 return current, lambda value: base.fields.__setitem__(target.field[-1], value)
             return current, lambda _value: self._invalidate_mutable_facts()
         if typ is self.INDEX_NODE_CLASS:
             base = self.walk_expression(target.base)
-            for part in target.index[:-1]:
+            for position, part in enumerate(target.index[:-1]):
                 index = self.walk_expression(part.root_expr)
-                base = self._index_type(base, index, target)
+                base = self._index_type(base, index, target, position)
             index = self.walk_expression(target.index[-1].root_expr)
-            current = self._index_type(base, index, target)
+            position = len(target.index) - 1
+            current = self._index_type(base, index, target, position)
+            metadata = index_location(target, position)
 
             def update(value):
                 if type(index) is self.SLICE_TYPE_CLASS:
                     if type(base) is self.STRING_TYPE_CLASS:
-                        self._error("slice assignment requires an array target", target)
+                        self._error(
+                            "slice assignment requires an array target; strings are immutable",
+                            metadata,
+                        )
                     if type(value) not in (self.ARRAY_TYPE_CLASS, self.DYNAMIC_TYPE_CLASS):
-                        self._error("slice assignment requires an array value", target)
+                        self._error(
+                            f"slice assignment requires an array value (got {type_name(value)})",
+                            metadata,
+                        )
                     if type(base) is self.DYNAMIC_TYPE_CLASS:
                         self._invalidate_mutable_facts()
                     elif type(base) is self.ARRAY_TYPE_CLASS:
@@ -773,8 +796,13 @@ class SemanticAnalysis:
                         ):
                             try:
                                 base.value[index.value] = list(value.value)
-                            except ValueError:
-                                self._error("extended slice assignment length mismatch", target)
+                            except ValueError as error:
+                                self._error(
+                                    index_error_message(
+                                        error, base.value, index.value, position + 1,
+                                        writing=True, value=value.value,
+                                    ), metadata,
+                                )
                         else:
                             base.value = None
                     return
@@ -887,7 +915,10 @@ class SemanticAnalysis:
                     self._error(str(error), root)
         if typ is self.DATA_CLASS_TYPE_CLASS:
             if len(arguments) > len(callee.fields):
-                self._error("more arguments than dataclass parameters", root)
+                self._error(
+                    f"too many constructor arguments (expected at most {len(callee.fields)}, "
+                    f"got {len(arguments)})", root,
+                )
             fields = {
                 name: arguments[index] if index < len(arguments) else self.DYNAMIC_TYPE_CLASS()
                 for index, name in enumerate(callee.fields)
@@ -930,7 +961,7 @@ class SemanticAnalysis:
                 self._error(f"{name} requires hashable elements or keys", root)
             return (self.SET_TYPE_CLASS if name == "set" else self.DICT_TYPE_CLASS)(list(items))
         if typ not in (self.DYNAMIC_TYPE_CLASS, self.FUNCTION_TYPE_CLASS):
-            self._error("attempt to call a non-function", root)
+            self._error(f"attempt to call a non-function (got {type_name(callee)})", root)
         self._invalidate_call_facts()
         return self.DYNAMIC_TYPE_CLASS()
 
@@ -990,7 +1021,9 @@ class SemanticAnalysis:
                 iterator = iter(supplied)
                 bounds = []
                 known = True
-                for part in (node.start, node.stop, node.step):
+                for role, part in zip(
+                    ("start", "stop", "step"), (node.start, node.stop, node.step), strict=True
+                ):
                     if part is None:
                         bounds.append(None)
                         continue
@@ -1001,14 +1034,22 @@ class SemanticAnalysis:
                         self.NONE_TYPE_CLASS,
                         self.DYNAMIC_TYPE_CLASS,
                     ):
-                        self._error("slice bounds and step must be integers", node)
+                        self._error(
+                            f"slice {role} must be an integer (got {type_name(fact)})",
+                            expression_location(part, node.meta_data),
+                        )
                     if fact.value is None:
                         known = False
                     elif not isinstance(fact.value, int):
-                        self._error("slice bounds and step must be integers", node)
+                        self._error(
+                            f"slice {role} must be an integer (got {type_name(fact)})",
+                            expression_location(part, node.meta_data),
+                        )
                     bounds.append(fact.value)
                 if node.step is not None and bounds[2] == 0:
-                    self._error("slice step cannot be zero", node)
+                    self._error(
+                        "slice step cannot be zero", expression_location(node.step, node.meta_data)
+                    )
                 values.append(self.SLICE_TYPE_CLASS(slice(*bounds) if known else None))
             elif tag == "interpolation":
                 count = task[2]
@@ -1031,7 +1072,10 @@ class SemanticAnalysis:
                 ):
                     value = self.NUMBER_TYPE_CLASS(None)
                 else:
-                    self._error("Invalid unary operation", node)
+                    self._error(
+                        f"unary '{node.meta_data.value}' requires a number "
+                        f"(got {type_name(operand)})", node,
+                    )
                 values.append(value)
             elif tag == "array":
                 count = task[2]
@@ -1051,12 +1095,12 @@ class SemanticAnalysis:
                         )
                     )
             elif tag == "indexed":
-                values.append(self._index_type(task[3], values.pop(), node))
+                values.append(self._index_type(task[3], values.pop(), node, task[2]))
                 tasks.append(("index", node, task[2] + 1))
             elif tag == "field":
                 base = values.pop()
-                for name in node.field:
-                    base = self._field_type(base, name, node)
+                for position, name in enumerate(node.field):
+                    base = self._field_type(base, name, field_location(node, position))
                 values.append(base)
             elif tag == "callee":
                 callee = values.pop()
