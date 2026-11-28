@@ -77,8 +77,10 @@ from bang.parsing.parser_nodes import (
     IF_NODE_CLASS,
     INDEX_NODE_CLASS,
     INTEGER_LITERAL_NODE_CLASS,
+    INTERPOLATED_STRING_NODE_CLASS,
     NONE_LITERAL_NODE_CLASS,
     RETURN_NODE_CLASS,
+    SLICE_NODE_CLASS,
     STRING_LITERAL_NODE_CLASS,
     UNARY_OP_NODE_CLASS,
     WHILE_NODE_CLASS,
@@ -94,6 +96,7 @@ from bang.semantic.semantic_nodes import (
     NONE_TYPE_CLASS,
     NUMBER_TYPE_CLASS,
     SET_TYPE_CLASS,
+    SLICE_TYPE_CLASS,
     STRING_TYPE_CLASS,
     BuiltinType,
 )
@@ -146,6 +149,7 @@ class SemanticAnalysis:
     NONE_TYPE_CLASS = NONE_TYPE_CLASS
     NUMBER_TYPE_CLASS = NUMBER_TYPE_CLASS
     SET_TYPE_CLASS = SET_TYPE_CLASS
+    SLICE_TYPE_CLASS = SLICE_TYPE_CLASS
     STRING_TYPE_CLASS = STRING_TYPE_CLASS
 
     # PARSER NODES
@@ -172,6 +176,8 @@ class SemanticAnalysis:
     INTEGER_LITERAL_NODE_CLASS = INTEGER_LITERAL_NODE_CLASS
     NONE_LITERAL_NODE_CLASS = NONE_LITERAL_NODE_CLASS
     RETURN_NODE_CLASS = RETURN_NODE_CLASS
+    INTERPOLATED_STRING_NODE_CLASS = INTERPOLATED_STRING_NODE_CLASS
+    SLICE_NODE_CLASS = SLICE_NODE_CLASS
     STRING_LITERAL_NODE_CLASS = STRING_LITERAL_NODE_CLASS
     UNARY_OP_NODE_CLASS = UNARY_OP_NODE_CLASS
     WHILE_NODE_CLASS = WHILE_NODE_CLASS
@@ -680,6 +686,18 @@ class SemanticAnalysis:
 
     def _index_type(self, base, index, root):
         typ = type(base)
+        if type(index) is self.SLICE_TYPE_CLASS:
+            if typ is self.DYNAMIC_TYPE_CLASS:
+                return self.DYNAMIC_TYPE_CLASS()
+            if typ not in (self.ARRAY_TYPE_CLASS, self.STRING_TYPE_CLASS):
+                self._error("slicing requires an array or string", root)
+            result_type = (
+                self.ARRAY_TYPE_CLASS if typ is self.ARRAY_TYPE_CLASS else self.STRING_TYPE_CLASS
+            )
+            value = None
+            if base.value is not None and index.value is not None:
+                value = base.value[index.value]
+            return result_type(value)
         if typ is self.DYNAMIC_TYPE_CLASS:
             return self.DYNAMIC_TYPE_CLASS()
         if typ is self.DICT_TYPE_CLASS:
@@ -739,6 +757,27 @@ class SemanticAnalysis:
             current = self._index_type(base, index, target)
 
             def update(value):
+                if type(index) is self.SLICE_TYPE_CLASS:
+                    if type(base) is self.STRING_TYPE_CLASS:
+                        self._error("slice assignment requires an array target", target)
+                    if type(value) not in (self.ARRAY_TYPE_CLASS, self.DYNAMIC_TYPE_CLASS):
+                        self._error("slice assignment requires an array value", target)
+                    if type(base) is self.DYNAMIC_TYPE_CLASS:
+                        self._invalidate_mutable_facts()
+                    elif type(base) is self.ARRAY_TYPE_CLASS:
+                        if (
+                            base.value is not None
+                            and index.value is not None
+                            and type(value) is self.ARRAY_TYPE_CLASS
+                            and value.value is not None
+                        ):
+                            try:
+                                base.value[index.value] = list(value.value)
+                            except ValueError:
+                                self._error("extended slice assignment length mismatch", target)
+                        else:
+                            base.value = None
+                    return
                 if type(base) is self.ARRAY_TYPE_CLASS:
                     if base.value is not None and index.value is not None:
                         base.value[index.value] = value
@@ -908,6 +947,16 @@ class SemanticAnalysis:
                     tasks.append(("eval", node.root_expr))
                 elif typ is self.FUNCTION_NODE_CLASS:
                     values.append(self._function_type(node))
+                elif typ is self.SLICE_NODE_CLASS:
+                    parts = (node.start, node.stop, node.step)
+                    tasks.append(("slice", node, sum(part is not None for part in parts)))
+                    tasks.extend(
+                        ("eval", part.root_expr) for part in reversed(parts) if part is not None
+                    )
+                elif typ is self.INTERPOLATED_STRING_NODE_CLASS:
+                    fields = [part for part in node.parts if not isinstance(part, str)]
+                    tasks.append(("interpolation", node, len(fields)))
+                    tasks.extend(("eval", part.root_expr) for part in reversed(fields))
                 elif typ is self.DYNAMIC_TYPE_CLASS:
                     values.append(node)
                 elif typ in self.LITERALS:
@@ -933,6 +982,39 @@ class SemanticAnalysis:
                     tasks.extend((("callee", node), ("eval", node.name)))
                 else:
                     self._error("invalid expression node", node)
+            elif tag == "slice":
+                count = task[2]
+                supplied = values[-count:] if count else []
+                if count:
+                    del values[-count:]
+                iterator = iter(supplied)
+                bounds = []
+                known = True
+                for part in (node.start, node.stop, node.step):
+                    if part is None:
+                        bounds.append(None)
+                        continue
+                    fact = next(iterator)
+                    if type(fact) not in (
+                        self.NUMBER_TYPE_CLASS,
+                        self.BOOL_TYPE_CLASS,
+                        self.NONE_TYPE_CLASS,
+                        self.DYNAMIC_TYPE_CLASS,
+                    ):
+                        self._error("slice bounds and step must be integers", node)
+                    if fact.value is None:
+                        known = False
+                    elif not isinstance(fact.value, int):
+                        self._error("slice bounds and step must be integers", node)
+                    bounds.append(fact.value)
+                if node.step is not None and bounds[2] == 0:
+                    self._error("slice step cannot be zero", node)
+                values.append(self.SLICE_TYPE_CLASS(slice(*bounds) if known else None))
+            elif tag == "interpolation":
+                count = task[2]
+                if count:
+                    del values[-count:]
+                values.append(self.STRING_TYPE_CLASS(None))
             elif tag == "binary":
                 right, left = values.pop(), values.pop()
                 values.append(self._infer_binary_type(node, left, right))

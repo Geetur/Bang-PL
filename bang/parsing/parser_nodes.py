@@ -76,6 +76,20 @@ class ExpressionNode:
 
 
 @dataclass(slots=True)
+class InterpolatedStringNode:
+    parts: tuple[str | ExpressionNode, ...]
+    meta_data: Lexeme
+
+
+@dataclass(slots=True)
+class SliceNode:
+    start: ExpressionNode | None
+    stop: ExpressionNode | None
+    step: ExpressionNode | None
+    meta_data: Lexeme
+
+
+@dataclass(slots=True)
 class BinOpNode:
     left: Any
     op: int
@@ -336,9 +350,11 @@ IDENTIFIER_NODE_CLASS = IdentifierNode
 IF_NODE_CLASS = IFNode
 INDEX_NODE_CLASS = IndexNode
 INTEGER_LITERAL_NODE_CLASS = IntegerLiteralNode
+INTERPOLATED_STRING_NODE_CLASS = InterpolatedStringNode
 NONE_LITERAL_NODE_CLASS = NoneLiteralNode
 RETURN_NODE_CLASS = ReturnNode
 STRING_LITERAL_NODE_CLASS = StringLiteralNode
+SLICE_NODE_CLASS = SliceNode
 END_NODE_CLASS = EndNode
 UNARY_OP_NODE_CLASS = UnaryOPNode
 WHILE_NODE_CLASS = WhileNode

@@ -12,12 +12,14 @@ from bang.lexing.lexer_tokens import (
     T_BOOL_ENUM_VAL,
     T_DOT_ENUM_VAL,
     T_FLOAT_ENUM_VAL,
+    T_FSTRING_ENUM_VAL,
     T_IDENT_ENUM_VAL,
     T_IN_ENUM_VAL,
     T_INT_ENUM_VAL,
     T_NONE_ENUM_VAL,
     T_STRING_ENUM_VAL,
     UNDERSCORE,
+    InterpolationField,
     Lexeme,
 )
 
@@ -57,10 +59,13 @@ class LexerError(Exception):
 
 
 class Lexer:
+    MAX_STRING_DEPTH = 64
+
     T_INT_ENUM_VAL = T_INT_ENUM_VAL
     T_FLOAT_ENUM_VAL = T_FLOAT_ENUM_VAL
     T_DOT_ENUM_VAL = T_DOT_ENUM_VAL
     T_STRING_ENUM_VAL = T_STRING_ENUM_VAL
+    T_FSTRING_ENUM_VAL = T_FSTRING_ENUM_VAL
     T_IDENT_ENUM_VAL = T_IDENT_ENUM_VAL
     T_BOOL_ENUM_VAL = T_BOOL_ENUM_VAL
     T_NONE_ENUM_VAL = T_NONE_ENUM_VAL
@@ -92,12 +97,22 @@ class Lexer:
         self.tokens = []
 
     def tokenizer(self):
-        tokens = self.tokens
+        self.tokens.extend(self._tokenize(0, len(self.text) - 1, line=1, line_start=0))
+        return self.tokens
+
+    @classmethod
+    def tokenize_fragment(cls, text, field):
+        lexer = cls.__new__(cls)
+        lexer.text = text
+        return lexer._tokenize(
+            field.start, field.stop, line=field.line, line_start=field.line_start
+        )
+
+    def _tokenize(self, start, stop, *, line, line_start):
+        tokens = []
         text = self.text
-        len_text = len(text)
-        pos = 0
-        line = 1
-        line_start = 0
+        len_text = stop
+        pos = start
 
         # localizing token types to avoid lookups
         T_INT_ENUM_VAL = self.T_INT_ENUM_VAL
@@ -143,9 +158,15 @@ class Lexer:
                 continue
 
             if char == SENTINEL:
-                if pos != len_text - 1:
-                    raise LexerError("NUL characters are not allowed in source", text, pos)
-                break
+                raise LexerError("NUL characters are not allowed in source", text, pos)
+
+            if char == "f" and pos + 1 < stop and text[pos + 1] == STRING:
+                start = pos
+                value, pos = self._read_string(
+                    pos, stop, formatted=True, line=line, line_start=line_start
+                )
+                tokens.append(create_lexeme(self.T_FSTRING_ENUM_VAL, value, start, pos))
+                continue
 
             if char.isalpha() or char == UNDERSCORE:
                 start = pos
@@ -201,16 +222,7 @@ class Lexer:
 
             if char == STRING:
                 start = pos
-                # Find the closing quote instantly using C-implementation
-                end_quote = text.find(STRING, pos + 1)
-
-                if end_quote == -1:
-                    raise LexerError("unterminated string literal", text, pos)
-
-                if NEWLINE in text[pos + 1 : end_quote]:
-                    raise LexerError("newline in string literal", text, pos)
-                value = text[pos + 1 : end_quote]  # Extract content without quotes
-                pos = end_quote + 1
+                value, pos = self._read_string(pos, stop, line=line, line_start=line_start)
                 tokens.append(create_lexeme(T_STRING_ENUM_VAL, value, start, pos))
                 continue
 
@@ -238,4 +250,121 @@ class Lexer:
             # if everything else fails, it must be an unrecognized symbol
 
             raise LexerError("Token not recognized", text, pos)
-        return self.tokens
+        return tokens
+
+    def _read_string(self, start, stop, *, line, line_start, formatted=False, depth=0):
+        if depth >= self.MAX_STRING_DEPTH:
+            raise LexerError("string nesting exceeds the limit", self.text, start)
+        text = self.text
+        pos = start + (2 if formatted else 1)
+        literal = []
+        parts = []
+        escapes = {
+            "n": "\n",
+            "r": "\r",
+            "t": "\t",
+            "b": "\b",
+            "f": "\f",
+            "v": "\v",
+            '"': '"',
+            "'": "'",
+            "\\": "\\",
+        }
+        while pos < stop:
+            char = text[pos]
+            if char in "\r\n":
+                raise LexerError("newline in string literal", text, start)
+            if char == self.SENTINEL:
+                raise LexerError("NUL characters are not allowed in source", text, pos)
+            if char == '"':
+                if not formatted:
+                    return "".join(literal), pos + 1
+                if literal:
+                    parts.append("".join(literal))
+                return tuple(parts), pos + 1
+            if char == "\\":
+                if pos + 1 < stop and text[pos + 1] in escapes:
+                    literal.append(escapes[text[pos + 1]])
+                    pos += 2
+                else:
+                    # Preserve unrecognized sequences, as older Bang strings did.
+                    literal.append(char)
+                    pos += 1
+                continue
+            if formatted and char == "{":
+                if pos + 1 < stop and text[pos + 1] == "{":
+                    literal.append("{")
+                    pos += 2
+                    continue
+                if literal:
+                    parts.append("".join(literal))
+                    literal = []
+                end = self._field_end(
+                    pos + 1, stop, line=line, line_start=line_start, depth=depth
+                )
+                if not text[pos + 1 : end].strip():
+                    raise LexerError("empty interpolation field", text, pos)
+                parts.append(InterpolationField(pos + 1, end, line, line_start))
+                pos = end + 1
+                continue
+            if formatted and char == "}":
+                if pos + 1 < stop and text[pos + 1] == "}":
+                    literal.append("}")
+                    pos += 2
+                    continue
+                raise LexerError(
+                    "single '}' in interpolated string; use '}}' for a literal brace", text, pos
+                )
+            literal.append(char)
+            pos += 1
+        raise LexerError("unterminated string literal", text, start)
+
+    def _field_end(self, start, stop, *, line, line_start, depth):
+        text = self.text
+        pairs = {"(": ")", "[": "]", "{": "}"}
+        enders = set(pairs.values())
+        openings = []
+        pos = start
+        while pos < stop:
+            char = text[pos]
+            if char in "\r\n":
+                raise LexerError("newline in string literal", text, start - 1)
+            if char == "#":
+                raise LexerError("comments are not allowed in interpolation fields", text, pos)
+            if char == "\\":
+                raise LexerError("backslash outside a string in interpolation field", text, pos)
+            if char == self.SENTINEL:
+                raise LexerError("NUL characters are not allowed in source", text, pos)
+            if char == '"':
+                _, pos = self._read_string(
+                    pos, stop, line=line, line_start=line_start, depth=depth + 1
+                )
+                continue
+            if char.isalpha() or char == self.UNDERSCORE:
+                end = pos + 1
+                while end < stop and (text[end].isalnum() or text[end] == self.UNDERSCORE):
+                    end += 1
+                if text[pos:end] == "f" and end < stop and text[end] == '"':
+                    _, pos = self._read_string(
+                        pos,
+                        stop,
+                        formatted=True,
+                        line=line,
+                        line_start=line_start,
+                        depth=depth + 1,
+                    )
+                else:
+                    pos = end
+                continue
+            if char in pairs:
+                openings.append(char)
+            elif char in enders:
+                if not openings:
+                    if char == "}":
+                        return pos
+                    raise LexerError("mismatched interpolation delimiter", text, pos)
+                if pairs[openings[-1]] != char:
+                    raise LexerError("mismatched interpolation delimiter", text, pos)
+                openings.pop()
+            pos += 1
+        raise LexerError("unterminated interpolation field", text, start - 1)

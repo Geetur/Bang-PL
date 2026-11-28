@@ -18,6 +18,11 @@ class StringType:
 
 
 @dataclass(slots=True)
+class SliceType:
+    value: slice | None
+
+
+@dataclass(slots=True)
 class NoneType:
     value: None
 
@@ -95,3 +100,4 @@ NONE_TYPE_CLASS = NoneType
 NUMBER_TYPE_CLASS = NumberType
 SET_TYPE_CLASS = SetType
 STRING_TYPE_CLASS = StringType
+SLICE_TYPE_CLASS = SliceType

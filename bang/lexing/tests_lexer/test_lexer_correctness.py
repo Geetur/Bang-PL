@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from bang.lexing.lexer import Lexer, LexerError
+from bang.lexing.lexer_tokens import InterpolationField
 
 # Prefer TokenType from lexer_tokens, but fall back if you re-export elsewhere.
 try:
@@ -189,12 +190,51 @@ def test_keywords(tmp_path, kw, ttype):
 # Strings
 # ----------------------------
 
-def test_string_literal_value_strips_quotes(tmp_path):
-    tokens = lex_string('"hello"', tmp_path)
+@pytest.mark.parametrize("src, expected", [
+    ('"hello"', "hello"),
+    (r'"a\nb\rc\td\be\ff\v"', "a\nb\rc\td\be\ff\v"),
+    (r'"say \"hello\"; C:\\tmp"', 'say "hello"; C:\\tmp'),
+    (r'"\q\u0041"', r"\q\u0041"),
+    ('"{name} {{score}}"', "{name} {{score}}"),
+])
+def test_string_literal_value_strips_quotes(tmp_path, src, expected):
+    tokens = lex_string(src, tmp_path)
     assert len(tokens) == 1
     assert tok_type(tokens[0]) == TokenType.T_STRING
     # Your lexer stores inner content only. :contentReference[oaicite:7]{index=7}
-    assert tok_value(tokens[0]) == "hello"
+    assert tok_value(tokens[0]) == expected
+
+
+def test_interpolation_fields_preserve_spans_and_physical_locations(tmp_path):
+    code = '\n  f"{{hi}} {len{"ab"}} {f"{name}"}\\n"; tail'
+    tokens = lex_string(code, tmp_path)
+    assert tok_type(tokens[0]) == TokenType.T_FSTRING
+    assert (tokens[0].line, tokens[0].column_start) == (2, 3)
+    parts = tokens[0].value
+    assert [part for part in parts if isinstance(part, str)] == ['{hi} ', ' ', '\n']
+    fields = [part for part in parts if isinstance(part, InterpolationField)]
+    assert [code[part.start:part.stop] for part in fields] == ['len{"ab"}', 'f"{name}"']
+    fragment = Lexer.tokenize_fragment(code + '\0', fields[0])
+    assert [token.value for token in fragment] == ['len', '{', 'ab', '}']
+    assert (fragment[0].line, fragment[0].column_start) == (2, code.splitlines()[1].index('len') + 1)
+    assert tokens[-1].line == 2
+    assert tok_type(lex_string('f "literal"', tmp_path)[0]) == TokenType.T_IDENT
+
+
+@pytest.mark.parametrize("src, message", [
+    ('f"{}"', 'empty interpolation'),
+    ('f"{   }"', 'empty interpolation'),
+    ('f"}"', "single '}'"),
+    ('f"{(1]}"', 'mismatched interpolation'),
+    ('f"{1', 'unterminated interpolation'),
+    ('f"{1 #comment}"', 'comments are not allowed'),
+    (r'f"{1\2}"', 'backslash outside'),
+    ('f"a\nb"', 'newline in string'),
+    ('"a\nb"', 'newline in string'),
+    ('"escaped\\"', 'unterminated string'),
+])
+def test_malformed_interpolation_and_escapes_are_lexer_errors(tmp_path, src, message):
+    assert_lex_error(src, tmp_path, contains=message)
 
 
 def test_string_can_contain_spaces_and_symbols(tmp_path):
@@ -214,7 +254,7 @@ def test_unterminated_string_error(tmp_path):
 # ----------------------------
 
 def test_single_char_symbols(tmp_path):
-    code = "+ - * / = ! ( ) { } [ ] , ; ."
+    code = "+ - * / = ! ( ) { } [ ] , ; . :"
     tokens = lex_string(code, tmp_path)
     assert_types(
         tokens,
@@ -234,6 +274,7 @@ def test_single_char_symbols(tmp_path):
             TokenType.T_COMMA,
             TokenType.T_SEMICOLON,
             TokenType.T_DOT,
+            TokenType.T_COLON,
         ],
     )
 

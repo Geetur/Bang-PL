@@ -10,7 +10,7 @@ from bang.parsing.control_flow_parser import ControlFlowParser
 from bang.parsing.expression_parser import ExpressionParser, ParserError
 from bang.parsing.parser_nodes import (
     ArrayLiteralNode, BinOpNode, CallNode, FieldAccessNode, FunctionNode, IdentifierNode,
-    IndexNode, ReturnNode, UnaryOPNode,
+    IndexNode, InterpolatedStringNode, ReturnNode, SliceNode, UnaryOPNode,
 )
 
 
@@ -84,9 +84,30 @@ class ParserCorrectnessTests(unittest.TestCase):
             "for [f{},b] rows; end", "for [a,[b*2]] rows; end",
             "for [a,b]; end", "for [a,b]", "for [a,b] = rows; end",
             "for [a,b] rows extra; end", "for 1 rows; end",
+            "a[1:2:3:4]", "a[1+:]", "a[:,1]", "a[1:2,3]", "1:2", "[:]",
+            'f"{1:02}"', 'f"{1!r}"', 'f"{x=1}"', 'f"{1;2}"',
         ):
             with self.subTest(code=code), self.assertRaises(ParserError):
                 parse(code)
+
+    def test_slice_bounds_and_interpolation_use_expression_nodes(self):
+        _, nodes = parse('values[:]; values[none:-1:2]; matrix[1:][0][::-1]')
+        first = nodes[0].root_expr.index[0].root_expr
+        self.assertIsInstance(first, SliceNode)
+        self.assertEqual((first.start, first.stop, first.step), (None, None, None))
+        second = nodes[1].root_expr.index[0].root_expr
+        self.assertIsNotNone(second.start)
+        self.assertEqual(second.stop.root_expr.operand.value, 1)
+        self.assertEqual(second.step.root_expr.value, 2)
+        self.assertEqual(len(nodes[2].root_expr.index), 3)
+        _, nodes = parse('\n  f"hello {sum{values[1:3]}} {f"{name}"}"')
+        root = nodes[0].root_expr
+        self.assertIsInstance(root, InterpolatedStringNode)
+        call = root.parts[1].root_expr
+        self.assertIsInstance(call, CallNode)
+        self.assertIsInstance(call.args[0].root_expr.index[0].root_expr, SliceNode)
+        self.assertEqual((call.meta_data.line, call.meta_data.column_start), (2, 12))
+        self.assertIsInstance(root.parts[3].root_expr, InterpolatedStringNode)
 
     def test_for_destructuring_ast_preserves_nested_targets_and_boundaries(self):
         _, nodes = parse(
